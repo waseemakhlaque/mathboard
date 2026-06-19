@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<!-- MathBoard — Copyright © 2026 Waseem Akhlaque. MIT License (see LICENSE). -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#1f2733" />
+<title>MathBoard</title>
+<link rel="manifest" href="./manifest.json" />
+<link rel="apple-touch-icon" href="./assets/icon.svg" />
+<link rel="stylesheet" href="./css/app.css" />
+<script src="./vendor/jspdf.umd.min.js" defer></script>
+<script src="./vendor/pdf.min.js" defer></script>
+</head>
+<body>
+
+<!-- ===== Library view ===== -->
+<section id="library" class="view">
+  <header class="lib-head">
+    <h1>MathBoard</h1>
+    <div class="lib-actions">
+      <button id="import-pdf-lib">Import past paper (PDF)</button>
+      <button id="new-nb" class="primary">+ New lesson</button>
+    </div>
+  </header>
+  <input id="pdf-file-lib" type="file" accept="application/pdf" hidden />
+  <div id="nb-list" class="nb-grid"></div>
+  <p class="muted footnote">Paginated notebook whiteboard · works offline · add to Home Screen on iPad</p>
+</section>
+
+<!-- ===== Editor view ===== -->
+<section id="editor" class="view hidden">
+  <div class="toolbar">
+    <div class="group">
+      <button id="back" class="ghost" title="Back to lessons">‹ Lessons</button>
+      <input id="nb-name" class="nb-name" type="text" />
+    </div>
+
+    <div class="group tools">
+      <button data-tool="pen" class="tool active" title="Pen (p)">Pen</button>
+      <button data-tool="highlighter" class="tool" title="Highlighter (h)">Highlight</button>
+      <button data-tool="eraser" class="tool" title="Eraser (e)">Erase</button>
+      <button data-tool="lasso" class="tool" title="Lasso select (l)">Lasso</button>
+    </div>
+
+    <div class="group" id="swatches"></div>
+
+    <div class="group width-group">
+      <label>Size</label>
+      <input id="width" type="range" min="1" max="24" value="4" />
+      <span id="width-val">4</span>
+    </div>
+
+    <div class="group">
+      <button id="undo" title="Undo (⌘Z)">Undo</button>
+      <button id="redo" title="Redo (⇧⌘Z)">Redo</button>
+    </div>
+
+    <div class="group">
+      <button id="prev" title="Previous page">‹</button>
+      <span id="page-label" class="page-label">1 / 1</span>
+      <button id="next" title="Next page">›</button>
+      <select id="paper" title="Paper for new page">
+        <option value="graph">Graph</option>
+        <option value="squared">Squared</option>
+        <option value="plain">Plain</option>
+        <option value="cornell">Cornell</option>
+        <option value="argand">Argand</option>
+        <option value="vectorgrid">Vector grid</option>
+      </select>
+      <button id="addpage" title="Add page">+ Page</button>
+    </div>
+
+    <div class="group">
+      <button id="fit" title="Fit page">Fit</button>
+      <label class="finger"><input id="finger" type="checkbox" /> Finger draws</label>
+    </div>
+
+    <div class="group">
+      <button id="brand-toggle" title="Show/hide branding overlay">Brand</button>
+      <button id="insert-pdf">Insert PDF</button>
+      <button id="export-png">PNG</button>
+      <button id="export-pdf" class="primary">Export PDF</button>
+    </div>
+  </div>
+  <input id="pdf-file" type="file" accept="application/pdf" hidden />
+
+  <div class="canvas-wrap">
+    <canvas id="board"></canvas>
+    <div id="brand" class="brand">
+      <img class="brand-photo" src="./assets/waseem.jpg" alt="Waseem Akhlaque" />
+      <div class="brand-text">
+        <div class="brand-name">Waseem Akhlaque</div>
+        <div class="brand-title">A Level Mathematics Teacher</div>
+        <div class="brand-phone">03212890512</div>
+      </div>
+    </div>
+    <div id="busy" class="busy hidden"><div class="busy-box"><div class="spinner"></div><div class="busy-msg">Working…</div></div></div>
+  </div>
+</section>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>
