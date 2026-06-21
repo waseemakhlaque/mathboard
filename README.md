@@ -56,6 +56,13 @@ Planned modules (each plugs onto the notebook core): Vectors → Complex/Argand 
 Trigonometry → Statistics → Mechanics, plus a free fx-991-equivalent scientific calculator.
 See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
+## Deploy to the web (Vercel)
+MathBoard is a static site, so hosting is trivial and free:
+- **Vercel:** push this folder to a GitHub repo, then "Import Project" on vercel.com (no build step —
+  it's detected as static). Or run `npx vercel` from this folder. `vercel.json` is already included.
+- **GitHub Pages / Netlify / Cloudflare Pages:** also work with zero config.
+No backend, no n8n, no server code — it's just files.
+
 ## License
 [MIT](LICENSE) © 2026 Waseem Akhlaque. Free to use, modify, and share — please keep the copyright
 notice. Bundled libraries keep their own licenses — see [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).

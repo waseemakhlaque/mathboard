@@ -1,7 +1,7 @@
 // sw.js — offline support.
 // Same-origin app files: network-first (always get the latest, fall back to cache offline).
 // Cross-origin CDN (jsPDF): cache-first (immutable, fine to pin).
-const CACHE = 'mathboard-v4';
+const CACHE = 'mathboard-v7';
 const ASSETS = [
   './',
   './index.html',
@@ -14,6 +14,10 @@ const ASSETS = [
   './vendor/jspdf.umd.min.js',
   './vendor/pdf.min.js',
   './vendor/pdf.worker.min.js',
+  './vendor/math.min.js',
+  './vendor/simple-statistics.min.js',
+  './vendor/uPlot.iife.min.js',
+  './vendor/uPlot.min.css',
 ];
 
 self.addEventListener('install', (e) => {
