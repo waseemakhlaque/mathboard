@@ -51,10 +51,14 @@ Vanilla JavaScript + HTML5 Canvas. [jsPDF](https://github.com/parallax/jsPDF) fo
 [Mozilla PDF.js](https://github.com/mozilla/pdf.js) for PDF import (both bundled in `vendor/`).
 No frameworks, no build tooling.
 
-## Roadmap
-Planned modules (each plugs onto the notebook core): Vectors → Complex/Argand → Geometry →
-Trigonometry → Statistics → Mechanics, plus a free fx-991-equivalent scientific calculator.
-See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+## Roadmap & project review
+A full project assessment, a redesigned architecture, and the build + hosting plan (local Mac/iPad
+→ online live teaching portal) are in `docs/`:
+- [`docs/ASSESSMENT.md`](docs/ASSESSMENT.md) — feature‑by‑feature gap analysis (what's done / partial / missing).
+- [`docs/ARCHITECTURE-V2.md`](docs/ARCHITECTURE-V2.md) — the redesigned architecture (core + plug‑ins, two shells, three runtimes).
+- [`docs/ROADMAP-V2.md`](docs/ROADMAP-V2.md) — phased roadmap + how to run locally and how to go live online.
+
+Original phased plan (still valid for the notebook core): [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Deploy to the web (Vercel)
 MathBoard is a static site, so hosting is trivial and free:
