@@ -1866,6 +1866,21 @@ async function createNotebook() {
   openNotebook(nb.id);
 }
 
+function clearPage() {
+  if (!confirm('Clear everything on this page? You can undo with ⌘Z.')) return;
+  const pg = page();
+  beginAction();
+  pg.strokes = []; pg.objects = []; pg.functions = [];
+  pg.mechItems = []; pg.cplxLoci = []; pg.calcItems = []; pg.instruments = [];
+  pg.geoItems = []; pg.geoLabelN = 0;
+  delete pg.unitCircle;
+  teardownGeo(); loadGeoPage(pg);
+  commitAction();
+  thumbCache.delete(pg.id);
+  clearSelection(); setGeoTool(null); setInstTool(null);
+  updatePageLabel(); persist(); mark();
+}
+
 function goToPage(i) {
   if (!S.notebook || i < 0 || i >= pages().length || i === S.pageIndex) return;
   flushGeo();
@@ -2185,6 +2200,7 @@ function bindEditor() {
   };
   $('#insert-pdf').onclick = () => $('#pdf-file').click();
   $('#insert-img').onclick = () => $('#img-file').click();
+  $('#clear-page').onclick = clearPage;
   $('#pdf-file').onchange = (e) => { const f = e.target.files[0]; if (f) insertPdfIntoNotebook(f); e.target.value = ''; };
   $('#img-file').onchange = (e) => { const f = e.target.files[0]; if (f) insertImageFile(f); e.target.value = ''; };
   document.querySelectorAll('[data-geo]').forEach((b) => {
