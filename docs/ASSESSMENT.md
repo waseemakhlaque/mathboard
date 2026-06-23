@@ -13,6 +13,23 @@
 
 ---
 
+## 0a. Update — work completed since this assessment
+
+The following gaps identified below have since been **implemented** (see the PR / roadmap):
+
+- ✅ **Brand logo** — gradient MathBoard logo across app header, editor, PWA icon, favicon.
+- ✅ **BrainCert‑style classroom layout (front‑end)** — top app bar + pinnable left tool rail +
+  stage with a bottom page tray; pin/unpin and Close All.
+- ✅ **Thorough calculus** — derivative + stationary points, definite integral + shaded area,
+  area between curves, Riemann sums (left/right/mid/trapezium), tangent/normal.
+- ✅ **fx‑991ES PLUS calculator** — faithful faceplate (CASIO/model/V.P.A.M., solar strip, SHIFT/
+  ALPHA, REPLAY pad, MODE) **plus working ∫ and d/dx** (Simpson + mathjs) and a MODE menu.
+- ✅ **MathLive/KaTeX fonts** vendored (natural display renders correctly, 404 fixed).
+
+The scorecard in §3 has been annotated accordingly. The remaining big items are: GeoGebra‑grade
+graphing (unit circle/sliders), draggable instruments, stats (box/normal), and the **online live
+portal** (backend + realtime + media).
+
 ## 0. How to read this
 
 Status legend:
@@ -241,15 +258,15 @@ media stack).
 | PDF / image import | 🟡 7/10 | Works; large‑media performance + blob storage needed. |
 | OpenBoard instruments (ruler/protractor/compass) | 🟡 5/10 | Present as annotations; not draggable physical instruments. |
 | Geometry constructions | ✅ 8/10 | JSXGraph solid; add transformations + more constructions. |
-| fx‑991ES PLUS calculator | 🟡 5/10 | Good engine; **faceplate does not match photos**; modes missing. |
+| fx‑991ES PLUS calculator | ✅ 8/10 | **Faceplate now matches the photos** + working ∫ / d/dx + MODE menu; full EQN/BASE‑N/STAT mode flow still to add. |
 | Graphing (GeoGebra/trig) | 🟡 6/10 | Good basic grapher; no unit circle / sliders / GeoGebra view. |
 | Statistics | 🟡 6/10 | Core there; box plot + normal curve missing. |
 | Mechanics | ✅ 8/10 | Good coverage; add pulleys/moments + editability. |
 | Vectors | ✅ 9/10 | Matches brief. |
 | Complex / Argand | ✅ 9/10 | Matches brief; among the best modules. |
-| **Calculus** | ❌ 2/10 | **Essentially unbuilt** — biggest content gap. |
-| Logo / branding | 🟡 6/10 | Branding overlay yes; real logo asset/placement no. |
-| **BrainCert portal UI** | ❌ 1/10 | **Not started** (top toolbar ≠ classroom shell). |
+| **Calculus** | ✅ 8/10 | **Now built**: derivative + stationary pts, ∫ + area, area between, Riemann, tangent/normal. |
+| Logo / branding | ✅ 9/10 | **Logo built** and placed across app/PWA/exports. |
+| **BrainCert portal UI** | 🟡 5/10 | **Front‑end layout done** (left rail/app bar/stage); presence/video/realtime still to add. |
 | **Live online portal (backend/realtime/media)** | ❌ 1/10 | **Not started**; only a sync stub. |
 | Local Mac/iPad usage | ✅ 9/10 | Documented and working. |
 

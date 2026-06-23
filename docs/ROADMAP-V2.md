@@ -17,6 +17,18 @@
 The order is chosen so the **offline notebook never breaks**, the **highest‑value teaching gaps**
 land early, and the **portal** is built on a stable base.
 
+> **Progress so far (implemented):**
+> - ✅ **Phase 2 — Brand & logo** (gradient MathBoard logo across app/PWA/exports).
+> - ✅ **Phase 8 (front‑end) — BrainCert‑style classroom layout** (top app bar + pinnable left
+>   tool rail + stage with bottom page tray; pin/unpin + Close All).
+> - ✅ **Phase 3 — Thorough calculus module** (f′(x) + stationary points, definite integral +
+>   area, area between curves, Riemann sums, tangent/normal).
+> - ✅ **Phase 5 — fx‑991ES PLUS calculator** faceplate + working ∫ and d/dx (Simpson + mathjs).
+> - ✅ **Font fix** — vendored KaTeX woff2 fonts so MathLive natural display renders correctly.
+>
+> Still to do below: notebook polish, GeoGebra‑grade graphing, instruments/stats/mechanics finish,
+> then the online phases (cloud sync → classroom backend → live multi‑user → live A/V).
+
 ### Phase 0 — Refactor to core + plug‑ins (foundation)
 *Enables everything else; no new features for the user.*
 - Add **Vite** (keep an unbundled fallback for solo/offline).
@@ -35,12 +47,12 @@ land early, and the **portal** is built on a stable base.
 - Optional: **search** across notes; outline/bookmarks.
 - **Done when:** day‑to‑day prep matches GoodNotes feel; big past papers are smooth.
 
-### Phase 2 — Your **logo** + brand system
+### Phase 2 — Your **logo** + brand system ✅ done
 - Add a real **logo** asset (SVG) → app header, PWA icons, launch screen, export footer, and the
   future portal. Make the branding overlay logo‑aware (logo + name + title + phone).
 - **Done when:** the logo appears consistently across app, exports, and installable icons.
 
-### Phase 3 — **Thorough calculus** module (biggest content gap)
+### Phase 3 — **Thorough calculus** module (biggest content gap) ✅ done
 - **Differentiation:** f′(x) plot + value at a point; tangent/normal (extend existing tangent);
   stationary points & inflections marked automatically (mathjs `derivative` + numeric roots).
 - **Integration:** definite integral with **shaded area under the curve**; area **between two
@@ -57,7 +69,7 @@ land early, and the **portal** is built on a stable base.
 - Degrees‑axis option; roots/extrema markers; (stretch) implicit/inequality/polar/piecewise.
 - **Done when:** trig and transformations can be taught interactively, GeoGebra‑style.
 
-### Phase 5 — **Casio fx‑991ES PLUS** calculator (pixel‑exact)
+### Phase 5 — **Casio fx‑991ES PLUS** calculator (pixel‑exact) ✅ done
 - Build the **faceplate skin** to match the photos: casing, solar strip, `CASIO / fx‑991ES PLUS /
   NATURAL‑V.P.A.M.`, round **REPLAY** pad, colour‑coded **SHIFT (yellow) / ALPHA (red)** secondary
   labels above each key, full key grid (`MODE/SETUP, ON, CALC, ∫dx, x³, √▮, x⁻¹, logₐ▯, hyp, ENG,
@@ -83,7 +95,7 @@ land early, and the **portal** is built on a stable base.
 - **Done when:** you log in on any device and see your boards; offline still works and merges on
   reconnect.
 
-### Phase 8 — **Classroom shell** (BrainCert‑style UI, single presenter)
+### Phase 8 — **Classroom shell** (BrainCert‑style UI, single presenter) 🟡 front‑end done
 - Build `shells/classroom/`: left pinnable tool rail + "Close All", 16:9 board, bottom page tabs,
   bottom‑right tool group (image/doc/media/polls), top‑right video settings.
 - Reuse the **same engine + modules**; add a **board page type** (16:9).
