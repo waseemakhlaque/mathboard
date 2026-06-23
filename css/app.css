@@ -870,6 +870,43 @@ button.ghost:hover {
   border-radius: 3px;
 }
 
+.page-thumb-acts {
+  position: absolute;
+  top: 2px; left: 2px; right: 2px;
+  display: flex;
+  justify-content: space-between;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease);
+  z-index: 2;
+}
+.page-thumb:hover .page-thumb-acts { opacity: 1; }
+.pt-act {
+  width: 12px; height: 14px;
+  padding: 0;
+  font-size: 9px;
+  line-height: 1;
+  border: none;
+  border-radius: 3px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #fff;
+}
+.pt-act:hover { background: var(--accent); transform: none; box-shadow: none; }
+
+.section-tab { position: relative; }
+.sec-del {
+  margin-left: 8px;
+  display: inline-block;
+  width: 16px; height: 16px;
+  line-height: 14px;
+  text-align: center;
+  border-radius: 50%;
+  font-size: 13px;
+  color: var(--text-3);
+  background: var(--surface-3);
+}
+.sec-del:hover { background: var(--danger); color: #fff; }
+
 .page-thumb-num {
   position: absolute;
   left: 0;

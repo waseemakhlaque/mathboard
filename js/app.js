@@ -32,7 +32,7 @@ import { getAllNotebooks, getNotebook, saveNotebook, deleteNotebook } from './st
 // ---- constants ---------------------------------------------------------------
 const PAGE_W = 1000;          // page units (A4 portrait ratio ~ 1.414)
 const PAGE_H = 1414;
-const PAPERS = ['plain', 'squared', 'graph', 'cornell', 'argand', 'vectorgrid'];
+const PAPERS = ['plain', 'squared', 'graph', 'dotted', 'lined', 'cornell', 'argand', 'vectorgrid', 'axes'];
 const COLORS = ['#1b1b1b', '#2566c8', '#d23b3b', '#1f9d57', '#e0892a', '#8a4fd0'];
 const PEN_WIDTHS = { fine: 4, marker: 10, calligraphy: 6 };
 const UNDO_CAP = 60;
@@ -332,7 +332,13 @@ function drawTemplate(c, paper) {
   const faint = '#dfe6ef', mid = '#c2d0e0', axis = '#7d8aa0';
   if (paper === 'squared') grid(40, faint);
   else if (paper === 'graph') { grid(20, faint); grid(100, mid); }
-  else if (paper === 'cornell') {
+  else if (paper === 'dotted') {
+    c.fillStyle = mid;
+    for (let x = 40; x < PAGE_W; x += 40) for (let y = 40; y < PAGE_H; y += 40) { c.beginPath(); c.arc(x, y, 1.7, 0, Math.PI * 2); c.fill(); }
+  } else if (paper === 'lined') {
+    for (let y = 64; y < PAGE_H; y += 48) line(0, y, PAGE_W, y, faint, 1);
+    line(86, 0, 86, PAGE_H, '#edc1c1', 1.5);
+  } else if (paper === 'cornell') {
     for (let y = 80; y < PAGE_H; y += 56) line(0, y, PAGE_W, y, faint, 1);
     line(240, 0, 240, PAGE_H, mid, 1.5);
   } else if (paper === 'argand' || paper === 'vectorgrid' || paper === 'axes') {
@@ -1865,6 +1871,51 @@ function addPagesAfterCurrent(items) {
   mark();
 }
 
+function duplicatePage(i) {
+  const src = pages()[i];
+  if (!src) return;
+  flushGeo();
+  const copy = clone(src); copy.id = uid();
+  pages().splice(i + 1, 0, copy);
+  S.undo = []; S.redo = [];
+  S.pageIndex = i + 1;
+  clearSelection(); teardownGeo(); loadGeoPage(page());
+  updatePageLabel(); persist(); mark();
+}
+function deletePage(i) {
+  if (pages().length <= 1) { alert('A notebook needs at least one page.'); return; }
+  if (!confirm(`Delete page ${i + 1}? This cannot be undone.`)) return;
+  flushGeo();
+  thumbCache.delete(pages()[i].id);
+  pages().splice(i, 1);
+  if (S.pageIndex >= pages().length) S.pageIndex = pages().length - 1;
+  S.undo = []; S.redo = [];
+  clearSelection(); teardownGeo(); loadGeoPage(page());
+  updatePageLabel(); persist(); mark();
+}
+function movePage(i, dir) {
+  const j = i + dir;
+  const arr = pages();
+  if (j < 0 || j >= arr.length) return;
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  if (S.pageIndex === i) S.pageIndex = j;
+  else if (S.pageIndex === j) S.pageIndex = i;
+  updatePageLabel(); persist(); mark();
+}
+function deleteSection(i) {
+  if (sections().length <= 1) { alert('A notebook needs at least one section.'); return; }
+  const sec = sections()[i];
+  if (!confirm(`Delete section "${sec.title}" and its ${sec.pages.length} page(s)?`)) return;
+  flushGeo();
+  sections().splice(i, 1);
+  if (S.sectionIndex > i) S.sectionIndex--;
+  if (S.sectionIndex >= sections().length) S.sectionIndex = sections().length - 1;
+  S.pageIndex = 0;
+  S.undo = []; S.redo = [];
+  clearSelection(); teardownGeo(); loadGeoPage(page());
+  renderSectionStrip(); updatePageLabel(); persist(); mark();
+}
+
 function goToSection(i) {
   if (!S.notebook || i < 0 || i >= sections().length || i === S.sectionIndex) return;
   flushGeo();
@@ -1909,6 +1960,12 @@ function renderSectionStrip() {
       const t = prompt('Rename section', sec.title);
       if (t && t.trim()) { sec.title = t.trim(); renderSectionStrip(); persist(); }
     };
+    if (i === S.sectionIndex && sections().length > 1) {
+      const x = document.createElement('span');
+      x.className = 'sec-del'; x.textContent = '×'; x.title = 'Delete section';
+      x.onclick = (e) => { e.stopPropagation(); deleteSection(i); };
+      btn.appendChild(x);
+    }
     wrap.appendChild(btn);
   });
 }
@@ -1931,6 +1988,21 @@ function renderPageStrip() {
     num.className = 'page-thumb-num';
     num.textContent = String(i + 1);
     btn.appendChild(num);
+    const acts = document.createElement('div');
+    acts.className = 'page-thumb-acts';
+    const mk = (txt, title, fn) => {
+      const a = document.createElement('button');
+      a.type = 'button'; a.className = 'pt-act'; a.textContent = txt; a.title = title;
+      a.onclick = (e) => { e.stopPropagation(); fn(); };
+      return a;
+    };
+    acts.append(
+      mk('‹', 'Move left', () => movePage(i, -1)),
+      mk('⧉', 'Duplicate page', () => duplicatePage(i)),
+      mk('✕', 'Delete page', () => deletePage(i)),
+      mk('›', 'Move right', () => movePage(i, 1)),
+    );
+    btn.appendChild(acts);
     btn.onclick = () => goToPage(i);
     wrap.appendChild(btn);
   });
