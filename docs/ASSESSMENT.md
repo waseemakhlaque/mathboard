@@ -257,13 +257,13 @@ media stack).
 | Notebook (pages/tabs/grid/pen/eraser) | ✅ 9/10 | Strong; **page management (duplicate/delete/reorder), section delete, dotted/ruled papers, clear-page, place-chart** added. Remaining: layers, large‑media handling. |
 | PDF / image import | 🟡 7/10 | Works; large‑media performance + blob storage needed. |
 | OpenBoard instruments (ruler/protractor/compass) | 🟡 5/10 | Present as annotations; not draggable physical instruments. |
-| Geometry constructions | ✅ 8/10 | JSXGraph solid; add transformations + more constructions. |
+| Geometry constructions | ✅ 9/10 | JSXGraph solid; + **midpoint / perpendicular bisector / angle bisector** (persistent). Full shape transformations (reflect/rotate/enlarge) still to add. |
 | fx‑991ES PLUS calculator | ✅ 9/10 | **Faceplate matches the photos**; full key set; ∫/d/dx, EQN (2/3 unknown, quadratic, cubic), BASE‑N, Pol/Rec, hyp, STO/RCL/M+, MODE menu. STAT-in-calc still separate. |
 | Graphing (GeoGebra/trig) | ✅ 8/10 | Grapher + **interactive unit circle** + **amplitude/period/phase/shift sliders**; full GeoGebra view (free pan/zoom axes, general sliders) still a stretch. |
 | Statistics | ✅ 8/10 | 1‑var + regression + **histogram / box plot / normal curve**; place-as-page-object still to add. |
 | Mechanics | ✅ 8/10 | Good coverage; add pulleys/moments + editability. |
 | Vectors | ✅ 9/10 | Matches brief. |
-| Complex / Argand | ✅ 9/10 | Matches brief; among the best modules. |
+| Complex / Argand | ✅ 9/10 | Matches brief; among the best modules; + **polar (r∠θ) display toggle**. |
 | **Calculus** | ✅ 8/10 | **Now built**: derivative + stationary pts, ∫ + area, area between, Riemann, tangent/normal. |
 | Logo / branding | ✅ 9/10 | **Logo built** and placed across app/PWA/exports. |
 | **BrainCert portal UI** | 🟡 5/10 | **Front‑end layout done** (left rail/app bar/stage); presence/video/realtime still to add. |

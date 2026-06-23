@@ -93,6 +93,15 @@ place-chart-on-page. Remaining: layers panel, large-media (blob) handling, searc
 - Mechanics: make placed diagrams **editable**; add connected particles/pulleys & moments (stretch).
 - **Done when:** instruments feel physical and the remaining stats/mechanics items are covered.
 
+### Phase 6.5 — **Live AR Studio Layout** (before going online)
+Build the webcam + 3D/AR + annotation compositing studio per **[`AR-STUDIO.md`](./AR-STUDIO.md)**:
+single full‑screen `<canvas>` (60 fps) blending getUserMedia video, optional MediaPipe Selfie
+Segmentation (chroma/transparent toggle), a vendored **Three.js** scene driven by a
+`MathObjectFactory` (helix / 3D vectors / parametric surfaces / rotating solids / grid), and 2D pen
+annotations — in a distraction‑free Presentation Window Mode for clean Zoom/Meet screen‑share.
+Implemented as vanilla ES modules (`js/studio/*`) to honour the no‑build rule. Requested explicitly
+to be delivered **after offline polish and before the online portal**.
+
 ### Phase 7 — **Cloud sync** (single‑user, multi‑device)
 - Stand up the backend (Supabase recommended): Auth + Postgres + Storage + RLS.
 - Implement the **REST persistence adapter** (the stub in `share.js` already targets this shape):
