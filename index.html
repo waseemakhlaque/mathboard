@@ -10,13 +10,14 @@
 <meta name="theme-color" content="#1f2733" />
 <title>MathBoard</title>
 <link rel="manifest" href="./manifest.json" />
-<link rel="apple-touch-icon" href="./assets/icon.svg" />
+<link rel="icon" href="./assets/logo.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="./assets/logo.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=31" />
+<link rel="stylesheet" href="./css/app.css?v=32" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <script src="./vendor/jsxgraphcore.js" defer></script>
 <script src="./vendor/mathlive.min.js" defer></script>
@@ -32,6 +33,7 @@
 <section id="library" class="view">
   <header class="lib-head lib-lesson">
     <div class="lib-head-left">
+      <img class="lib-logo" src="./assets/logo.svg" alt="MathBoard logo" />
       <h1>MathBoard</h1>
       <div class="lib-tabs">
         <button type="button" class="lib-tab active" data-lib="lesson">Blank lessons</button>
@@ -67,16 +69,13 @@
 
 <!-- ===== Editor view ===== -->
 <section id="editor" class="view hidden">
+  <!-- Top app bar -->
   <div class="toolbar">
     <div class="tbar-row tbar-top">
+      <img class="appbar-logo" src="./assets/logo.svg" alt="MathBoard" />
       <button id="back" class="ghost" title="Back to lessons">‹ Lessons</button>
       <input id="nb-name" class="nb-name present-hide" type="text" />
       <span id="nb-title-present" class="nb-title-present"></span>
-      <div class="tabs present-hide">
-        <button class="tab-btn active" data-tab="draw">Draw</button>
-        <button class="tab-btn" data-tab="maths">Maths</button>
-        <button class="tab-btn" data-tab="page">Page</button>
-      </div>
       <span class="spacer"></span>
       <button id="undo" title="Undo (⌘Z)">Undo</button>
       <button id="redo" title="Redo (⇧⌘Z)">Redo</button>
@@ -104,8 +103,24 @@
       <button id="export-json" class="present-hide" title="Download portable .mathboard.json backup">Backup</button>
       <button id="export-pdf" class="present-hide primary">Export PDF</button>
     </div>
+  </div>
 
-    <div class="tbar-row tbar-tools">
+  <input id="pdf-file" type="file" accept="application/pdf" hidden />
+  <input id="img-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+
+  <!-- Classroom body: left tool rail + stage -->
+  <div class="editor-main">
+    <aside id="tool-rail" class="tool-rail tbar-tools">
+      <div class="rail-head present-hide">
+        <button type="button" id="rail-pin" class="rail-icon" title="Pin / unpin toolbar">⇤</button>
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="draw" title="Drawing tools">Draw</button>
+          <button class="tab-btn" data-tab="maths" title="Maths tools">Maths</button>
+          <button class="tab-btn" data-tab="page" title="Page &amp; insert">Page</button>
+        </div>
+        <button type="button" id="close-all" class="rail-icon" title="Close all floating panels">⤫</button>
+      </div>
+
       <div class="group" data-tabs="draw maths">
         <button data-tool="select" class="tool" title="Select, move &amp; resize objects (s)">Select</button>
       </div>
@@ -171,9 +186,11 @@
       </div>
 
       <div class="group present-hide" data-tabs="page">
-        <button id="prev" title="Previous page">‹</button>
-        <span id="page-label" class="page-label">1 / 1</span>
-        <button id="next" title="Next page">›</button>
+        <div class="rail-pagenav">
+          <button id="prev" title="Previous page">‹</button>
+          <span id="page-label" class="page-label">1 / 1</span>
+          <button id="next" title="Next page">›</button>
+        </div>
         <label class="ctl-label" for="paper">Grid</label>
         <select id="paper" title="Grid / paper for this page">
           <option value="plain">None (blank)</option>
@@ -191,34 +208,36 @@
         <button id="insert-img">Insert image</button>
         <button id="export-png">PNG</button>
       </div>
-    </div>
-  </div>
-  <input id="pdf-file" type="file" accept="application/pdf" hidden />
-  <input id="img-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+    </aside>
 
-  <div id="section-strip" class="section-strip present-hide">
-    <div id="section-tabs" class="section-tabs"></div>
-    <button type="button" id="section-add" class="section-add" title="Add section (OneNote-style tab)">+ Section</button>
-  </div>
+    <button type="button" id="rail-reopen" class="rail-reopen" title="Show toolbar">⇥</button>
 
-  <div id="page-strip" class="page-strip present-hide">
-    <div id="page-thumbs" class="page-thumbs"></div>
-    <button type="button" id="strip-add" class="strip-add" title="Add page after current">+</button>
-  </div>
+    <div class="stage">
+      <div id="section-strip" class="section-strip present-hide">
+        <div id="section-tabs" class="section-tabs"></div>
+        <button type="button" id="section-add" class="section-add" title="Add section (OneNote-style tab)">+ Section</button>
+      </div>
 
-  <div class="canvas-wrap">
-    <canvas id="board"></canvas>
-    <div id="geo-layer" class="geo-layer"><div id="geo-inner" class="geo-inner"></div></div>
-    <div id="brand" class="brand">
-      <img class="brand-photo" src="./assets/waseem.jpg" alt="Waseem Akhlaque" />
-      <div class="brand-text">
-        <div class="brand-name">Waseem Akhlaque</div>
-        <div class="brand-title">A Level Mathematics Teacher</div>
-        <div class="brand-phone">03212890512</div>
+      <div class="canvas-wrap">
+        <canvas id="board"></canvas>
+        <div id="geo-layer" class="geo-layer"><div id="geo-inner" class="geo-inner"></div></div>
+        <div id="brand" class="brand">
+          <img class="brand-photo" src="./assets/waseem.jpg" alt="Waseem Akhlaque" />
+          <div class="brand-text">
+            <div class="brand-name">Waseem Akhlaque</div>
+            <div class="brand-title">A Level Mathematics Teacher</div>
+            <div class="brand-phone">03212890512</div>
+          </div>
+        </div>
+        <div id="busy" class="busy hidden"><div class="busy-box"><div class="spinner"></div><div class="busy-msg">Working…</div></div></div>
+        <textarea id="text-editor" class="text-editor hidden" autocomplete="off" autocapitalize="off" spellcheck="false" rows="1"></textarea>
+      </div>
+
+      <div id="page-strip" class="page-strip present-hide">
+        <div id="page-thumbs" class="page-thumbs"></div>
+        <button type="button" id="strip-add" class="strip-add" title="Add page after current">+</button>
       </div>
     </div>
-    <div id="busy" class="busy hidden"><div class="busy-box"><div class="spinner"></div><div class="busy-msg">Working…</div></div></div>
-    <textarea id="text-editor" class="text-editor hidden" autocomplete="off" autocapitalize="off" spellcheck="false" rows="1"></textarea>
   </div>
 
   <div id="stats" class="stats-panel hidden">
@@ -509,5 +528,5 @@
   </div>
 </section>
 
-<script type="module" src="./js/app.js?v=31"></script>
+<script type="module" src="./js/app.js?v=32"></script>
 </html>

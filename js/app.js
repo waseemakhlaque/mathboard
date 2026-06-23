@@ -2593,6 +2593,23 @@ function setupSyncSettings() {
   });
 }
 
+// ---- tool rail (classroom layout): pin/unpin + close-all panels ---------------
+function setupRail() {
+  const rail = $('#tool-rail');
+  const collapse = (on) => rail?.classList.toggle('collapsed', on);
+  const pin = $('#rail-pin');
+  if (pin) pin.onclick = () => collapse(!rail.classList.contains('collapsed'));
+  const reopen = $('#rail-reopen');
+  if (reopen) reopen.onclick = () => collapse(false);
+  const closeAll = $('#close-all');
+  if (closeAll) closeAll.onclick = () => {
+    ['#calc', '#stats', '#graph', '#mech', '#cplx'].forEach((id) => $(id)?.classList.add('hidden'));
+    $('#panel-drop')?.classList.add('hidden');
+    setMechPlacing(null);
+    setCplxPlacing(null);
+  };
+}
+
 // ---- boot --------------------------------------------------------------------
 function init() {
   cv = $('#board');
@@ -2622,6 +2639,7 @@ function init() {
   setupStats();
   setupText();
   setupPanelMenu();
+  setupRail();
   setupSyncSettings();
   $('#new-nb').onclick = createNotebook;
   document.querySelectorAll('.lib-tab').forEach((b) => { b.onclick = () => setLibTab(b.dataset.lib); });

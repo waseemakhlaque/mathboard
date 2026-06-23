@@ -192,6 +192,14 @@ button.ghost:hover {
   gap: 20px;
 }
 
+.lib-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  flex: none;
+  box-shadow: var(--shadow-sm);
+}
+
 .lib-head h1 {
   font-size: 24px;
   font-weight: 700;
@@ -571,6 +579,156 @@ button.ghost:hover {
   font-weight: 500;
 }
 
+/* ---------- Classroom layout: app bar + left tool rail + stage ---------- */
+.appbar-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  flex: none;
+  box-shadow: var(--shadow-sm);
+}
+
+.editor-main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  position: relative;
+}
+
+.tool-rail {
+  flex: none;
+  width: 178px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 12px 18px;
+  border-top: none;
+  border-right: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  transition: width var(--duration-normal) var(--ease), padding var(--duration-normal) var(--ease);
+}
+
+.tool-rail.collapsed {
+  width: 0;
+  padding: 0;
+  border-right: none;
+  overflow: hidden;
+}
+
+.rail-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.rail-head .tabs {
+  margin: 0;
+  flex: 1;
+}
+
+.rail-head .tab-btn {
+  flex: 1;
+  padding: 6px 4px;
+  font-size: 12px;
+}
+
+.rail-head .rail-icon {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text-3);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.rail-head .rail-icon:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-light);
+  transform: none;
+  box-shadow: none;
+}
+
+.rail-reopen {
+  position: absolute;
+  left: 8px;
+  top: 10px;
+  z-index: 6;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 16px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  display: none;
+}
+
+.tool-rail.collapsed ~ .rail-reopen { display: inline-flex; }
+
+.tool-rail .group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.tool-rail .group:last-child { border-bottom: none; padding-bottom: 0; }
+
+.tool-rail .group > button:not(.swatch) {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+}
+
+.tool-rail .tool { position: relative; }
+
+.tool-rail .tool.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
+}
+
+.tool-rail .ctl-label { flex: 1 1 100%; }
+.tool-rail select { flex: 1 1 100%; }
+
+.rail-pagenav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 100%;
+}
+
+.rail-pagenav button { flex: none; width: 36px; }
+.rail-pagenav .page-label { flex: 1; }
+
+.tool-rail .width-group { flex-wrap: wrap; }
+.tool-rail .width-group input[type=range] { flex: 1 1 90px; }
+
+.stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
 /* ---------- Section Tabs ---------- */
 .section-strip {
   display: flex;
@@ -648,7 +806,7 @@ button.ghost:hover {
   gap: 8px;
   background: rgba(255, 255, 255, 0.5);
   backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
   padding: 8px 14px 8px max(env(safe-area-inset-left), 14px);
   min-height: var(--page-strip-height);
 }
@@ -749,11 +907,12 @@ button.ghost:hover {
 /* ---------- Present Mode ---------- */
 #editor.present-mode .present-hide { display: none !important; }
 #editor.present-mode .nb-title-present { display: block !important; }
-#editor.present-mode .tbar-tools { padding-top: 10px; padding-bottom: 10px; }
+#editor.present-mode .tbar-tools { padding-top: 12px; padding-bottom: 12px; }
+#editor.present-mode .tool-rail { width: 168px; }
 #editor.present-mode .tbar-tools .group.show { gap: 8px; }
-#editor.present-mode .tbar-tools .tool {
-  padding: 10px 18px;
-  font-size: 15px;
+#editor.present-mode .tool-rail .group > button:not(.swatch) {
+  padding: 10px 12px;
+  font-size: 14px;
   font-weight: 500;
 }
 #editor.present-mode .tbar-tools .swatch { width: 34px; height: 34px; }
@@ -899,10 +1058,49 @@ math-field.calc-expr:focus-within { outline: none; }
   .lib-head { padding: max(env(safe-area-inset-top), 14px) 16px 10px; }
 }
 
+/* On narrow screens, the left tool rail becomes a horizontal scrolling bar on top. */
+@media (max-width: 760px) {
+  .editor-main { flex-direction: column; }
+  .tool-rail {
+    width: auto;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 8px;
+    padding: 8px 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: 42vh;
+  }
+  .tool-rail.collapsed { width: auto; height: 0; max-height: 0; padding: 0; border-bottom: none; }
+  .tool-rail.collapsed ~ .rail-reopen { display: inline-flex; }
+  .rail-head {
+    flex: none;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0 8px 0 0;
+    border-bottom: none;
+    border-right: 1px solid var(--border-light);
+  }
+  .tool-rail .group {
+    flex-wrap: nowrap;
+    flex: none;
+    padding: 0 8px 0 0;
+    border-bottom: none;
+    border-right: 1px solid var(--border-light);
+  }
+  .tool-rail .group:last-child { border-right: none; }
+  .tool-rail .ctl-label,
+  .tool-rail select,
+  .rail-pagenav { flex: none; }
+  .rail-reopen { top: 8px; }
+}
+
 @media (max-width: 600px) {
   .tbar-top .present-hide:not(.panel-menu-wrap) { display: none !important; }
-  .tbar-tools { max-height: 38vh; overflow-y: auto; }
-  .geo-group { flex-wrap: wrap; }
+  .geo-group { flex-wrap: nowrap; }
   .nb-grid { grid-template-columns: 1fr; }
   .lib-head { flex-direction: column; align-items: stretch; }
   .lib-head-left { flex-direction: column; align-items: stretch; gap: 10px; }
