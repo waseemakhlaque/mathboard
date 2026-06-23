@@ -2107,18 +2107,97 @@ function bindCanvas() {
 }
 
 // ---- fx-991-equivalent scientific calculator --------------------------------
-let calcDeg = true, calcAns = 0, mathFrac = null, calcShift = false;
+let calcDeg = true, calcAns = 0, mathFrac = null, calcShift = false, calcAlpha = false;
 let calcLastExpr = null, calcResultValue = null, calcDisplayMode = 0; // 0=D 1=frac 2=surd
+let intgMode = 'integral';
 const SHIFT_MAP = {
   'sin(': 'asin(', 'cos(': 'acos(', 'tan(': 'atan(', 'log(': 'e^(', 'log10(': '10^(',
-  'table': 'matrix', '^': 'nthRoot(', ',': 'frac', ')': 'del',
+  '^': 'nthRoot(', 'sqrt(': 'cbrt(', '^2': '^3', 'inv': '!', 'pi': 'e', 'int': 'diff',
 };
 const CALC_FMT = ['D', 'F', '√'];
 
 function showCalcView(view) {
   $('#calc-keys').classList.toggle('hidden', view !== 'keys');
+  document.querySelector('.calc-ctl')?.classList.toggle('hidden', view !== 'keys');
+  document.querySelector('.calc-funcs')?.classList.toggle('hidden', view !== 'keys');
   $('#calc-table').classList.toggle('hidden', view !== 'table');
   $('#calc-matrix').classList.toggle('hidden', view !== 'matrix');
+  $('#calc-intg')?.classList.toggle('hidden', view !== 'intg');
+  const mn = $('#calc-modename');
+  if (mn) mn.textContent = view === 'table' ? 'TABLE' : view === 'matrix' ? 'MATRIX' : view === 'intg' ? (intgMode === 'derivative' ? 'd/dx' : '∫dx') : 'COMP';
+}
+function calcReset() {
+  calcSetExpr(''); $('#calc-result').textContent = '0'; $('#calc-history').textContent = '';
+  calcResultValue = null; calcShift = false; calcAlpha = false;
+  $('#calc-shift-ind')?.classList.remove('on'); $('#calc-alpha-ind')?.classList.remove('on');
+  $('#calc-mode-menu')?.classList.add('hidden');
+  showCalcView('keys');
+  calcExprEl()?.focus();
+}
+function toggleModeMenu() { $('#calc-mode-menu')?.classList.toggle('hidden'); }
+function setCalcMode(m) {
+  $('#calc-mode-menu')?.classList.add('hidden');
+  if (m === 'keys') showCalcView('keys');
+  else if (m === 'intg-integral') openIntg('integral');
+  else if (m === 'intg-derivative') openIntg('derivative');
+  else if (m === 'table') showCalcView('table');
+  else if (m === 'matrix') { showCalcView('matrix'); $('#mx-tab-mat')?.click(); }
+  else if (m === 'vector') { showCalcView('matrix'); $('#mx-tab-vec')?.click(); }
+  else if (m === 'deg') setCalcDeg(true);
+  else if (m === 'rad') setCalcDeg(false);
+}
+function setCalcDeg(on) { calcDeg = on; const m = $('#calc-mode'); if (m) m.textContent = on ? 'DEG' : 'RAD'; }
+function openIntg(mode) {
+  intgMode = mode === 'derivative' ? 'derivative' : 'integral';
+  $('#calc-mode-menu')?.classList.add('hidden');
+  showCalcView('intg');
+  $('#intg-bounds')?.classList.toggle('hidden', intgMode === 'derivative');
+  $('#intg-point')?.classList.toggle('hidden', intgMode !== 'derivative');
+  $('#intg-tab-int')?.classList.toggle('active', intgMode === 'integral');
+  $('#intg-tab-der')?.classList.toggle('active', intgMode === 'derivative');
+}
+// numeric definite integral (composite Simpson) using the calculator angle mode
+function simpsonCalc(node, a, b, n = 400) {
+  if (a === b) return 0;
+  if (n % 2) n++;
+  const sc = calcScope();
+  const f = (x) => node.evaluate({ ...sc, x });
+  const h = (b - a) / n;
+  let s = f(a) + f(b);
+  for (let i = 1; i < n; i++) s += (i % 2 ? 4 : 2) * f(a + i * h);
+  return (h / 3) * s;
+}
+function calcComputeIntg() {
+  const out = $('#intg-out');
+  const fx = $('#intg-fx').value.trim();
+  if (!fx) { out.innerHTML = '<div class="ct-err">Enter f(x).</div>'; return; }
+  let node;
+  try { node = math.compile(fx); } catch (_) { out.innerHTML = '<div class="ct-err">Check f(x).</div>'; return; }
+  const toL = window.MathLive?.convertAsciiMathToLatex;
+  try {
+    if (intgMode === 'derivative') {
+      const x0 = Number(math.evaluate($('#intg-x0').value || '0', calcScope()));
+      const sc = calcScope();
+      const h = 1e-5;
+      const d = (node.evaluate({ ...sc, x: x0 + h }) - node.evaluate({ ...sc, x: x0 - h })) / (2 * h);
+      let sym = '';
+      try { sym = math.derivative(fx, 'x').toString(); } catch (_) {}
+      calcResultValue = d; calcDisplayMode = 0;
+      if (toL) calcSetExpr(`\\frac{d}{dx}\\left(${toL(fx)}\\right)\\Big|_{x=${toL(String($('#intg-x0').value || '0'))}}`);
+      $('#calc-history').textContent = sym ? `f'(x) = ${sym}` : 'd/dx';
+      calcRenderResult();
+      out.innerHTML = `<div class="ct-ok">f′(${fmt(x0)}) = ${calcFormatPlain(d)}${sym ? `<br>f′(x) = ${escapeHtml(sym)}` : ''}</div>`;
+    } else {
+      const a = Number(math.evaluate($('#intg-a').value || '0', calcScope()));
+      const b = Number(math.evaluate($('#intg-b').value || '0', calcScope()));
+      const val = simpsonCalc(node, a, b);
+      calcResultValue = val; calcDisplayMode = 0;
+      if (toL) calcSetExpr(`\\int_{${toL(String($('#intg-a').value || '0'))}}^{${toL(String($('#intg-b').value || '0'))}}\\left(${toL(fx)}\\right)\\,dx`);
+      $('#calc-history').textContent = `∫ from ${fmt(a)} to ${fmt(b)}`;
+      calcRenderResult();
+      out.innerHTML = `<div class="ct-ok">∫ = ${calcFormatPlain(val)}</div>`;
+    }
+  } catch (e) { out.innerHTML = '<div class="ct-err">Could not compute. Check inputs &amp; angle mode.</div>'; }
 }
 function calcScope() {
   const toRad = (x) => calcDeg ? x * Math.PI / 180 : x;
@@ -2215,7 +2294,10 @@ function calcGetExpr() {
   const el = calcExprEl();
   if (!el) return '';
   if (typeof el.getValue === 'function') {
-    try { return (el.getValue('ASCIIMath') || el.getValue() || '').trim(); } catch (_) { return (el.value || '').trim(); }
+    for (const fmt of ['ascii-math', 'ASCIIMath']) {
+      try { const v = el.getValue(fmt); if (v) return v.trim(); } catch (_) { /* try next */ }
+    }
+    try { return (el.getValue() || '').trim(); } catch (_) { return (el.value || '').trim(); }
   }
   return (el.value || '').trim();
 }
@@ -2257,9 +2339,16 @@ function calcRecall() {
 function calcKey(k) {
   const inp = calcExprEl();
   if (k === 'shift') { calcShift = !calcShift; $('#calc-shift-ind').classList.toggle('on', calcShift); return; }
+  if (k === 'alpha') { calcAlpha = !calcAlpha; $('#calc-alpha-ind')?.classList.toggle('on', calcAlpha); return; }
   const sh = calcShift;
   if (sh) { calcShift = false; $('#calc-shift-ind').classList.remove('on'); }
-  if (k === 'ac') { calcSetExpr(''); $('#calc-result').textContent = '0'; $('#calc-history').textContent = ''; calcResultValue = null; inp?.focus(); return; }
+  if (calcAlpha) { calcAlpha = false; $('#calc-alpha-ind')?.classList.remove('on'); }
+  if (k === 'on' || k === 'ac') { calcReset(); return; }
+  if (k === 'mode') { toggleModeMenu(); return; }
+  if (k === 'up') { calcRecall(); return; }
+  if (k === 'down') { return; }
+  if (k === 'left') { inp?.executeCommand?.('moveToPreviousChar'); inp?.focus?.(); return; }
+  if (k === 'right') { inp?.executeCommand?.('moveToNextChar'); inp?.focus?.(); return; }
   if (k === 'matrix') { showCalcView('matrix'); return; }
   if (k === 'table') { showCalcView('table'); return; }
   if (k === 'calc') { calcRecall(); return; }
@@ -2267,12 +2356,18 @@ function calcKey(k) {
   if (k === 'sd') { calcToggleSD(); return; }
   let token = (k === 'ans') ? 'Ans' : k;
   if (sh && SHIFT_MAP[k]) token = SHIFT_MAP[k];
+  if (token === 'int') { openIntg('integral'); return; }
+  if (token === 'diff') { openIntg('derivative'); return; }
   if (token === 'del') {
     if (inp?.executeCommand) inp.executeCommand('deleteBackward');
     else if (inp) inp.value = inp.value.slice(0, -1);
     inp?.focus(); return;
   }
+  if (token === 'inv') { calcInsert('^(-1)'); return; }
+  if (token === 'neg') { calcInsert('-'); return; }
+  if (token === 'e10') { calcInsert('*10^('); return; }
   if (token === 'frac') { calcInsert('()/()'); return; }
+  if (token === 'hyp' || token === 'rcl' || token === 'dms') { return; }
   calcInsert(token);
 }
 function calcGenTable() {
@@ -2345,13 +2440,18 @@ function calcVectorOp(op) {
 function setupCalculator() {
   if (!window.math) { $('#calc-toggle').style.display = 'none'; return; }
   mathFrac = math.create(math.all); mathFrac.config({ number: 'Fraction' });
-  document.querySelectorAll('#calc-keys .ck').forEach((b) => b.onclick = () => calcKey(b.dataset.k));
+  document.querySelectorAll('#calc [data-k]').forEach((b) => b.onclick = () => calcKey(b.dataset.k));
   $('#calc-toggle').onclick = () => { $('#calc').classList.toggle('hidden'); calcExprEl()?.focus(); };
   $('#calc-close').onclick = () => $('#calc').classList.add('hidden');
-  $('#calc-mode').onclick = () => { calcDeg = !calcDeg; $('#calc-mode').textContent = calcDeg ? 'DEG' : 'RAD'; };
+  $('#calc-mode').onclick = () => setCalcDeg(!calcDeg);
   const mf = calcExprEl();
   if (mf?.setOptions) mf.setOptions({ smartMode: false, virtualKeyboardMode: 'manual' });
   mf?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); calcEvaluate(); } });
+  document.querySelectorAll('[data-cmode]').forEach((b) => b.onclick = () => setCalcMode(b.dataset.cmode));
+  $('#intg-back').onclick = () => showCalcView('keys');
+  $('#intg-go').onclick = calcComputeIntg;
+  $('#intg-tab-int').onclick = () => openIntg('integral');
+  $('#intg-tab-der').onclick = () => openIntg('derivative');
   $('#ct-back').onclick = () => showCalcView('keys');
   $('#cm-back').onclick = () => showCalcView('keys');
   $('#ct-gen').onclick = calcGenTable;

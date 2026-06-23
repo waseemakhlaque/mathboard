@@ -1592,6 +1592,103 @@ select:focus {
   line-height: 1;
 }
 
+/* ---------- fx-991ES PLUS faceplate ---------- */
+.calc.casio {
+  width: 344px;
+  background: linear-gradient(180deg, #2b2f36 0%, #1f2228 100%);
+  border: 1px solid #0e1013;
+  border-radius: 18px;
+  padding-bottom: 6px;
+}
+.calc.casio .calc-head {
+  position: relative;
+  background: linear-gradient(180deg, #34373d, #26292e);
+  padding: 10px 12px 9px;
+  border-radius: 17px 17px 0 0;
+}
+.casio-logo { font-weight: 800; font-size: 16px; letter-spacing: 1px; color: #f2f4f7; }
+.casio-model { margin-left: 8px; font-style: italic; font-weight: 700; font-size: 12.5px; color: #cfd6e0; }
+.casio-vpam { margin-left: 8px; font-size: 8px; letter-spacing: 0.4px; color: #18b36b; font-weight: 700; }
+.casio-solar {
+  position: absolute; right: 34px; top: 11px;
+  width: 54px; height: 15px; border-radius: 3px;
+  background: repeating-linear-gradient(90deg, #5b4a2a, #5b4a2a 8px, #3a2f1c 8px, #3a2f1c 10px);
+  border: 1px solid #1c160c;
+}
+.calc.casio .calc-x { position: absolute; right: 8px; top: 6px; color: #99a2ad; }
+
+.calc.casio .calc-screen {
+  margin: 10px 12px;
+  background: linear-gradient(180deg, #aebfa6, #9eb397);
+  border: 2px solid #6f7d68;
+}
+.ind-alpha { visibility: hidden; color: #b23b2e; }
+.ind-alpha.on { visibility: visible; }
+.ind-modename { margin-left: auto; color: #36432f; font-weight: 800; }
+
+.calc-ctl {
+  display: grid;
+  grid-template-columns: 1fr 1fr 84px 1fr 1fr;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 12px 8px;
+}
+.ck-alpha { background: #b23b2e; color: #fff; font-weight: 700; font-size: 12px; box-shadow: 0 2px 0 #7e271d; }
+
+.calc-replay {
+  position: relative;
+  width: 78px; height: 58px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%, #4a515c, #2b3038);
+  box-shadow: inset 0 0 0 2px #15181c, 0 2px 0 #15181c;
+}
+.calc-replay .rep {
+  position: absolute; background: transparent; border: none; color: #cfd6e0;
+  font-size: 9px; padding: 0; cursor: pointer; width: 22px; height: 18px; line-height: 1;
+}
+.calc-replay .rep:active { color: #fff; }
+.rep-up { top: 1px; left: 50%; transform: translateX(-50%); }
+.rep-down { bottom: 1px; left: 50%; transform: translateX(-50%); }
+.rep-left { left: 1px; top: 50%; transform: translateY(-50%); }
+.rep-right { right: 1px; top: 50%; transform: translateY(-50%); }
+.rep-hub {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 26px; height: 26px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%, #5b636f, #343b44);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.15), 0 1px 2px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+.calc.casio .calc-keys { padding: 2px 12px 8px; gap: 6px; }
+.calc.casio .ck { background: #3a4048; color: #eef1f5; box-shadow: 0 2px 0 #1b1f25; font-size: 13.5px; padding: 9px 0 8px; }
+.calc.casio .ck-num { background: #eef1f5; color: #14181d; box-shadow: 0 2px 0 #aeb6c0; font-weight: 600; font-size: 15px; }
+.calc.casio .ck-op { background: #cdd6e0; color: #14181d; box-shadow: 0 2px 0 #98a2ad; font-weight: 700; }
+.calc.casio .ck-eq { background: var(--accent); color: #fff; box-shadow: 0 2px 0 #1a4e9c; font-weight: 700; font-size: 17px; }
+.calc.casio .ck-warn { background: #d8643f; color: #fff; box-shadow: 0 2px 0 #a64a2c; font-size: 12px; }
+.calc.casio .ck-shift { background: #e6b422; color: #2a1c05; box-shadow: 0 2px 0 #ab8316; font-weight: 700; font-size: 12px; }
+.calc.casio .ck-ctl { background: #4a515c; color: #eceef2; box-shadow: 0 2px 0 #2c313a; font-size: 12px; }
+.sh.sh-y { color: #f0c33a; }
+.sh.sh-r { color: #e0796b; }
+
+.calc-funcs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 0 12px 8px; }
+
+.calc-mode-menu {
+  margin: 0 12px 10px; padding: 10px; border-radius: 10px;
+  background: #161a20; border: 1px solid #2c313a;
+}
+.calc-mode-menu.hidden { display: none; }
+.cmm-title { color: #9aa3af; font-size: 11px; margin-bottom: 8px; letter-spacing: 0.4px; }
+.cmm-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.cmm-grid button { background: #2a2f37; color: #e7eaef; border: 1px solid #3a414b; border-radius: 6px; padding: 8px; font-size: 12px; }
+.cmm-grid button:hover { background: #343b44; }
+
+.intg-modes { display: flex; gap: 6px; margin-bottom: 10px; }
+
+/* hide MathLive's built-in menu / virtual-keyboard toggle inside the calc display */
+.calc-expr::part(menu-toggle),
+.calc-expr::part(virtual-keyboard-toggle) { display: none; }
+
 /* ---------- Calculator TABLE / Matrix ---------- */
 .calc-sub { padding: 12px; }
 .calc-sub.hidden { display: none; }
