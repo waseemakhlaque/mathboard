@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=32" />
+<link rel="stylesheet" href="./css/app.css?v=33" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <script src="./vendor/jsxgraphcore.js" defer></script>
 <script src="./vendor/mathlive.min.js" defer></script>
@@ -86,6 +86,7 @@
         <button type="button" id="panel-menu" title="Panels menu">Panels ▾</button>
         <div id="panel-drop" class="panel-drop hidden">
           <button type="button" data-panel="#graph">Graph f(x)</button>
+          <button type="button" data-panel="#calculus">Calculus ∫</button>
           <button type="button" data-panel="#stats">Statistics</button>
           <button type="button" data-panel="#calc">Calculator</button>
           <button type="button" data-panel="#mech">Mechanics</button>
@@ -94,6 +95,7 @@
       </div>
       <span class="panel-btns present-hide">
       <button id="graph-toggle" title="Graph functions y = f(x)">f(x)</button>
+      <button id="calculus-toggle" title="Calculus: derivative, integral, area, Riemann, tangent">∫ Calc</button>
       <button id="stats-toggle" title="Statistics">Stats</button>
       <button id="calc-toggle" title="Scientific calculator">Calc</button>
       <button id="mech-toggle" title="Mechanics diagrams">Mech</button>
@@ -526,7 +528,87 @@
       <p class="gp-hint">Loci export with PNG/PDF · combine with Plot z &amp; Circle tools</p>
     </div>
   </div>
+
+  <div id="calculus" class="gpanel mech-panel panel-calculus hidden">
+    <div class="gp-head" id="calculus-head">
+      <span class="calc-title">Calculus</span>
+      <button class="calc-x" id="calculus-close" title="Close" aria-label="Close calculus">×</button>
+    </div>
+    <div class="mech-tabs cal-tabs">
+      <button type="button" data-caltab="deriv" class="mech-tab active">f′(x)</button>
+      <button type="button" data-caltab="integral" class="mech-tab">∫ area</button>
+      <button type="button" data-caltab="between" class="mech-tab">between</button>
+      <button type="button" data-caltab="riemann" class="mech-tab">Riemann</button>
+      <button type="button" data-caltab="tangent" class="mech-tab">tangent</button>
+    </div>
+
+    <div id="cal-deriv" class="cal-pane mech-pane">
+      <p class="cplx-hint">Plot the derivative f′(x) and mark stationary points (max / min / inflexion).</p>
+      <label class="ct-lab">f(x) =</label>
+      <input id="cal-d-expr" class="mech-in full" type="text" value="x^2 - 3" />
+      <label class="mech-chk"><input type="checkbox" id="cal-d-stat" checked /> Mark stationary points</label>
+      <button type="button" data-cadd="deriv" class="ck ck-eq2 mech-place">Add to page</button>
+    </div>
+
+    <div id="cal-integral" class="cal-pane mech-pane hidden">
+      <p class="cplx-hint">Shade the area under y = f(x) between x = a and x = b (Simpson's rule).</p>
+      <label class="ct-lab">f(x) =</label>
+      <input id="cal-i-expr" class="mech-in full" type="text" value="x^2" />
+      <div class="cal-row2">
+        <span><label class="ct-lab">a</label><input id="cal-i-a" class="mech-in" type="text" value="-1" /></span>
+        <span><label class="ct-lab">b</label><input id="cal-i-b" class="mech-in" type="text" value="2" /></span>
+      </div>
+      <button type="button" data-cadd="integral" class="ck ck-eq2 mech-place">Add to page</button>
+    </div>
+
+    <div id="cal-between" class="cal-pane mech-pane hidden">
+      <p class="cplx-hint">Shade the region between two curves and give its area.</p>
+      <label class="ct-lab">upper f₁(x) =</label>
+      <input id="cal-b-e1" class="mech-in full" type="text" value="x + 2" />
+      <label class="ct-lab">lower f₂(x) =</label>
+      <input id="cal-b-e2" class="mech-in full" type="text" value="x^2" />
+      <div class="cal-row2">
+        <span><label class="ct-lab">a</label><input id="cal-b-a" class="mech-in" type="text" value="-1" /></span>
+        <span><label class="ct-lab">b</label><input id="cal-b-b" class="mech-in" type="text" value="2" /></span>
+      </div>
+      <button type="button" data-cadd="between" class="ck ck-eq2 mech-place">Add to page</button>
+    </div>
+
+    <div id="cal-riemann" class="cal-pane mech-pane hidden">
+      <p class="cplx-hint">Approximate ∫ with rectangles / trapezia — great for showing the limit.</p>
+      <label class="ct-lab">f(x) =</label>
+      <input id="cal-r-expr" class="mech-in full" type="text" value="x^2" />
+      <div class="cal-row3">
+        <span><label class="ct-lab">a</label><input id="cal-r-a" class="mech-in" type="text" value="0" /></span>
+        <span><label class="ct-lab">b</label><input id="cal-r-b" class="mech-in" type="text" value="2" /></span>
+        <span><label class="ct-lab">n</label><input id="cal-r-n" class="mech-in" type="text" value="8" /></span>
+      </div>
+      <label class="ct-lab">rule</label>
+      <select id="cal-r-rule" class="mech-in full">
+        <option value="left">Left endpoint</option>
+        <option value="right">Right endpoint</option>
+        <option value="mid" selected>Midpoint</option>
+        <option value="trap">Trapezium</option>
+      </select>
+      <button type="button" data-cadd="riemann" class="ck ck-eq2 mech-place">Add to page</button>
+    </div>
+
+    <div id="cal-tangent" class="cal-pane mech-pane hidden">
+      <p class="cplx-hint">Draw the tangent (and optional normal) to a curve at x = x₀.</p>
+      <label class="ct-lab">f(x) =</label>
+      <input id="cal-t-expr" class="mech-in full" type="text" value="x^3 - 3*x" />
+      <label class="ct-lab">x₀</label>
+      <input id="cal-t-x0" class="mech-in full" type="text" value="1" />
+      <label class="mech-chk"><input type="checkbox" id="cal-t-normal" /> Also draw normal</label>
+      <button type="button" data-cadd="tangent" class="ck ck-eq2 mech-place">Add to page</button>
+    </div>
+
+    <div class="mech-foot">
+      <button type="button" id="calculus-clear" class="ck ck-warn mech-clear">Clear calculus on page</button>
+      <p class="gp-hint">Use a grid paper (axes) · diagrams export with PNG/PDF · radians for trig</p>
+    </div>
+  </div>
 </section>
 
-<script type="module" src="./js/app.js?v=32"></script>
+<script type="module" src="./js/app.js?v=33"></script>
 </html>

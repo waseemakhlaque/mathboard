@@ -1,7 +1,7 @@
 // sw.js — offline support.
 // Same-origin app files: network-first (always get the latest, fall back to cache offline).
 // Cross-origin CDN (jsPDF): cache-first (immutable, fine to pin).
-const CACHE = 'mathboard-v32';
+const CACHE = 'mathboard-v33';
 const ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const ASSETS = [
   './js/geo.js',
   './js/mech.js',
   './js/cplx.js',
+  './js/calculus.js',
   './js/instruments.js',
   './js/model.js',
   './js/share.js',

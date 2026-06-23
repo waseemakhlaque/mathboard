@@ -24,6 +24,9 @@ import {
 import {
   setupInstruments, setInstTool, instToolActive, handleInstClick, drawInstruments,
 } from './instruments.js';
+import {
+  setupCalculus, setupCalculusPanel, drawCalcItems, clearCalcPage,
+} from './calculus.js';
 import { getAllNotebooks, getNotebook, saveNotebook, deleteNotebook } from './storage.js';
 
 // ---- constants ---------------------------------------------------------------
@@ -128,6 +131,7 @@ function snapshotPage() {
     geoLabelN: p.geoLabelN || 0,
     mechItems: clone(p.mechItems || []),
     cplxLoci: clone(p.cplxLoci || []),
+    calcItems: clone(p.calcItems || []),
     instruments: clone(p.instruments || []),
   };
 }
@@ -149,6 +153,7 @@ function restorePage(s) {
   p.geoLabelN = s.geoLabelN || 0;
   p.mechItems = clone(s.mechItems || []);
   p.cplxLoci = clone(s.cplxLoci || []);
+  p.calcItems = clone(s.calcItems || []);
   p.instruments = clone(s.instruments || []);
   restoreGeoItems(p.geoItems);
   updatePageLabel();
@@ -860,6 +865,7 @@ function drawPageContent(c, pg) {
   const e = imgCache.get(pg.id);
   drawBackground(c, pg, e && e.loaded ? e.img : null);
   drawFunctions(c, pg);
+  drawCalcItems(c, pg);
   drawObjects(c, pg);
   drawMechItems(c, pg);
   drawCplxLoci(c, pg);
@@ -892,6 +898,7 @@ function render() {
     ctx.clip();
     drawBackground(ctx, page(), pageImage(page()));
     drawFunctions(ctx, page());
+    drawCalcItems(ctx, page());
     drawObjects(ctx, page());
     drawMechItems(ctx, page());
     drawCplxLoci(ctx, page());
@@ -2603,7 +2610,7 @@ function setupRail() {
   if (reopen) reopen.onclick = () => collapse(false);
   const closeAll = $('#close-all');
   if (closeAll) closeAll.onclick = () => {
-    ['#calc', '#stats', '#graph', '#mech', '#cplx'].forEach((id) => $(id)?.classList.add('hidden'));
+    ['#calc', '#stats', '#graph', '#mech', '#cplx', '#calculus'].forEach((id) => $(id)?.classList.add('hidden'));
     $('#panel-drop')?.classList.add('hidden');
     setMechPlacing(null);
     setCplxPlacing(null);
@@ -2637,6 +2644,12 @@ function init() {
   setupCalculator();
   setupGraph();
   setupStats();
+  setupCalculus({
+    page, beginAction, commitAction, persist, mark, unit: UNIT, pageW: PAGE_W, pageH: PAGE_H,
+    ensureAxes: () => { if (!GRID_PAPERS.includes(page().paper)) { page().paper = 'axes'; updatePageLabel(); persist(); mark(); } },
+  });
+  setupCalculusPanel();
+  makeDraggable($('#calculus'), $('#calculus-head'));
   setupText();
   setupPanelMenu();
   setupRail();

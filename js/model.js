@@ -17,6 +17,7 @@ export function normalizePage(p) {
   if (!Array.isArray(p.geoItems)) p.geoItems = [];
   if (!Array.isArray(p.mechItems)) p.mechItems = [];
   if (!Array.isArray(p.cplxLoci)) p.cplxLoci = [];
+  if (!Array.isArray(p.calcItems)) p.calcItems = [];
   if (!Array.isArray(p.instruments)) p.instruments = [];
   if (typeof p.geoLabelN !== 'number') p.geoLabelN = 0;
   return p;

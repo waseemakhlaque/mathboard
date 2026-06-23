@@ -979,6 +979,11 @@ button.ghost:hover {
 #graph.gpanel { top: 88px; right: 20px; }
 #mech.panel-mech { top: 88px; right: 20px; }
 #cplx.panel-cplx { top: 88px; right: 330px; }
+#calculus.panel-calculus { top: 88px; right: 330px; }
+.cal-row2, .cal-row3 { display: flex; gap: 8px; }
+.cal-row2 span, .cal-row3 span { flex: 1; }
+.cal-row2 .mech-in, .cal-row3 .mech-in { width: 100%; }
+.cal-tabs .mech-tab { padding: 6px 8px; font-size: 12px; }
 .stats-panel { left: 20px; bottom: 20px; }
 .calc { right: 20px; bottom: 20px; }
 
@@ -1052,6 +1057,7 @@ math-field.calc-expr:focus-within { outline: none; }
   .tbar-tools .tool { padding: 7px 10px; font-size: 12px; }
   .nb-name { width: 110px; }
   #cplx.panel-cplx { right: 12px; top: auto; bottom: 80px; max-height: 45vh; }
+  #calculus.panel-calculus { right: 12px; top: auto; bottom: 80px; max-height: 45vh; }
   .calc { width: min(328px, calc(100vw - 24px)); right: 12px; bottom: 12px; }
   .stats-panel { width: min(340px, calc(100vw - 24px)); left: 12px; bottom: 12px; }
   .nb-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; padding: 14px 16px; }
