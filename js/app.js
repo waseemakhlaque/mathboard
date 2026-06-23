@@ -655,10 +655,13 @@ const mathToPage = (x, y) => ({ x: gridCx() + x * UNIT, y: gridCy() - y * UNIT }
 const pageToMath = (px, py) => ({ x: (px - gridCx()) / UNIT, y: (gridCy() - py) / UNIT });
 
 function evalFnY(f, x) {
-  const A = f.amp != null && f.amp !== '' ? Number(math.evaluate(String(f.amp), calcScope())) : 1;
-  const k = f.period != null && f.period !== '' ? Number(math.evaluate(String(f.period), calcScope())) : 1;
-  const y = math.compile(f.expr).evaluate({ x: (isFinite(k) ? k : 1) * x });
-  return (isFinite(A) ? A : 1) * y;
+  const num = (v, dflt) => (v != null && v !== '' ? Number(math.evaluate(String(v), calcScope())) : dflt);
+  let A = num(f.amp, 1); if (!isFinite(A)) A = 1;
+  let k = num(f.period, 1); if (!isFinite(k)) k = 1;
+  let c = num(f.phase, 0); if (!isFinite(c)) c = 0;
+  let dsh = num(f.vshift, 0); if (!isFinite(dsh)) dsh = 0;
+  const y = math.compile(f.expr).evaluate({ x: k * x + c });
+  return A * y + dsh;
 }
 function applyGraphAmp(f) { /* amp/period applied in evalFnY */ }
 function evalParam(f, t) {
@@ -839,13 +842,16 @@ function drawFunctions(c, pg) {
     if (!f.expr || !f.expr.trim()) continue;
     let node;
     try { node = math.compile(f.expr); } catch (_) { continue; }
+    // precompute transform parameters A·f(k·x + φ) + d once per curve
+    const pnum = (v, dflt) => { if (v == null || v === '') return dflt; try { const n = Number(math.evaluate(String(v), calcScope())); return isFinite(n) ? n : dflt; } catch (_) { return dflt; } };
+    const A = pnum(f.amp, 1), k = pnum(f.period, 1), ph = pnum(f.phase, 0), vs = pnum(f.vshift, 0);
     c.strokeStyle = f.color; c.lineWidth = 3; c.lineJoin = 'round'; c.lineCap = 'round'; c.setLineDash([]);
     c.beginPath();
     let pen = false, lastPy = null;
     for (let px = 0; px <= PAGE_W; px += 2) {
       const x = (px - gridCx()) / UNIT;
       let y;
-      try { y = node.evaluate({ x }); } catch (_) { pen = false; continue; }
+      try { y = A * node.evaluate({ x: k * x + ph }) + vs; } catch (_) { pen = false; continue; }
       if (typeof y !== 'number' || !isFinite(y)) { pen = false; continue; }
       const py = gridCy() - y * UNIT;
       if (pen && lastPy != null && Math.abs(py - lastPy) > PAGE_H * 1.5) pen = false;
@@ -858,6 +864,36 @@ function drawFunctions(c, pg) {
   }
 }
 
+// interactive unit circle for trigonometry teaching (page-level, exports with the page)
+function drawTrig(c, pg) {
+  const u = pg.unitCircle;
+  if (!u || !u.show) return;
+  const R = UNIT, cx = gridCx(), cy = gridCy();
+  const th = (u.angleDeg || 0) * Math.PI / 180;
+  const px = cx + Math.cos(th) * R, py = cy - Math.sin(th) * R;
+  c.lineWidth = 2; c.setLineDash([]);
+  c.strokeStyle = '#5a6570';
+  c.beginPath(); c.arc(cx, cy, R, 0, Math.PI * 2); c.stroke();
+  // cos (horizontal) and sin (vertical) projections
+  c.strokeStyle = '#1f9d57'; c.lineWidth = 3;
+  c.beginPath(); c.moveTo(cx, cy); c.lineTo(px, cy); c.stroke();         // cos
+  c.strokeStyle = '#d23b3b';
+  c.beginPath(); c.moveTo(px, cy); c.lineTo(px, py); c.stroke();         // sin
+  // radius
+  c.strokeStyle = '#2566c8'; c.lineWidth = 2.5;
+  c.beginPath(); c.moveTo(cx, cy); c.lineTo(px, py); c.stroke();
+  // angle arc
+  c.strokeStyle = '#e0892a'; c.lineWidth = 2;
+  c.beginPath(); c.arc(cx, cy, R * 0.3, 0, -th, th > 0); c.stroke();
+  c.fillStyle = '#2566c8'; c.beginPath(); c.arc(px, py, 5, 0, Math.PI * 2); c.fill();
+  c.fillStyle = '#1b1b1b'; c.font = '600 16px sans-serif'; c.textAlign = 'left';
+  const s = Math.sin(th), co = Math.cos(th), tn = Math.tan(th);
+  c.fillText(`θ = ${u.angleDeg || 0}°`, cx + R + 12, cy - R - 4);
+  c.fillStyle = '#d23b3b'; c.fillText(`sin = ${s.toFixed(3)}`, cx + R + 12, cy - R + 18);
+  c.fillStyle = '#1f9d57'; c.fillText(`cos = ${co.toFixed(3)}`, cx + R + 12, cy - R + 38);
+  c.fillStyle = '#8a4fd0'; c.fillText(`tan = ${Math.abs(tn) > 1e4 ? '∞' : tn.toFixed(3)}`, cx + R + 12, cy - R + 58);
+}
+
 // draws one page's full content into a context already scaled to page units
 function drawPageContent(c, pg) {
   c.fillStyle = '#ffffff';
@@ -865,6 +901,7 @@ function drawPageContent(c, pg) {
   const e = imgCache.get(pg.id);
   drawBackground(c, pg, e && e.loaded ? e.img : null);
   drawFunctions(c, pg);
+  drawTrig(c, pg);
   drawCalcItems(c, pg);
   drawObjects(c, pg);
   drawMechItems(c, pg);
@@ -898,6 +935,7 @@ function render() {
     ctx.clip();
     drawBackground(ctx, page(), pageImage(page()));
     drawFunctions(ctx, page());
+    drawTrig(ctx, page());
     drawCalcItems(ctx, page());
     drawObjects(ctx, page());
     drawMechItems(ctx, page());
@@ -2743,6 +2781,10 @@ function openGraph() {
   if (!GRID_PAPERS.includes(page().paper)) { page().paper = 'axes'; updatePageLabel(); persist(); }
   $('#graph').classList.remove('hidden');
   if (!fns().length) addFunction('sin(x)'); else renderGraphList();
+  const u = page().unitCircle;
+  $('#gp-unit')?.classList.toggle('brand-toggle-active', !!(u && u.show));
+  if (u && $('#gp-angle')) { $('#gp-angle').value = u.angleDeg || 45; $('#gp-angle-v').textContent = (u.angleDeg || 45) + '°'; }
+  trigReadout();
   mark();
 }
 function setupGraph() {
@@ -2757,7 +2799,47 @@ function setupGraph() {
     if (b.dataset.param) b.onclick = () => addFunction('', true);
     else b.onclick = () => addFunction(b.dataset.fn);
   });
+  setupTrigControls();
   makeDraggable($('#graph'), $('#gp-head'));
+}
+function trigReadout() {
+  const u = page().unitCircle || {};
+  const th = (u.angleDeg || 0) * Math.PI / 180;
+  const tn = Math.tan(th);
+  const r = $('#gp-unit-read');
+  if (r) r.textContent = u.show ? `sin ${Math.sin(th).toFixed(2)} · cos ${Math.cos(th).toFixed(2)} · tan ${Math.abs(tn) > 1e4 ? '∞' : tn.toFixed(2)}` : 'off';
+}
+function setupTrigControls() {
+  const unitBtn = $('#gp-unit');
+  if (!unitBtn) return;
+  unitBtn.onclick = () => {
+    const pg = page();
+    if (!pg.unitCircle) pg.unitCircle = { show: false, angleDeg: +($('#gp-angle').value || 45) };
+    pg.unitCircle.show = !pg.unitCircle.show;
+    unitBtn.classList.toggle('brand-toggle-active', pg.unitCircle.show);
+    trigReadout(); persist(); mark();
+  };
+  $('#gp-angle').oninput = (e) => {
+    const pg = page();
+    if (!pg.unitCircle) pg.unitCircle = { show: true, angleDeg: 0 };
+    pg.unitCircle.angleDeg = +e.target.value;
+    $('#gp-angle-v').textContent = e.target.value + '°';
+    trigReadout(); persist(); mark();
+  };
+  const bindSlider = (id, valId, key, scale, suffix) => {
+    const el = $(id); if (!el) return;
+    el.oninput = () => {
+      const v = +el.value / scale;
+      const f = fns()[0];
+      if (f) { f[key] = String(v); f.mode = f.mode === 'param' ? 'y' : f.mode; }
+      $(valId).textContent = v + (suffix || '');
+      persist(); mark();
+    };
+  };
+  bindSlider('#gp-amp', '#gp-amp-v', 'amp', 100, '');
+  bindSlider('#gp-per', '#gp-per-v', 'period', 100, '');
+  bindSlider('#gp-pha', '#gp-pha-v', 'phase', 100, '');
+  bindSlider('#gp-vsh', '#gp-vsh-v', 'vshift', 100, '');
 }
 
 // ---- statistics (simple-statistics + uPlot) ---------------------------------

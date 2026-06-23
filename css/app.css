@@ -1687,6 +1687,13 @@ select:focus {
 .cmm-grid button:hover { background: #343b44; }
 
 .intg-modes { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.gp-trig { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.gp-trig-head { display: flex; align-items: center; gap: 8px; }
+.gp-read { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; flex: 1; }
+.gp-trig-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.gp-slab { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+.gp-slab input[type=range] { flex: 1; }
+.gp-slab span { width: 38px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text-3); }
 .stats-chart-types { display: flex; gap: 6px; margin: 8px 0 4px; }
 .stats-chart-types .sc-btn { flex: 1; padding: 6px 4px; font-size: 12px; background: var(--surface-3); border: 1px solid var(--border); color: var(--text-3); border-radius: var(--radius-sm); }
 .stats-chart-types .sc-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }

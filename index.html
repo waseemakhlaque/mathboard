@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=37" />
+<link rel="stylesheet" href="./css/app.css?v=38" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <script src="./vendor/jsxgraphcore.js" defer></script>
 <script src="./vendor/mathlive.min.js" defer></script>
@@ -521,6 +521,18 @@
       <button data-fn="sin(2*x)" class="gp-quick ck ck-fn">sin2x</button>
       <button data-param="1" class="gp-quick ck ck-fn" title="Add circle parametric">○</button>
     </div>
+    <div class="gp-trig" id="gp-trig">
+      <div class="gp-trig-head">
+        <button type="button" id="gp-unit" class="ck ck-fn">Unit circle</button>
+        <span id="gp-unit-read" class="gp-read">—</span>
+      </div>
+      <label class="gp-slab">θ<input id="gp-angle" type="range" min="0" max="360" value="45" /><span id="gp-angle-v">45°</span></label>
+      <div class="gp-trig-sub">Transform y₁ = A·f(k·x + φ) + d</div>
+      <label class="gp-slab">A<input id="gp-amp" type="range" min="-400" max="400" value="100" /><span id="gp-amp-v">1</span></label>
+      <label class="gp-slab">k<input id="gp-per" type="range" min="-400" max="400" value="100" /><span id="gp-per-v">1</span></label>
+      <label class="gp-slab">φ<input id="gp-pha" type="range" min="-628" max="628" value="0" /><span id="gp-pha-v">0</span></label>
+      <label class="gp-slab">d<input id="gp-vsh" type="range" min="-400" max="400" value="0" /><span id="gp-vsh-v">0</span></label>
+    </div>
     <div class="gp-hint">y(x) or parametric x(t), y(t) · drag points with Select · radians</div>
   </div>
 
@@ -716,5 +728,5 @@
   </div>
 </section>
 
-<script type="module" src="./js/app.js?v=37"></script>
+<script type="module" src="./js/app.js?v=38"></script>
 </html>
