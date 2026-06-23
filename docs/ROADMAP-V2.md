@@ -23,7 +23,10 @@ land early, and the **portal** is built on a stable base.
 >   tool rail + stage with bottom page tray; pin/unpin + Close All).
 > - ✅ **Phase 3 — Thorough calculus module** (f′(x) + stationary points, definite integral +
 >   area, area between curves, Riemann sums, tangent/normal).
-> - ✅ **Phase 5 — fx‑991ES PLUS calculator** faceplate + working ∫ and d/dx (Simpson + mathjs).
+> - ✅ **Phase 5 — fx‑991ES PLUS calculator** — faithful faceplate + full key set + ∫/d/dx, EQN
+>   (2/3 unknown, quadratic, cubic), BASE‑N, Pol/Rec, hyp, STO/RCL/M+, MODE menu.
+> - ✅ **Phase 4 (trig part)** — interactive unit circle + amplitude/period/phase/shift sliders.
+> - ✅ **Statistics** — box plot + shaded normal‑distribution curve added.
 > - ✅ **Font fix** — vendored KaTeX woff2 fonts so MathLive natural display renders correctly.
 >
 > Still to do below: notebook polish, GeoGebra‑grade graphing, instruments/stats/mechanics finish,
@@ -62,7 +65,7 @@ land early, and the **portal** is built on a stable base.
 - Wire ∫ and d/dx as first‑class actions (and into the calculator in Phase 5).
 - **Done when:** you can teach differentiation + integration visually on a page, with area shading.
 
-### Phase 4 — **GeoGebra‑grade graphing** + trigonometry teaching
+### Phase 4 — **GeoGebra‑grade graphing** + trigonometry teaching 🟡 trig done (unit circle + sliders)
 - A dedicated **graphing view** with auto axis scaling, gridlines/labels, pan/zoom.
 - **Sliders / parameters** (a, b, k…) that live‑update curves.
 - **Unit‑circle** widget (angle → sin/cos/tan), and **amplitude/period/phase** sliders for trig.

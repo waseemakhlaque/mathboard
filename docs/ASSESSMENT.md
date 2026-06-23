@@ -258,9 +258,9 @@ media stack).
 | PDF / image import | 🟡 7/10 | Works; large‑media performance + blob storage needed. |
 | OpenBoard instruments (ruler/protractor/compass) | 🟡 5/10 | Present as annotations; not draggable physical instruments. |
 | Geometry constructions | ✅ 8/10 | JSXGraph solid; add transformations + more constructions. |
-| fx‑991ES PLUS calculator | ✅ 8/10 | **Faceplate now matches the photos** + working ∫ / d/dx + MODE menu; full EQN/BASE‑N/STAT mode flow still to add. |
-| Graphing (GeoGebra/trig) | 🟡 6/10 | Good basic grapher; no unit circle / sliders / GeoGebra view. |
-| Statistics | 🟡 6/10 | Core there; box plot + normal curve missing. |
+| fx‑991ES PLUS calculator | ✅ 9/10 | **Faceplate matches the photos**; full key set; ∫/d/dx, EQN (2/3 unknown, quadratic, cubic), BASE‑N, Pol/Rec, hyp, STO/RCL/M+, MODE menu. STAT-in-calc still separate. |
+| Graphing (GeoGebra/trig) | ✅ 8/10 | Grapher + **interactive unit circle** + **amplitude/period/phase/shift sliders**; full GeoGebra view (free pan/zoom axes, general sliders) still a stretch. |
+| Statistics | ✅ 8/10 | 1‑var + regression + **histogram / box plot / normal curve**; place-as-page-object still to add. |
 | Mechanics | ✅ 8/10 | Good coverage; add pulleys/moments + editability. |
 | Vectors | ✅ 9/10 | Matches brief. |
 | Complex / Argand | ✅ 9/10 | Matches brief; among the best modules. |
