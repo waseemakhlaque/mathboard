@@ -1683,6 +1683,27 @@ function insertImageFile(file) {
   reader.readAsDataURL(file);
 }
 
+// place any canvas (e.g. a stats chart) onto the page as a movable image object
+function placeImageFromCanvas(canvas) {
+  if (!canvas) { alert('Run an analysis first to create a chart.'); return; }
+  let data;
+  try { data = canvas.toDataURL('image/png'); } catch (_) { alert('Could not capture the chart.'); return; }
+  const w = Math.min(420, canvas.width || 320);
+  const h = Math.round(w * (canvas.height || 200) / (canvas.width || 320));
+  const x = (PAGE_W - w) / 2, y = (PAGE_H - h) / 2;
+  beginAction();
+  const o = { id: uid(), kind: 'image', from: { x, y }, to: { x: x + w, y: y + h }, data };
+  objs().unshift(o);
+  commitAction();
+  persist();
+  thumbCache.delete(page().id);
+  S.selStrokes = []; S.selObj = o; S.tool = 'select';
+  if (cv) cv.classList.add('cur-select');
+  document.querySelectorAll('[data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === 'select'));
+  setTab('draw');
+  mark();
+}
+
 // ---- PDF import (past papers -> annotatable pages) ---------------------------
 function busy(on, msg) {
   const el = $('#busy');
@@ -3037,6 +3058,7 @@ function setupStats() {
   $('#stats-toggle').onclick = () => $('#stats').classList.toggle('hidden');
   $('#stats-close').onclick = () => $('#stats').classList.add('hidden');
   $('#stats-run').onclick = statRun;
+  $('#stats-place').onclick = () => placeImageFromCanvas($('#stats-chart canvas') || $('#stats-chart .u-wrap canvas'));
   document.querySelectorAll('.sm-btn').forEach((b) => b.onclick = () => {
     statsMode = b.dataset.smode;
     document.querySelectorAll('.sm-btn').forEach((x) => x.classList.toggle('active', x === b));

@@ -1731,6 +1731,7 @@ select:focus {
 .gp-slab { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
 .gp-slab input[type=range] { flex: 1; }
 .gp-slab span { width: 38px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text-3); }
+.stats-place { width: 100%; margin-top: 10px; }
 .stats-chart-types { display: flex; gap: 6px; margin: 8px 0 4px; }
 .stats-chart-types .sc-btn { flex: 1; padding: 6px 4px; font-size: 12px; background: var(--surface-3); border: 1px solid var(--border); color: var(--text-3); border-radius: var(--radius-sm); }
 .stats-chart-types .sc-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
