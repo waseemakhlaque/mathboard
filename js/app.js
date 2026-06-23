@@ -5,6 +5,25 @@
 // Vanilla JS, Canvas 2D. Strokes are stored in page units (PAGE_W x PAGE_H) so
 // pan/zoom never distorts saved ink. One page is shown at a time.
 
+import { notebookKind, normalizeNotebook, allPages } from './model.js';
+import {
+  downloadBlob, exportNotebookJSON, importNotebookFromFile, shareNotebook,
+  onSyncStatus, getPortalAPI, sync, getSyncBaseUrl, setSyncBaseUrl,
+  syncAllToRemote, pullRemoteCatalog,
+} from './share.js';
+import {
+  setupGeo, setGeoTool, syncGeoLayer, loadGeoPage, teardownGeo, clearGeoPage,
+  restoreGeoItems, drawGeoSvgToCanvas, geoToolActive, flushGeo,
+} from './geo.js';
+import {
+  setupMech, setupMechPanel, drawMechItems, handleMechClick, setMechPlacing,
+} from './mech.js';
+import {
+  setupCplx, setupCplxPanel, drawCplxLoci, handleCplxClick, setCplxPlacing,
+} from './cplx.js';
+import {
+  setupInstruments, setInstTool, instToolActive, handleInstClick, drawInstruments,
+} from './instruments.js';
 import { getAllNotebooks, getNotebook, saveNotebook, deleteNotebook } from './storage.js';
 
 // ---- constants ---------------------------------------------------------------
@@ -12,6 +31,7 @@ const PAGE_W = 1000;          // page units (A4 portrait ratio ~ 1.414)
 const PAGE_H = 1414;
 const PAPERS = ['plain', 'squared', 'graph', 'cornell', 'argand', 'vectorgrid'];
 const COLORS = ['#1b1b1b', '#2566c8', '#d23b3b', '#1f9d57', '#e0892a', '#8a4fd0'];
+const PEN_WIDTHS = { fine: 4, marker: 10, calligraphy: 6 };
 const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
@@ -21,8 +41,10 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 // ---- application state -------------------------------------------------------
 const S = {
   notebook: null,           // current notebook object
+  sectionIndex: 0,
   pageIndex: 0,
   tool: 'pen',              // pen | highlighter | eraser | lasso
+  penType: 'fine',          // fine | marker | calligraphy (pen tool only)
   color: COLORS[0],
   width: 4,                 // page units
   fingerDraw: false,
@@ -40,7 +62,8 @@ const S = {
   selection: null,          // { strokes:[refs], bbox:{x,y,w,h} }
   moving: null,             // { lastX, lastY }
   selObj: null,             // selected math object/shape/text (Select tool)
-  objMove: null,            // { lastX, lastY } — dragging a selected object's body
+  selStrokes: [],           // ink strokes selected by Select tool
+  objMove: null,            // { lastX, lastY } — dragging selection body
   objResize: null,          // handle name — dragging a selected object's handle
   // multi-touch gesture
   touch: new Map(),         // pointerId -> {x,y} css
@@ -51,7 +74,12 @@ const S = {
 let cv, ctx, dpr = 1;
 
 // ---- helpers -----------------------------------------------------------------
-const page = () => S.notebook.pages[S.pageIndex];
+function sections() {
+  if (!S.notebook?.sections?.length) normalizeNotebook(S.notebook);
+  return S.notebook.sections;
+}
+function pages() { return sections()[S.sectionIndex].pages; }
+const page = () => pages()[S.pageIndex];
 const objs = () => { const p = page(); if (!p.objects) p.objects = []; return p.objects; };  // math objects (vectors/lines)
 const fns = () => { const p = page(); if (!p.functions) p.functions = []; return p.functions; };  // graphed y=f(x)
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -62,13 +90,17 @@ function toPage(cssX, cssY) {
 }
 
 function newPage(paper = 'graph') {
-  return { id: uid(), paper, strokes: [], objects: [] };
+  return { id: uid(), paper, strokes: [], objects: [], instruments: [] };
 }
 
-function newNotebook(title) {
+function newNotebook(title, kind = 'lesson') {
   const t = Date.now();
-  return { id: uid(), title: title || 'Untitled lesson', created: t, updated: t, pages: [newPage()] };
+  return {
+    id: uid(), title: title || 'Untitled lesson', kind, created: t, updated: t,
+    sections: [{ id: uid(), title: 'Section 1', pages: [newPage()] }],
+  };
 }
+function pageIsPdf(pg) { return !!(pg.background && pg.background.type === 'image'); }
 
 // ---- persistence (debounced) -------------------------------------------------
 let saveTimer = null;
@@ -76,12 +108,52 @@ function persist() {
   if (!S.notebook) return;
   S.notebook.updated = Date.now();
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => saveNotebook(clone(S.notebook)), 400);
+  saveTimer = setTimeout(() => sync.push(clone(S.notebook)), 400);
 }
 
-// ---- undo / redo (snapshot of current page strokes) --------------------------
-function snapshotPage() { return { strokes: clone(page().strokes), objects: clone(objs()) }; }
-function restorePage(s) { page().strokes = clone(s.strokes); page().objects = clone(s.objects); }
+// ---- undo / redo (full page snapshot: ink, objects, grapher, flags, paper) ---
+function snapshotPage() {
+  flushGeo();
+  const p = page();
+  return {
+    strokes: clone(p.strokes),
+    objects: clone(objs()),
+    functions: clone(p.functions || []),
+    showResultant: !!p.showResultant,
+    showConjugate: !!p.showConjugate,
+    showParallelogram: !!p.showParallelogram,
+    paper: p.paper,
+    background: p.background ? clone(p.background) : null,
+    geoItems: clone(p.geoItems || []),
+    geoLabelN: p.geoLabelN || 0,
+    mechItems: clone(p.mechItems || []),
+    cplxLoci: clone(p.cplxLoci || []),
+    instruments: clone(p.instruments || []),
+  };
+}
+function restorePage(s) {
+  const p = page();
+  p.strokes = clone(s.strokes);
+  p.objects = clone(s.objects);
+  p.functions = clone(s.functions || []);
+  p.showResultant = !!s.showResultant;
+  p.showConjugate = !!s.showConjugate;
+  p.showParallelogram = !!s.showParallelogram;
+  p.paper = s.paper;
+  const bgChanged = JSON.stringify(p.background || null) !== JSON.stringify(s.background || null);
+  if (s.background) p.background = clone(s.background);
+  else delete p.background;
+  if (bgChanged) imgCache.delete(p.id);
+  thumbCache.delete(p.id);
+  p.geoItems = clone(s.geoItems || []);
+  p.geoLabelN = s.geoLabelN || 0;
+  p.mechItems = clone(s.mechItems || []);
+  p.cplxLoci = clone(s.cplxLoci || []);
+  p.instruments = clone(s.instruments || []);
+  restoreGeoItems(p.geoItems);
+  updatePageLabel();
+  if (!$('#graph').classList.contains('hidden')) renderGraphList();
+}
 function beginAction() { S.actionBefore = snapshotPage(); }
 function commitAction() {
   if (!S.actionBefore) return;
@@ -89,6 +161,7 @@ function commitAction() {
     S.undo.push(S.actionBefore);
     if (S.undo.length > UNDO_CAP) S.undo.shift();
     S.redo = [];
+    thumbCache.delete(page().id);
     persist();
   }
   S.actionBefore = null;
@@ -142,11 +215,32 @@ function resizeCanvas() {
 
 function fitPage() {
   const r = cv.getBoundingClientRect();
-  const m = 24;
+  const present = $('#editor')?.classList.contains('present-mode');
+  const m = present ? 10 : 24;
   S.scale = Math.min((r.width - m) / PAGE_W, (r.height - m) / PAGE_H);
   S.offsetX = (r.width - PAGE_W * S.scale) / 2;
   S.offsetY = (r.height - PAGE_H * S.scale) / 2;
   mark();
+}
+
+// page strip thumbnails (blank pages rendered; PDF pages use background JPEG)
+const thumbCache = new Map(); // pageId -> data URL
+const THUMB_W = 56, THUMB_H = 79;
+function makePageThumbUrl(pg) {
+  let url = thumbCache.get(pg.id);
+  if (url) return url;
+  const oc = document.createElement('canvas');
+  oc.width = THUMB_W; oc.height = THUMB_H;
+  const c = oc.getContext('2d');
+  c.fillStyle = '#ffffff';
+  c.fillRect(0, 0, THUMB_W, THUMB_H);
+  const sf = THUMB_W / PAGE_W;
+  c.scale(sf, sf);
+  drawTemplate(c, pg.paper);
+  for (const s of pg.strokes) drawStroke(c, s);
+  url = oc.toDataURL('image/jpeg', 0.72);
+  thumbCache.set(pg.id, url);
+  return url;
 }
 
 // page background images (imported PDF/photo pages), cached + lazily decoded
@@ -163,6 +257,37 @@ function pageImage(pg) {
   }
   return e.loaded ? e.img : null;
 }
+// inserted diagram/photo objects (movable, not page background)
+const objImgCache = new Map(); // object id -> { img, loaded }
+function objImage(o) {
+  if (o.kind !== 'image' || !o.data) return null;
+  let e = objImgCache.get(o.id);
+  if (!e) {
+    const img = new Image();
+    e = { img, loaded: false };
+    objImgCache.set(o.id, e);
+    img.onload = () => { e.loaded = true; mark(); };
+    img.onerror = () => { e.loaded = true; mark(); };
+    img.src = o.data;
+  }
+  return e.loaded ? e.img : null;
+}
+function purgeObjImage(id) { objImgCache.delete(id); }
+function ensureObjImagesLoaded() {
+  const list = [];
+  if (!S.notebook) return Promise.resolve();
+  for (const pg of allPages(S.notebook)) {
+    for (const o of (pg.objects || [])) if (o.kind === 'image' && o.data) list.push(o);
+  }
+  return Promise.all(list.map((o) => new Promise((res) => {
+    const e = objImgCache.get(o.id);
+    if (e && e.loaded) return res();
+    const img = new Image();
+    img.onload = () => { objImgCache.set(o.id, { img, loaded: true }); res(); };
+    img.onerror = () => res();
+    img.src = o.data;
+  })));
+}
 function drawContain(c, img) {
   const s = Math.min(PAGE_W / img.width, PAGE_H / img.height);
   const w = img.width * s, h = img.height * s;
@@ -178,7 +303,7 @@ function drawBackground(c, pg, img) {
 }
 // ensure all imported page images are decoded before export
 function ensureImagesLoaded() {
-  const pend = S.notebook.pages.filter((p) => p.background && p.background.type === 'image');
+  const pend = allPages(S.notebook).filter((p) => p.background && p.background.type === 'image');
   return Promise.all(pend.map((p) => new Promise((res) => {
     const e = imgCache.get(p.id);
     if (e && e.loaded) return res();
@@ -227,6 +352,17 @@ function drawTemplate(c, paper) {
   }
 }
 
+function inkWidth(s, pt, prev) {
+  const w = s.width;
+  if (s.tool === 'highlighter') return w;
+  if (s.penType === 'marker') return w * 2.2;
+  if (s.penType === 'calligraphy' && prev) {
+    const ang = Math.atan2(pt.y - prev.y, pt.x - prev.x);
+    return w * (0.3 + 1.35 * Math.abs(Math.cos(ang - 0.785)));
+  }
+  return w * (0.45 + 0.9 * (pt.p ?? 0.5));
+}
+
 function drawStroke(c, s) {
   const pts = s.points;
   const hl = s.tool === 'highlighter';
@@ -237,10 +373,10 @@ function drawStroke(c, s) {
   c.globalAlpha = hl ? 0.3 : 1;
   if (pts.length === 1) {
     c.beginPath();
-    c.arc(pts[0].x, pts[0].y, Math.max(s.width / 2, 0.6), 0, Math.PI * 2);
+    c.arc(pts[0].x, pts[0].y, Math.max(inkWidth(s, pts[0], null) / 2, 0.6), 0, Math.PI * 2);
     c.fill();
   } else if (pts.length === 2) {
-    c.lineWidth = s.width;
+    c.lineWidth = inkWidth(s, pts[1], pts[0]);
     c.beginPath(); c.moveTo(pts[0].x, pts[0].y); c.lineTo(pts[1].x, pts[1].y); c.stroke();
   } else {
     // smooth: quadratic curves through the midpoints of consecutive samples
@@ -248,7 +384,7 @@ function drawStroke(c, s) {
       const p1 = pts[i], p0 = pts[i - 1], p2 = pts[i + 1];
       const m1 = { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
       const m2 = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-      c.lineWidth = hl ? s.width : s.width * (0.45 + 0.9 * (p1.p ?? 0.5));
+      c.lineWidth = inkWidth(s, p1, p0);
       c.beginPath();
       c.moveTo(m1.x, m1.y);
       c.quadraticCurveTo(p1.x, p1.y, m2.x, m2.y);
@@ -294,10 +430,16 @@ function drawComplex(c, o, col) {
     c.font = '20px sans-serif'; c.fillText('z̄', px + 10, py + 6);
   }
   const lx = o.at.x + 12, ly = o.at.y - 10;
+  const tag = o.ctag ? `${o.ctag} = ` : 'z = ';
   c.fillStyle = col; c.font = '600 24px sans-serif';
-  c.fillText(`z = ${fmt(z.a)} ${z.b < 0 ? '−' : '+'} ${fmt(Math.abs(z.b))}i`, lx, ly);
+  c.fillText(`${tag}${fmt(z.a)} ${z.b < 0 ? '−' : '+'} ${fmt(Math.abs(z.b))}i`, lx, ly);
+  if (o.omega) {
+    c.font = '16px sans-serif';
+    const ow = o.omega;
+    c.fillText(`ω = ${fmt(ow.re)} ${ow.im < 0 ? '−' : '+'} ${fmt(Math.abs(ow.im))}i`, lx, ly + 48);
+  }
   c.font = '18px sans-serif';
-  c.fillText(`|z| = ${z.mod.toFixed(2)}   arg ${formatAngle(z.argRad)}`, lx, ly + 24);
+  c.fillText(`|z| = ${z.mod.toFixed(2)}   arg ${formatAngle(z.argRad)}`, lx, ly + (o.omega ? 70 : 24));
 }
 function drawCircle(c, o, col) {
   const r = Math.hypot(o.edge.x - o.center.x, o.edge.y - o.center.y);
@@ -324,6 +466,78 @@ function textBox(o) {
   const h = Math.max(o.size, lines.length * o.size * 1.25);
   return { w, h };
 }
+
+// ---- equation objects (LaTeX via MathLive) -----------------------------------
+// Equations are stored as { kind:'equation', at:{x,y}, latex:'...', color, size }
+// and rendered to canvas via an offscreen <math-field> element.
+let eqRenderCache = new Map(); // latex+size -> { img, w, h }
+
+function renderEquationToImage(latex, size) {
+  const key = latex + '|' + size;
+  let hit = eqRenderCache.get(key);
+  if (hit) return hit;
+  // Use an offscreen math-field to render LaTeX to SVG/HTML, then canvas
+  const mf = document.createElement('math-field');
+  mf.style.position = 'absolute'; mf.style.left = '-9999px'; mf.style.top = '-9999px';
+  mf.style.fontSize = size + 'px';
+  mf.value = latex;
+  document.body.appendChild(mf);
+  // Force layout so MathLive renders
+  const rect = mf.getBoundingClientRect();
+  const svg = mf.querySelector('math') || mf.querySelector('svg');
+  let img = null, w = 40, h = size * 1.4;
+  if (svg) {
+    const ser = new XMLSerializer();
+    const svgStr = ser.serializeToString(svg);
+    const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); };
+    img.src = url;
+    // approximate dimensions from the SVG viewBox
+    const vb = svg.getAttribute('viewBox');
+    if (vb) {
+      const parts = vb.split(/\s+/).map(Number);
+      w = parts[2] || 40; h = parts[3] || size * 1.4;
+    }
+  } else {
+    // fallback: render text approximation
+    const oc = document.createElement('canvas');
+    oc.width = 40; oc.height = size * 1.4;
+    const cx = oc.getContext('2d');
+    cx.fillStyle = '#1b1b1b'; cx.font = `${size}px serif`;
+    cx.fillText(latex.replace(/\\/g, ''), 0, size);
+    img = oc;
+    w = oc.width; h = oc.height;
+  }
+  document.body.removeChild(mf);
+  hit = { img, w, h };
+  eqRenderCache.set(key, hit);
+  return hit;
+}
+
+function drawEquation(c, o) {
+  if (S.editingId === o.id) return;
+  const r = renderEquationToImage(o.latex || '\\text{ }', o.size || 34);
+  if (r.img && r.img.complete !== false) {
+    try { c.drawImage(r.img, o.at.x, o.at.y, r.w, r.h); } catch (_) {}
+  } else if (r.img && r.img.tagName === 'CANVAS') {
+    c.drawImage(r.img, o.at.x, o.at.y, r.w, r.h);
+  } else {
+    // fallback text
+    c.fillStyle = o.color || '#1b1b1b';
+    c.font = `${o.size || 34}px serif`;
+    c.fillText((o.latex || '').replace(/[\\{}]/g, ''), o.at.x, o.at.y + (o.size || 34));
+  }
+}
+function equationBox(o) {
+  const r = renderEquationToImage(o.latex || '\\text{ }', o.size || 34);
+  return { w: r.w + 8, h: r.h + 8 };
+}
+function pointInEquation(o, p) {
+  const b = equationBox(o);
+  return p.x >= o.at.x - 4 && p.x <= o.at.x + b.w + 4 && p.y >= o.at.y - 4 && p.y <= o.at.y + b.h + 4;
+}
 function drawObject(c, o) {
   const col = o.color || '#1b1b1b';
   if (o.kind === 'line') {
@@ -332,6 +546,7 @@ function drawObject(c, o) {
     return;
   }
   if (o.kind === 'text') { drawText(c, o); return; }
+  if (o.kind === 'equation') { drawEquation(c, o); return; }
   if (o.kind === 'rect') {
     c.strokeStyle = col; c.lineWidth = 3; c.setLineDash([]);
     c.strokeRect(Math.min(o.from.x, o.to.x), Math.min(o.from.y, o.to.y), Math.abs(o.to.x - o.from.x), Math.abs(o.to.y - o.from.y));
@@ -346,6 +561,40 @@ function drawObject(c, o) {
   }
   if (o.kind === 'complex') { drawComplex(c, o, col); return; }
   if (o.kind === 'circle') { drawCircle(c, o, col); return; }
+  if (o.kind === 'image') {
+    const img = objImage(o);
+    const x0 = Math.min(o.from.x, o.to.x), y0 = Math.min(o.from.y, o.to.y);
+    const w = Math.abs(o.to.x - o.from.x), h = Math.abs(o.to.y - o.from.y);
+    if (img && w > 1 && h > 1) c.drawImage(img, x0, y0, w, h);
+    else { c.fillStyle = '#e8edf3'; c.fillRect(x0, y0, w, h); }
+    return;
+  }
+  if (o.kind === 'graphpt') {
+    const m = pageToMath(o.at.x, o.at.y);
+    c.fillStyle = o.color || '#d23b3b';
+    c.beginPath(); c.arc(o.at.x, o.at.y, 7, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke();
+    c.font = '600 18px sans-serif';
+    c.fillText(`(${fmt(m.x)}, ${fmt(m.y)})`, o.at.x + 10, o.at.y - 8);
+    return;
+  }
+  if (o.kind === 'tangent') {
+    c.strokeStyle = o.color || '#d23b3b'; c.lineWidth = 2.5; c.setLineDash([10, 6]);
+    c.beginPath(); c.moveTo(o.from.x, o.from.y); c.lineTo(o.to.x, o.to.y); c.stroke();
+    c.setLineDash([]);
+    return;
+  }
+  if (o.kind === 'intersect') {
+    const r = 9;
+    c.strokeStyle = o.color || '#8a4fd0'; c.lineWidth = 2.5;
+    c.beginPath();
+    c.moveTo(o.at.x - r, o.at.y); c.lineTo(o.at.x + r, o.at.y);
+    c.moveTo(o.at.x, o.at.y - r); c.lineTo(o.at.x, o.at.y + r);
+    c.stroke();
+    c.beginPath(); c.arc(o.at.x, o.at.y, 5, 0, Math.PI * 2); c.fillStyle = o.color; c.fill();
+    if (o.label) { c.font = '600 17px sans-serif'; c.fillText(o.label, o.at.x + 10, o.at.y + 5); }
+    return;
+  }
   drawArrow(c, o.from, o.to, col, o.kind === 'resultant');
   const v = vecInfo(o);
   const lx = o.to.x + 12, ly = o.to.y - 10;
@@ -355,7 +604,23 @@ function drawObject(c, o) {
   c.fillText(`|v| = ${v.mag.toFixed(2)}   ${formatAngle(v.angRad)}`, lx, ly + 24);
 }
 function drawObjects(c, pg) {
+  refreshGraphObjects();
   for (const o of (pg.objects || [])) drawObject(c, o);
+  if (pg.showParallelogram) {
+    const vs = (pg.objects || []).filter((o) => o.kind === 'vector');
+    if (vs.length >= 2) {
+      const O = vs[0].from, A = vs[0].to;
+      const v2x = vs[1].to.x - vs[1].from.x, v2y = vs[1].to.y - vs[1].from.y;
+      const B = { x: O.x + v2x, y: O.y + v2y };
+      const C = { x: A.x + v2x, y: A.y + v2y };
+      c.strokeStyle = '#8a4fd0'; c.lineWidth = 2; c.setLineDash([12, 8]);
+      c.beginPath();
+      c.moveTo(A.x, A.y); c.lineTo(C.x, C.y);
+      c.moveTo(B.x, B.y); c.lineTo(C.x, C.y);
+      c.stroke();
+      c.setLineDash([]);
+    }
+  }
   if (pg.showResultant) {
     const vs = (pg.objects || []).filter((o) => o.kind === 'vector');
     if (vs.length) {
@@ -378,27 +643,207 @@ function pointSegDist(p, a, b) {
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
-// graphed functions y = f(x), origin at page centre, UNIT page-units = 1
+// ---- graphing: y(x), parametric, probe points, tangents, intersections ----------
+const gridCx = () => PAGE_W / 2;
+const gridCy = () => PAGE_H / 2;
+const mathToPage = (x, y) => ({ x: gridCx() + x * UNIT, y: gridCy() - y * UNIT });
+const pageToMath = (px, py) => ({ x: (px - gridCx()) / UNIT, y: (gridCy() - py) / UNIT });
+
+function evalFnY(f, x) {
+  const A = f.amp != null && f.amp !== '' ? Number(math.evaluate(String(f.amp), calcScope())) : 1;
+  const k = f.period != null && f.period !== '' ? Number(math.evaluate(String(f.period), calcScope())) : 1;
+  const y = math.compile(f.expr).evaluate({ x: (isFinite(k) ? k : 1) * x });
+  return (isFinite(A) ? A : 1) * y;
+}
+function applyGraphAmp(f) { /* amp/period applied in evalFnY */ }
+function evalParam(f, t) {
+  const nx = math.compile(f.exprX || 't');
+  const ny = math.compile(f.exprY || 't');
+  return { x: nx.evaluate({ t }), y: ny.evaluate({ t }) };
+}
+function fnPointAt(f, param) {
+  if (f.mode === 'param') {
+    const { x, y } = evalParam(f, param);
+    if (!isFinite(x) || !isFinite(y)) return null;
+    return mathToPage(x, y);
+  }
+  try {
+    const y = evalFnY(f, param);
+    if (typeof y !== 'number' || !isFinite(y)) return null;
+    return mathToPage(param, y);
+  } catch (_) { return null; }
+}
+function slopeAt(f, param) {
+  const h = 1e-4;
+  if (f.mode === 'param') {
+    const p0 = evalParam(f, param - h), p1 = evalParam(f, param + h);
+    const dx = p1.x - p0.x, dy = p1.y - p0.y;
+    if (Math.abs(dx) < 1e-12) return 0;
+    return dy / dx;
+  }
+  try {
+    return (evalFnY(f, param + h) - evalFnY(f, param - h)) / (2 * h);
+  } catch (_) { return 0; }
+}
+function projectGraphPt(o, p) {
+  const f = fns()[o.fnIndex];
+  if (!f) return;
+  let best = o.param, bestD = Infinity;
+  if (f.mode === 'param') {
+    const t0 = f.tMin ?? 0, t1 = f.tMax ?? Math.PI * 2;
+    const steps = 240;
+    for (let i = 0; i <= steps; i++) {
+      const t = t0 + (t1 - t0) * i / steps;
+      const pt = fnPointAt(f, t);
+      if (!pt) continue;
+      const d = dist2(pt, p);
+      if (d < bestD) { bestD = d; best = t; }
+    }
+  } else {
+    for (let x = -12; x <= 12; x += 0.08) {
+      const pt = fnPointAt(f, x);
+      if (!pt) continue;
+      const d = dist2(pt, p);
+      if (d < bestD) { bestD = d; best = x; }
+    }
+  }
+  o.param = best;
+  const at = fnPointAt(f, best);
+  if (at) o.at = at;
+}
+function updateTangentGeom(o) {
+  const pt = objs().find((x) => x.id === o.ptId);
+  if (!pt || pt.kind !== 'graphpt') return;
+  const f = fns()[pt.fnIndex];
+  if (!f) return;
+  const at = fnPointAt(f, pt.param);
+  if (!at) return;
+  pt.at = at;
+  const m = slopeAt(f, pt.param);
+  const ang = Math.atan2(-m, 1);
+  const len = 2.8 * UNIT;
+  o.from = { x: at.x - Math.cos(ang) * len, y: at.y - Math.sin(ang) * len };
+  o.to = { x: at.x + Math.cos(ang) * len, y: at.y + Math.sin(ang) * len };
+  o.color = f.color || o.color;
+}
+function syncTangentsFor(pt) {
+  for (const o of objs()) if (o.kind === 'tangent' && o.ptId === pt.id) updateTangentGeom(o);
+}
+function refreshGraphObjects() {
+  for (const o of objs()) {
+    if (o.kind === 'graphpt') {
+      const f = fns()[o.fnIndex];
+      if (f) { const at = fnPointAt(f, o.param); if (at) o.at = at; }
+    }
+    if (o.kind === 'tangent') updateTangentGeom(o);
+  }
+}
+function findFnIntersections(i, j) {
+  const f1 = fns()[i], f2 = fns()[j];
+  if (!f1 || !f2 || f1.mode === 'param' || f2.mode === 'param') return [];
+  const pts = [];
+  let prev = null;
+  for (let x = -10; x <= 10; x += 0.08) {
+    let d;
+    try { d = evalFnY(f1, x) - evalFnY(f2, x); } catch (_) { prev = null; continue; }
+    if (typeof d !== 'number' || !isFinite(d)) { prev = null; continue; }
+    if (prev && prev.d * d < 0) {
+      let a = prev.x, b = x;
+      for (let k = 0; k < 24; k++) {
+        const m = (a + b) / 2;
+        const dm = evalFnY(f1, m) - evalFnY(f2, m);
+        if (prev.d * dm <= 0) b = m; else a = m;
+      }
+      const xi = (a + b) / 2;
+      try {
+        const yi = evalFnY(f1, xi);
+        if (isFinite(yi)) pts.push(mathToPage(xi, yi));
+      } catch (_) { /* skip */ }
+    }
+    prev = { x, d };
+  }
+  return pts;
+}
+function addGraphPoint(fnIndex = 0) {
+  const f = fns()[fnIndex];
+  if (!f) return;
+  beginAction();
+  const param = f.mode === 'param' ? (f.tMin ?? 0) : 0;
+  const at = fnPointAt(f, param);
+  if (!at) { S.actionBefore = null; return; }
+  const o = { id: uid(), kind: 'graphpt', fnIndex, param, at, color: f.color || '#d23b3b' };
+  objs().push(o);
+  commitAction();
+  S.selStrokes = [];
+  S.selObj = o;
+  S.tool = 'select';
+  if (cv) cv.classList.add('cur-select');
+  document.querySelectorAll('[data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === 'select'));
+  mark();
+}
+function addTangentAtSelection() {
+  const pt = S.selObj?.kind === 'graphpt' ? S.selObj : objs().find((o) => o.kind === 'graphpt');
+  if (!pt) { alert('Select a point on a curve first (+ Point), or create one.'); return; }
+  if (objs().some((o) => o.kind === 'tangent' && o.ptId === pt.id)) return;
+  beginAction();
+  const o = { id: uid(), kind: 'tangent', ptId: pt.id, from: { x: 0, y: 0 }, to: { x: 1, y: 1 }, color: '#d23b3b' };
+  updateTangentGeom(o);
+  objs().push(o);
+  commitAction();
+  mark();
+}
+function markIntersections() {
+  if (fns().length < 2) { alert('Add at least two y(x) curves first.'); return; }
+  beginAction();
+  page().objects = objs().filter((o) => o.kind !== 'intersect');
+  for (const at of findFnIntersections(0, 1)) {
+    const m = pageToMath(at.x, at.y);
+    objs().push({ id: uid(), kind: 'intersect', at, label: `(${fmt(m.x)}, ${fmt(m.y)})`, color: '#8a4fd0' });
+  }
+  commitAction();
+  mark();
+}
+
+// graphed functions y = f(x) or parametric, origin at page centre
 function drawFunctions(c, pg) {
   const list = pg.functions || [];
   if (!list.length || !window.math) return;
-  const cx = PAGE_W / 2, cy = PAGE_H / 2;
   c.textAlign = 'start';
   let labelY = 30;
   for (const f of list) {
+    if (f.mode === 'param') {
+      if (!f.exprX?.trim() || !f.exprY?.trim()) continue;
+      c.strokeStyle = f.color; c.lineWidth = 3; c.lineJoin = 'round'; c.lineCap = 'round'; c.setLineDash([]);
+      c.beginPath();
+      const t0 = f.tMin ?? 0, t1 = f.tMax ?? Math.PI * 2;
+      let pen = false, lastPy = null;
+      for (let i = 0; i <= 400; i++) {
+        const t = t0 + (t1 - t0) * i / 400;
+        let pt;
+        try { pt = fnPointAt(f, t); } catch (_) { pen = false; continue; }
+        if (!pt) { pen = false; continue; }
+        if (pen && lastPy != null && Math.abs(pt.y - lastPy) > PAGE_H * 0.8) pen = false;
+        if (!pen) { c.moveTo(pt.x, pt.y); pen = true; } else c.lineTo(pt.x, pt.y);
+        lastPy = pt.y;
+      }
+      c.stroke();
+      c.fillStyle = f.color; c.font = '600 20px sans-serif';
+      c.fillText(`(${f.exprX}, ${f.exprY})`, 16, labelY); labelY += 26;
+      continue;
+    }
     if (!f.expr || !f.expr.trim()) continue;
     let node;
-    try { node = math.compile(f.expr); } catch (e) { continue; }
+    try { node = math.compile(f.expr); } catch (_) { continue; }
     c.strokeStyle = f.color; c.lineWidth = 3; c.lineJoin = 'round'; c.lineCap = 'round'; c.setLineDash([]);
     c.beginPath();
     let pen = false, lastPy = null;
     for (let px = 0; px <= PAGE_W; px += 2) {
-      const x = (px - cx) / UNIT;
+      const x = (px - gridCx()) / UNIT;
       let y;
-      try { y = node.evaluate({ x }); } catch (e) { pen = false; continue; }
+      try { y = node.evaluate({ x }); } catch (_) { pen = false; continue; }
       if (typeof y !== 'number' || !isFinite(y)) { pen = false; continue; }
-      const py = cy - y * UNIT;
-      if (pen && lastPy != null && Math.abs(py - lastPy) > PAGE_H * 1.5) pen = false;  // skip asymptote jumps
+      const py = gridCy() - y * UNIT;
+      if (pen && lastPy != null && Math.abs(py - lastPy) > PAGE_H * 1.5) pen = false;
       if (!pen) { c.moveTo(px, py); pen = true; } else c.lineTo(px, py);
       lastPy = py;
     }
@@ -416,6 +861,9 @@ function drawPageContent(c, pg) {
   drawBackground(c, pg, e && e.loaded ? e.img : null);
   drawFunctions(c, pg);
   drawObjects(c, pg);
+  drawMechItems(c, pg);
+  drawCplxLoci(c, pg);
+  drawInstruments(c, pg);
   for (const s of pg.strokes) drawStroke(c, s);
 }
 
@@ -445,6 +893,9 @@ function render() {
     drawBackground(ctx, page(), pageImage(page()));
     drawFunctions(ctx, page());
     drawObjects(ctx, page());
+    drawMechItems(ctx, page());
+    drawCplxLoci(ctx, page());
+    drawInstruments(ctx, page());
     if (S.creating) drawObject(ctx, S.creating);
     for (const s of page().strokes) drawStroke(ctx, s);
     if (S.drawing) drawStroke(ctx, S.drawing);
@@ -459,19 +910,10 @@ function render() {
       ctx.strokeRect(b.x, b.y, b.w, b.h);
       ctx.setLineDash([]);
     }
-    // selected object: dashed bbox + square drag handles
-    if (S.selObj && objs().includes(S.selObj)) {
-      const b = objBBox(S.selObj);
-      ctx.strokeStyle = '#2566c8'; ctx.lineWidth = 1.5 / S.scale;
-      ctx.setLineDash([7 / S.scale, 5 / S.scale]);
-      ctx.strokeRect(b.x, b.y, b.w, b.h);
-      ctx.setLineDash([]);
-      const hs = 6 / S.scale;
-      ctx.fillStyle = '#ffffff';
-      for (const h of objHandles(S.selObj)) {
-        ctx.beginPath(); ctx.rect(h.x - hs, h.y - hs, hs * 2, hs * 2);
-        ctx.fill(); ctx.stroke();
-      }
+    // selected object or ink: dashed bbox + square drag handles
+    if (S.selObj && objs().includes(S.selObj)) drawSelBox(ctx, objBBox(S.selObj), objHandles(S.selObj));
+    else if (S.selStrokes.length && S.selStrokes.every((s) => page().strokes.includes(s))) {
+      drawSelBox(ctx, strokeBBox(S.selStrokes), []);
     }
     // lasso in progress
     if (S.lassoPath && S.lassoPath.length > 1) {
@@ -484,16 +926,31 @@ function render() {
       ctx.setLineDash([]);
     }
     ctx.restore();
+    syncGeoLayer(S.offsetX, S.offsetY, S.scale);
     S.dirty = false;
   }
   requestAnimationFrame(render);
 }
 
 // ---- selection ---------------------------------------------------------------
-function clearSelection() { S.selection = null; S.lassoPath = null; S.selObj = null; mark(); }
+function drawSelBox(c, b, handles) {
+  const pad = 6;
+  const bx = b.x - pad, by = b.y - pad, bw = b.w + pad * 2, bh = b.h + pad * 2;
+  c.strokeStyle = '#2566c8'; c.lineWidth = 1.5 / S.scale;
+  c.setLineDash([7 / S.scale, 5 / S.scale]);
+  c.strokeRect(bx, by, bw, bh);
+  c.setLineDash([]);
+  const hs = 9 / S.scale;
+  c.fillStyle = '#ffffff';
+  for (const h of handles) {
+    c.beginPath(); c.rect(h.x - hs, h.y - hs, hs * 2, hs * 2);
+    c.fill(); c.stroke();
+  }
+}
+function clearSelection() { S.selection = null; S.lassoPath = null; S.selObj = null; S.selStrokes = []; mark(); }
 
 function touchToolCanInteract() {
-  return ['select','lasso','text','plotz','circle','line','rect','ellipse','vector','eraser'].includes(S.tool);
+  return ['select','lasso','text','equation','plotz','circle','line','rect','ellipse','vector','eraser'].includes(S.tool);
 }
 function selectionBBox(selection) {
   const boxes = [];
@@ -523,7 +980,7 @@ function objectInLasso(o, poly) {
 // body to move it, or drag a handle to reshape it. Geometry is stored in page
 // units, so moves/resizes are zoom-independent like everything else.
 function objPoints(o) {                 // the point refs that define an object's geometry
-  if (o.kind === 'text' || o.kind === 'complex') return [o.at];
+  if (o.kind === 'text' || o.kind === 'equation' || o.kind === 'complex' || o.kind === 'graphpt' || o.kind === 'intersect') return [o.at];
   if (o.kind === 'circle') return [o.center, o.edge];
   return [o.from, o.to];               // vector / line / rect / ellipse
 }
@@ -533,7 +990,10 @@ function objBBox(o) {
     return { x: o.center.x - r, y: o.center.y - r, w: 2 * r, h: 2 * r };
   }
   if (o.kind === 'text') { const b = textBox(o); return { x: o.at.x, y: o.at.y, w: b.w, h: b.h }; }
+  if (o.kind === 'equation') { const b = equationBox(o); return { x: o.at.x, y: o.at.y, w: b.w, h: b.h }; }
   if (o.kind === 'complex') return { x: o.at.x - 10, y: o.at.y - 10, w: 20, h: 20 };
+  if (o.kind === 'graphpt' || o.kind === 'intersect') return { x: o.at.x - 12, y: o.at.y - 12, w: 24, h: 24 };
+  if (o.kind === 'tangent') return { x: Math.min(o.from.x, o.to.x), y: Math.min(o.from.y, o.to.y), w: Math.abs(o.to.x - o.from.x), h: Math.abs(o.to.y - o.from.y) };
   const x0 = Math.min(o.from.x, o.to.x), y0 = Math.min(o.from.y, o.to.y);
   return { x: x0, y: y0, w: Math.abs(o.to.x - o.from.x), h: Math.abs(o.to.y - o.from.y) };
 }
@@ -544,13 +1004,14 @@ function objHandles(o) {                 // named drag handles, in page units
     return [{ name: 'center', x: o.center.x, y: o.center.y }, { name: 'edge', x: o.edge.x, y: o.edge.y }];
   if (o.kind === 'complex')
     return [{ name: 'at', x: o.at.x, y: o.at.y }];
-  if (o.kind === 'rect' || o.kind === 'ellipse') {
+  if (o.kind === 'rect' || o.kind === 'ellipse' || o.kind === 'image') {
     const x0 = Math.min(o.from.x, o.to.x), y0 = Math.min(o.from.y, o.to.y),
           x1 = Math.max(o.from.x, o.to.x), y1 = Math.max(o.from.y, o.to.y);
-    return [{ name: 'nw', x: x0, y: y0 }, { name: 'ne', x: x1, y: y0 },
+    return [{ name: 'nw', x: x0, y: y0 }, { name: 'ne', x: x1, y: y1 },
             { name: 'sw', x: x0, y: y1 }, { name: 'se', x: x1, y: y1 }];
   }
   if (o.kind === 'text') { const b = textBox(o); return [{ name: 'size', x: o.at.x + b.w, y: o.at.y + b.h }]; }
+  if (o.kind === 'equation') { const b = equationBox(o); return [{ name: 'size', x: o.at.x + b.w, y: o.at.y + b.h }]; }
   return [];
 }
 function applyHandle(o, name, p) {        // drag a handle to point p (snapped on grid papers)
@@ -560,38 +1021,78 @@ function applyHandle(o, name, p) {        // drag a handle to point p (snapped o
   else if (name === 'at') o.at = sp;
   else if (name === 'edge') o.edge = sp;
   else if (name === 'center') { const dx = sp.x - o.center.x, dy = sp.y - o.center.y; o.center = sp; o.edge = { x: o.edge.x + dx, y: o.edge.y + dy }; }
-  else if (name === 'size') { const b = textBox(o); o.size = Math.max(10, Math.min(220, o.size * Math.max(20, p.x - o.at.x) / (b.w || 1))); }
-  else {                                  // rect / ellipse corner
+  else if (name === 'size') {
+    if (o.kind === 'equation') {
+      const b = equationBox(o);
+      o.size = Math.max(14, Math.min(120, o.size * Math.max(20, p.x - o.at.x) / (b.w || 1)));
+    } else {
+      const b = textBox(o);
+      o.size = Math.max(10, Math.min(220, o.size * Math.max(20, p.x - o.at.x) / (b.w || 1)));
+    }
+  }
+  else {                                  // rect / ellipse / image corner
+    const pt = o.kind === 'image' ? p : snapPt(p);
     let x0 = Math.min(o.from.x, o.to.x), y0 = Math.min(o.from.y, o.to.y),
         x1 = Math.max(o.from.x, o.to.x), y1 = Math.max(o.from.y, o.to.y);
-    if (name.includes('n')) y0 = sp.y; else y1 = sp.y;
-    if (name.includes('w')) x0 = sp.x; else x1 = sp.x;
+    if (name.includes('n')) y0 = pt.y; else y1 = pt.y;
+    if (name.includes('w')) x0 = pt.x; else x1 = pt.x;
+    if (o.kind === 'image') {
+      const min = 48;
+      if (x1 - x0 < min) { if (name.includes('w')) x0 = x1 - min; else x1 = x0 + min; }
+      if (y1 - y0 < min) { if (name.includes('n')) y0 = y1 - min; else y1 = y0 + min; }
+    }
     o.from = { x: x0, y: y0 }; o.to = { x: x1, y: y1 };
   }
 }
 function moveObject(o, dx, dy) { for (const pt of objPoints(o)) { pt.x += dx; pt.y += dy; } }
 function hitObject(p) {                   // topmost object under p (or null)
-  const tol = 10 / S.scale, list = objs();
+  const tol = 14 / S.scale, list = objs();
   for (let i = list.length - 1; i >= 0; i--) {
     const o = list[i];
     if (objHit(o, p, tol)) return o;
     const b = objBBox(o);
-    if (['rect', 'ellipse', 'text', 'complex', 'circle'].includes(o.kind) &&
+    if (['rect', 'ellipse', 'text', 'equation', 'complex', 'circle', 'image'].includes(o.kind) &&
         p.x >= b.x - tol && p.x <= b.x + b.w + tol && p.y >= b.y - tol && p.y <= b.y + b.h + tol) return o;
   }
   return null;
 }
 function handleAt(o, p) {                  // name of the handle near p (or null)
-  const tol = 13 / S.scale;
+  const tol = 20 / S.scale;
   for (const h of objHandles(o)) if (Math.abs(p.x - h.x) < tol && Math.abs(p.y - h.y) < tol) return h.name;
   return null;
 }
-function deleteSelectedObject() {
-  if (!S.selObj) return;
+function hitStroke(p) {                    // topmost ink stroke under p (or null)
+  const tol = 14 / S.scale;
+  const strokes = page().strokes;
+  for (let i = strokes.length - 1; i >= 0; i--) {
+    const s = strokes[i];
+    const hitR = tol + s.width * (s.penType === 'marker' ? 1.2 : 0.5);
+    for (let j = 0; j < s.points.length; j++) {
+      if (Math.hypot(p.x - s.points[j].x, p.y - s.points[j].y) < hitR) return s;
+      if (j > 0 && pointSegDist(p, s.points[j - 1], s.points[j]) < hitR) return s;
+    }
+  }
+  return null;
+}
+function deleteSelection() {
+  if (!S.selObj && !S.selStrokes.length) return;
   beginAction();
-  const i = objs().indexOf(S.selObj);
-  if (i >= 0) objs().splice(i, 1);
-  S.selObj = null; commitAction(); mark();
+  if (S.selObj) {
+    const i = objs().indexOf(S.selObj);
+    if (i >= 0) objs().splice(i, 1);
+    if (S.selObj.kind === 'image') purgeObjImage(S.selObj.id);
+    if (S.selObj.kind === 'graphpt') {
+      const pid = S.selObj.id;
+      page().objects = objs().filter((o) => !(o.kind === 'tangent' && o.ptId === pid));
+    }
+    S.selObj = null;
+  }
+  if (S.selStrokes.length) {
+    const set = new Set(S.selStrokes);
+    page().strokes = page().strokes.filter((s) => !set.has(s));
+    S.selStrokes = [];
+  }
+  commitAction(); mark();
 }
 
 function finishLasso() {
@@ -611,9 +1112,27 @@ function pressureOf(e) {
   return 0.5;
 }
 function isDrawPointer(e) {
-  if (e.pointerType === 'pen' || e.pointerType === 'mouse') return true;
+  if (geoToolActive() || instToolActive()) return false;
+  if (e.pointerType === 'pen' || e.pointerType === 'mouse' || e.pointerType === 'eraser') return true;
   if (e.pointerType === 'touch') return S.fingerDraw && S.touch.size === 1 && ['pen', 'highlighter'].includes(S.tool);
   return false;
+}
+
+// A second finger means "I'm navigating, not editing": revert any uncommitted
+// edit started by the first finger so a two-finger pan/zoom never leaves a stray
+// object (e.g. plot-z), an accidental move, or half a stroke behind.
+function abortGesture() {
+  const selIdx = S.selObj ? objs().indexOf(S.selObj) : -1;
+  if (S.actionBefore) {
+    restorePage(S.actionBefore);
+    S.selObj = selIdx >= 0 ? objs()[selIdx] : null;
+    S.selStrokes = [];
+    S.selection = null;
+  }
+  S.creating = null; S.drawing = null; S.lassoPath = null;
+  S.moving = null; S.objMove = null; S.objResize = null;
+  S.actionBefore = null;
+  mark();
 }
 
 function onDown(e) {
@@ -621,22 +1140,45 @@ function onDown(e) {
   if (e.pointerType === 'touch') {
     S.touch.set(e.pointerId, cssPt(e));
     setGestureRef();
-    // a touch ends any pen drawing safety
+    if (S.touch.size >= 2) { abortGesture(); return; }  // 2+ fingers = pan/zoom only; cancel any tool action
   }
   if (!isDrawPointer(e) && !(e.pointerType === 'touch' && touchToolCanInteract())) { mark(); return; }
   const p = toPage(...cssArr(e));
 
+  if (handleInstClick(p)) return;
+  if (handleCplxClick(p)) return;
+  if (handleMechClick(p)) return;
+
+  // Apple Pencil eraser end — always erase, any selected tool
+  if (e.pointerType === 'eraser') {
+    beginAction();
+    eraseAt(p);
+    S.drawing = { eraser: true };
+    return;
+  }
+
   if (S.tool === 'select') {
-    // grab a handle of the current selection, else pick the object under the cursor
     if (S.selObj) {
       const h = handleAt(S.selObj, p);
       if (h) { beginAction(); S.objResize = h; return; }
     }
     const hit = hitObject(p);
     if (hit) {
+      S.selStrokes = [];
       S.selObj = hit; beginAction();
       S.objMove = { lastX: p.x, lastY: p.y };
-    } else { S.selObj = null; }
+    } else {
+      const ink = hitStroke(p);
+      if (ink) {
+        S.selObj = null;
+        S.selStrokes = [ink];
+        beginAction();
+        S.objMove = { lastX: p.x, lastY: p.y };
+      } else {
+        S.selObj = null; S.selStrokes = [];
+        S.objMove = null; S.objResize = null;
+      }
+    }
     mark();
     return;
   }
@@ -669,6 +1211,17 @@ function onDown(e) {
     }
     return;
   }
+  if (S.tool === 'equation') {
+    const hit = [...objs()].reverse().find((o) => o.kind === 'equation' && pointInEquation(o, p));
+    beginAction();
+    if (hit) openEquationEditor(hit);
+    else {
+      const o = { id: uid(), kind: 'equation', at: p, latex: 'x^2 + y^2 = r^2', color: S.color, size: 34 };
+      objs().push(o);
+      openEquationEditor(o);
+    }
+    return;
+  }
   if (S.tool === 'plotz') {
     beginAction();
     S.creating = { kind: 'complex', at: snapPt(p), color: S.color };
@@ -690,7 +1243,9 @@ function onDown(e) {
   }
   // pen / highlighter
   beginAction();
-  S.drawing = { tool: S.tool, color: S.color, width: S.width, points: [{ x: p.x, y: p.y, p: pressureOf(e) }] };
+  const stroke = { tool: S.tool, color: S.color, width: S.width, points: [{ x: p.x, y: p.y, p: pressureOf(e) }] };
+  if (S.tool === 'pen') stroke.penType = S.penType;
+  S.drawing = stroke;
   mark();
 }
 
@@ -703,7 +1258,13 @@ function onMove(e) {
   if (S.objResize) { applyHandle(S.selObj, S.objResize, toPage(...cssArr(e))); mark(); return; }
   if (S.objMove) {
     const p = toPage(...cssArr(e));
-    moveObject(S.selObj, p.x - S.objMove.lastX, p.y - S.objMove.lastY);
+    if (S.selObj?.kind === 'graphpt') {
+      projectGraphPt(S.selObj, p);
+      syncTangentsFor(S.selObj);
+    } else if (S.selObj) {
+      const dx = p.x - S.objMove.lastX, dy = p.y - S.objMove.lastY;
+      moveObject(S.selObj, dx, dy);
+    } else for (const s of S.selStrokes) for (const pt of s.points) { pt.x += p.x - S.objMove.lastX; pt.y += p.y - S.objMove.lastY; }
     S.objMove.lastX = p.x; S.objMove.lastY = p.y;
     mark(); return;
   }
@@ -759,20 +1320,60 @@ function onUp(e) {
   }
 }
 
+// Eraser hit test — vertices AND segments (fast strokes can gap between samples).
+function strokeEraseHit(s, p, r) {
+  const pts = s.points;
+  if (!pts.length) return false;
+  for (let j = 0; j < pts.length; j++) {
+    if (Math.hypot(p.x - pts[j].x, p.y - pts[j].y) < r) return true;
+    if (j > 0 && pointSegDist(p, pts[j - 1], pts[j]) < r) return true;
+  }
+  return false;
+}
+function pointErased(p, q, r) {
+  return Math.hypot(p.x - q.x, p.y - q.y) < r;
+}
+// Split a stroke at erased samples so only the touched segment disappears (not the whole path).
+function splitStrokeAtErase(s, r, p) {
+  const segs = [];
+  let run = [];
+  const pts = s.points;
+  for (let j = 0; j < pts.length; j++) {
+    const q = pts[j];
+    const hit = pointErased(p, q, r) || (j > 0 && pointSegDist(p, pts[j - 1], q) < r);
+    if (hit) {
+      if (run.length) { segs.push(run); run = []; }
+    } else run.push(q);
+  }
+  if (run.length) segs.push(run);
+  return segs
+    .filter((pts) => pts.length > 0)
+    .map((pts) => ({ tool: s.tool, penType: s.penType, color: s.color, width: s.width, points: pts }));
+}
 function eraseAt(p) {
   const r = (S.width + 14);
-  const r2 = r * r;
-  const before = page().strokes.length;
-  page().strokes = page().strokes.filter((s) => !s.points.some((q) => dist2(q, p) < r2));
+  const strokesBefore = page().strokes.length;
+  const next = [];
+  for (const s of page().strokes) {
+    if (!strokeEraseHit(s, p, r)) next.push(s);
+    else next.push(...splitStrokeAtErase(s, r, p));
+  }
+  page().strokes = next;
   const objBefore = objs().length;
-  page().objects = objs().filter((o) => !objHit(o, p, r));
-  if (page().strokes.length !== before || page().objects.length !== objBefore) mark();
+  page().objects = objs().filter((o) => {
+    if (!objHit(o, p, r)) return true;
+    if (o.kind === 'image') purgeObjImage(o.id);
+    return false;
+  });
+  if (page().strokes.length !== strokesBefore || page().objects.length !== objBefore) mark();
 }
 function pointInText(o, p) {
   const b = textBox(o);
   return p.x >= o.at.x - 8 && p.x <= o.at.x + b.w + 8 && p.y >= o.at.y - 8 && p.y <= o.at.y + b.h + 8;
 }
 function objHit(o, p, r) {
+  if (o.kind === 'graphpt' || o.kind === 'intersect') return Math.hypot(p.x - o.at.x, p.y - o.at.y) < r + 10;
+  if (o.kind === 'tangent') return pointSegDist(p, o.from, o.to) < r + 4;
   if (o.kind === 'text') return pointInText(o, p);
   if (o.kind === 'complex') return Math.hypot(p.x - o.at.x, p.y - o.at.y) < r + 8;
   if (o.kind === 'circle') {
@@ -780,11 +1381,9 @@ function objHit(o, p, r) {
     const d = Math.hypot(p.x - o.center.x, p.y - o.center.y);
     return Math.abs(d - rad) < r || d < r;
   }
-  if (o.kind === 'rect') {
+  if (o.kind === 'rect' || o.kind === 'image') {
     const x0 = Math.min(o.from.x, o.to.x), y0 = Math.min(o.from.y, o.to.y), x1 = Math.max(o.from.x, o.to.x), y1 = Math.max(o.from.y, o.to.y);
-    const nearV = (Math.abs(p.x - x0) < r || Math.abs(p.x - x1) < r) && p.y > y0 - r && p.y < y1 + r;
-    const nearH = (Math.abs(p.y - y0) < r || Math.abs(p.y - y1) < r) && p.x > x0 - r && p.x < x1 + r;
-    return nearV || nearH;
+    return p.x >= x0 - r && p.x <= x1 + r && p.y >= y0 - r && p.y <= y1 + r;
   }
   if (o.kind === 'ellipse') {
     const cx = (o.from.x + o.to.x) / 2, cy = (o.from.y + o.to.y) / 2, rx = Math.abs(o.to.x - o.from.x) / 2 || 1, ry = Math.abs(o.to.y - o.from.y) / 2 || 1;
@@ -829,6 +1428,65 @@ function setupText() {
   ta.addEventListener('input', sizeTextEditor);
   ta.addEventListener('blur', commitTextEditor);
   ta.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); ta.blur(); } e.stopPropagation(); });
+}
+
+// ---- equation editor (LaTeX via MathLive <math-field>) -----------------------
+let eqTarget = null;
+let eqField = null; // the <math-field> overlay
+
+function openEquationEditor(o) {
+  eqTarget = o; S.editingId = o.id;
+  if (!eqField) {
+    eqField = document.createElement('math-field');
+    eqField.id = 'eq-editor';
+    eqField.style.position = 'absolute';
+    eqField.style.zIndex = '100';
+    eqField.style.background = '#fff';
+    eqField.style.border = '2px solid #2566c8';
+    eqField.style.borderRadius = '6px';
+    eqField.style.padding = '4px 8px';
+    eqField.style.fontSize = '20px';
+    eqField.style.minWidth = '120px';
+    eqField.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+    eqField.setAttribute('virtual-keyboard-mode', 'manual');
+    document.body.appendChild(eqField);
+    eqField.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEquationEditor(); }
+      if (e.key === 'Escape') { e.preventDefault(); cancelEquationEditor(); }
+      e.stopPropagation();
+    });
+    eqField.addEventListener('blur', commitEquationEditor);
+  }
+  eqField.style.left = (o.at.x * S.scale + S.offsetX) + 'px';
+  eqField.style.top = (o.at.y * S.scale + S.offsetY) + 'px';
+  eqField.value = o.latex || '';
+  eqField.classList.remove('hidden');
+  mark();
+  setTimeout(() => { eqField.focus(); eqField.setValue?.(o.latex || ''); }, 0);
+}
+function commitEquationEditor() {
+  if (!eqTarget || !eqField) return;
+  const latex = eqField.value || '';
+  eqTarget.latex = latex;
+  if (!latex.trim()) {
+    const i = objs().indexOf(eqTarget);
+    if (i >= 0) objs().splice(i, 1);
+  }
+  S.editingId = null; eqTarget = null;
+  eqField.classList.add('hidden');
+  eqRenderCache = new Map(); // invalidate cache since latex changed
+  commitAction(); persist(); mark();
+}
+function cancelEquationEditor() {
+  if (!eqTarget) return;
+  // remove the object if it was just created and has no content
+  if (!eqTarget.latex || !eqTarget.latex.trim()) {
+    const i = objs().indexOf(eqTarget);
+    if (i >= 0) objs().splice(i, 1);
+  }
+  S.editingId = null; eqTarget = null;
+  eqField.classList.add('hidden');
+  mark();
 }
 
 // ---- multi-touch pan / zoom --------------------------------------------------
@@ -887,28 +1545,91 @@ function renderPageToCanvas(pg, sf = 2) {
   return oc;
 }
 function exportPNG() {
-  const oc = renderPageToCanvas(page(), 2);
-  oc.toBlob((blob) => downloadBlob(blob, `${S.notebook.title}-p${S.pageIndex + 1}.png`));
+  (async () => {
+    await ensureObjImagesLoaded();
+    const oc = renderPageToCanvas(page(), 2);
+    await drawGeoSvgToCanvas(oc.getContext('2d'), page());
+    oc.toBlob((blob) => downloadBlob(blob, `${S.notebook.title}-p${S.pageIndex + 1}.png`));
+  })();
 }
 async function exportPDF() {
   if (!window.jspdf) { alert('PDF library not loaded (need internet on first use).'); return; }
   await ensureImagesLoaded();
+  await ensureObjImagesLoaded();
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
   const W = pdf.internal.pageSize.getWidth(), H = pdf.internal.pageSize.getHeight();
-  S.notebook.pages.forEach((pg, i) => {
+  const all = allPages(S.notebook);
+  for (let i = 0; i < all.length; i++) {
+    const pg = all[i];
     const oc = renderPageToCanvas(pg, 2);
+    await drawGeoSvgToCanvas(oc.getContext('2d'), pg);
     if (i > 0) pdf.addPage();
     pdf.addImage(oc.toDataURL('image/png'), 'PNG', 0, 0, W, H);
-  });
+  }
   pdf.save(`${S.notebook.title}.pdf`);
 }
-function downloadBlob(blob, name) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+async function importJsonAsNotebook(file) {
+  try {
+    busy(true, 'Importing lesson…');
+    const nb = await importNotebookFromFile(file);
+    busy(false);
+    setLibTab(notebookKind(nb));
+    openNotebook(nb.id);
+  } catch (e) { busy(false); alert('Could not import lesson: ' + e.message); }
+}
+
+// ---- insert image (movable object on current page) ----------------------------
+function imageDataUrl(img, usePng) {
+  const maxDim = 1400;
+  let dw = img.width, dh = img.height;
+  if (dw > maxDim || dh > maxDim) {
+    const s = maxDim / Math.max(dw, dh);
+    dw = Math.round(dw * s); dh = Math.round(dh * s);
+  }
+  const oc = document.createElement('canvas');
+  oc.width = dw; oc.height = dh;
+  const cx = oc.getContext('2d');
+  if (!usePng) { cx.fillStyle = '#ffffff'; cx.fillRect(0, 0, dw, dh); }
+  cx.drawImage(img, 0, 0, dw, dh);
+  return usePng ? oc.toDataURL('image/png') : oc.toDataURL('image/jpeg', 0.88);
+}
+function insertImageFile(file) {
+  if (!file || !file.type.startsWith('image/')) { alert('Please choose a PNG, JPEG, WebP, or GIF image.'); return; }
+  busy(true, 'Adding image…');
+  const reader = new FileReader();
+  reader.onerror = () => { busy(false); alert('Could not read image.'); };
+  reader.onload = () => {
+    const img = new Image();
+    img.onerror = () => { busy(false); alert('Could not load image.'); };
+    img.onload = () => {
+      try {
+        const usePng = file.type === 'image/png' || file.type === 'image/gif';
+        const data = imageDataUrl(img, usePng);
+        const maxW = 480, maxH = 400;
+        let w = img.width, h = img.height;
+        const fit = Math.min(maxW / w, maxH / h, 1);
+        w = Math.round(w * fit); h = Math.round(h * fit);
+        const x = (PAGE_W - w) / 2, y = (PAGE_H - h) / 2;
+        beginAction();
+        const o = { id: uid(), kind: 'image', from: { x, y }, to: { x: x + w, y: y + h }, data };
+        objs().unshift(o);
+        commitAction();
+        persist();
+        thumbCache.delete(page().id);
+        S.selStrokes = [];
+        S.selObj = o;
+        S.tool = 'select';
+        if (cv) cv.classList.add('cur-select');
+        document.querySelectorAll('[data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === 'select'));
+        setTab('draw');
+        mark();
+      } catch (e) { alert('Could not add image: ' + e.message); }
+      busy(false);
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
 }
 
 // ---- PDF import (past papers -> annotatable pages) ---------------------------
@@ -928,7 +1649,7 @@ async function renderPdfToPages(arrayBuffer) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js';   // ensure worker set even if init timing missed it
   }
   const pdf = await withTimeout(pdfjsLib.getDocument({ data: arrayBuffer }).promise, 20000, 'Opening PDF');
-  const pages = [];
+  const newPgs = [];
   for (let i = 1; i <= pdf.numPages; i++) {
     busy(true, `Importing PDF — page ${i} of ${pdf.numPages}…`);
     const pg = await pdf.getPage(i);
@@ -941,59 +1662,105 @@ async function renderPdfToPages(arrayBuffer) {
     cx.fillRect(0, 0, oc.width, oc.height);              // (otherwise JPEG turns the page black/blank)
     const task = pg.render({ canvasContext: cx, viewport: vp });
     await withTimeout(task.promise, 30000, `Rendering page ${i}`).catch((e) => { try { task.cancel(); } catch (_) {} throw e; });
-    pages.push({ id: uid(), paper: 'plain', background: { type: 'image', data: oc.toDataURL('image/jpeg', 0.92) }, strokes: [], objects: [] });
+    newPgs.push({ id: uid(), paper: 'plain', background: { type: 'image', data: oc.toDataURL('image/jpeg', 0.92) }, strokes: [], objects: [], instruments: [] });
   }
-  return pages;
+  return newPgs;
 }
 async function insertPdfIntoNotebook(file) {
   try {
     busy(true, 'Reading PDF…');
-    const pages = await renderPdfToPages(await file.arrayBuffer());
-    S.notebook.pages.splice(S.pageIndex + 1, 0, ...pages);
-    S.pageIndex += 1;
-    S.undo = []; S.redo = []; clearSelection();
-    updatePageLabel(); persist(); mark();
+    const newPgs = await renderPdfToPages(await file.arrayBuffer());
+    addPagesAfterCurrent(newPgs);
   } catch (e) { alert('Could not import PDF: ' + e.message); }
   finally { busy(false); }
 }
 async function importPdfAsNotebook(file) {
   try {
     busy(true, 'Reading PDF…');
-    const pages = await renderPdfToPages(await file.arrayBuffer());
-    const nb = newNotebook(file.name.replace(/\.pdf$/i, ''));
-    nb.pages = pages.length ? pages : [newPage()];
+    const newPgs = await renderPdfToPages(await file.arrayBuffer());
+    const nb = newNotebook(file.name.replace(/\.pdf$/i, ''), 'paper');
+    nb.sections[0].pages = newPgs.length ? newPgs : [newPage('plain')];
     await saveNotebook(nb);
     busy(false);
+    setLibTab('paper');
     openNotebook(nb.id);
   } catch (e) { busy(false); alert('Could not import PDF: ' + e.message); }
 }
 
 // ---- UI: library <-> editor --------------------------------------------------
+let libTab = 'lesson';
+
+function updateSyncStatus(s) {
+  const el = $('#sync-status');
+  if (!el) return;
+  const labels = {
+    saved: '● Saved', exported: '● Exported', imported: '● Imported', shared: '● Shared',
+    synced: '● Synced', 'synced-all': '● Synced all', pulled: '● Pulled', configured: '● Cloud ready',
+  };
+  el.textContent = labels[s.state] || (getSyncBaseUrl() ? '● Cloud' : '● Local');
+  el.title = getSyncBaseUrl() ? `Cloud: ${getSyncBaseUrl()}` : 'Offline · saved on this device';
+  if (s.state === 'saved') {
+    clearTimeout(updateSyncStatus._t);
+    updateSyncStatus._t = setTimeout(() => {
+      el.textContent = getSyncBaseUrl() ? '● Cloud' : '● Local';
+    }, 2500);
+  }
+}
+
 function show(view) {
   $('#library').classList.toggle('hidden', view !== 'library');
   $('#editor').classList.toggle('hidden', view !== 'editor');
 }
 
+function setLibTab(t) {
+  libTab = t;
+  const head = $('.lib-head');
+  head.classList.toggle('lib-lesson', t === 'lesson');
+  head.classList.toggle('lib-paper', t === 'paper');
+  document.querySelectorAll('.lib-tab').forEach((b) => b.classList.toggle('active', b.dataset.lib === t));
+  renderLibrary();
+}
+
+function notebookCardThumb(nb) {
+  const pg = allPages(nb)[0];
+  if (!pg) return '<div class="nb-thumb"></div>';
+  if (pageIsPdf(pg)) return `<div class="nb-thumb"><img src="${pg.background.data}" alt="" /></div>`;
+  return `<div class="nb-thumb"><img class="nb-thumb-blank" src="${makePageThumbUrl(pg)}" alt="" /></div>`;
+}
+
 async function renderLibrary() {
   const list = $('#nb-list');
   list.innerHTML = '';
-  const nbs = (await getAllNotebooks()).sort((a, b) => b.updated - a.updated);
+  const nbs = (await getAllNotebooks())
+    .filter((nb) => notebookKind(nb) === libTab)
+    .sort((a, b) => b.updated - a.updated);
   if (!nbs.length) {
-    list.innerHTML = '<p class="muted">No lessons yet. Create your first notebook.</p>';
+    const msg = libTab === 'paper'
+      ? 'No past papers yet. Import a PDF to annotate exam questions.'
+      : 'No lessons yet. Create your first blank lesson notebook.';
+    list.innerHTML = `<p class="muted lib-empty">${msg}</p>`;
+    return;
   }
   for (const nb of nbs) {
+    const kind = notebookKind(nb);
     const card = document.createElement('div');
     card.className = 'nb-card';
-    card.innerHTML = `<div class="nb-title">${escapeHtml(nb.title)}</div>
-      <div class="nb-meta">${nb.pages.length} page${nb.pages.length > 1 ? 's' : ''} · ${new Date(nb.updated).toLocaleDateString()}</div>
-      <div class="nb-actions">
-        <button class="open">Open</button>
-        <button class="ren">Rename</button>
-        <button class="del danger">Delete</button>
+    card.innerHTML = `${notebookCardThumb(nb)}
+      <div class="nb-body">
+        <span class="nb-badge ${kind}">${kind === 'paper' ? 'Past paper' : 'Lesson'}</span>
+        <div class="nb-title">${escapeHtml(nb.title)}</div>
+        <div class="nb-meta">${allPages(nb).length} page${allPages(nb).length > 1 ? 's' : ''} · ${(nb.sections || []).length} sec · ${new Date(nb.updated).toLocaleDateString()}</div>
+        <div class="nb-actions">
+          <button class="open">Open</button>
+          <button class="exp">Export</button>
+          <button class="ren">Rename</button>
+          <button class="del danger">Delete</button>
+        </div>
       </div>`;
     card.querySelector('.open').onclick = () => openNotebook(nb.id);
+    card.querySelector('.exp').onclick = () => exportNotebookJSON(nb);
     card.querySelector('.ren').onclick = async () => {
-      const t = prompt('Rename lesson', nb.title);
+      const t = prompt('Rename', nb.title);
       if (t) { nb.title = t.trim(); await saveNotebook(nb); renderLibrary(); }
     };
     card.querySelector('.del').onclick = async () => {
@@ -1006,32 +1773,160 @@ async function renderLibrary() {
 const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 async function openNotebook(id) {
-  S.notebook = await getNotebook(id);
-  if (!S.notebook) return;
-  S.pageIndex = 0; S.undo = []; S.redo = []; clearSelection();
+  const raw = await getNotebook(id);
+  if (!raw) return;
+  S.notebook = normalizeNotebook(raw);
+  if (!S.notebook.kind) { S.notebook.kind = notebookKind(S.notebook); persist(); }
+  S.sectionIndex = 0; S.pageIndex = 0; S.undo = []; S.redo = []; clearSelection();
+  setPresentMode(false);
   show('editor');
-  requestAnimationFrame(() => { resizeCanvas(); fitPage(); updatePageLabel(); updateTitle(); });
+  requestAnimationFrame(() => {
+    resizeCanvas(); fitPage(); updatePageLabel(); updateTitle(); updatePresentTitle();
+    renderSectionStrip(); loadGeoPage(page());
+  });
 }
 
 async function createNotebook() {
   const t = prompt('New lesson name', 'Vectors — Lesson 1');
   if (t === null) return;
-  const nb = newNotebook(t.trim() || 'Untitled lesson');
+  const nb = newNotebook(t.trim() || 'Untitled lesson', 'lesson');
   await saveNotebook(nb);
   openNotebook(nb.id);
 }
 
+function goToPage(i) {
+  if (!S.notebook || i < 0 || i >= pages().length || i === S.pageIndex) return;
+  flushGeo();
+  S.pageIndex = i;
+  S.undo = []; S.redo = [];
+  clearSelection();
+  setGeoTool(null); setInstTool(null);
+  loadGeoPage(page());
+  updatePageLabel();
+  mark();
+}
+
+// Insert page(s) after current; wrapped for rule compliance, undo cleared (structural change).
+function addPagesAfterCurrent(items) {
+  const arr = Array.isArray(items) ? items : [items];
+  beginAction();
+  pages().splice(S.pageIndex + 1, 0, ...arr);
+  S.pageIndex += 1;
+  commitAction();
+  S.undo = []; S.redo = [];
+  clearSelection();
+  updatePageLabel();
+  persist();
+  mark();
+}
+
+function goToSection(i) {
+  if (!S.notebook || i < 0 || i >= sections().length || i === S.sectionIndex) return;
+  flushGeo();
+  S.sectionIndex = i;
+  S.pageIndex = 0;
+  S.undo = []; S.redo = [];
+  clearSelection();
+  setGeoTool(null); setInstTool(null);
+  loadGeoPage(page());
+  updatePageLabel();
+  renderSectionStrip();
+  mark();
+}
+
+function addSection() {
+  const t = prompt('Section name', `Section ${sections().length + 1}`);
+  if (t === null) return;
+  beginAction();
+  sections().push({ id: uid(), title: t.trim() || `Section ${sections().length + 1}`, pages: [newPage(page().paper)] });
+  S.sectionIndex = sections().length - 1;
+  S.pageIndex = 0;
+  commitAction();
+  renderSectionStrip();
+  updatePageLabel();
+  persist();
+  mark();
+}
+
+function renderSectionStrip() {
+  const wrap = $('#section-tabs');
+  if (!wrap || !S.notebook) return;
+  wrap.innerHTML = '';
+  sections().forEach((sec, i) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'section-tab' + (i === S.sectionIndex ? ' active' : '');
+    btn.textContent = sec.title;
+    btn.title = sec.title;
+    btn.onclick = () => goToSection(i);
+    btn.oncontextmenu = (e) => {
+      e.preventDefault();
+      const t = prompt('Rename section', sec.title);
+      if (t && t.trim()) { sec.title = t.trim(); renderSectionStrip(); persist(); }
+    };
+    wrap.appendChild(btn);
+  });
+}
+
+function renderPageStrip() {
+  const wrap = $('#page-thumbs');
+  if (!wrap || !S.notebook) return;
+  wrap.innerHTML = '';
+  pages().forEach((pg, i) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'page-thumb' + (i === S.pageIndex ? ' active' : '') + (pageIsPdf(pg) ? ' pdf' : ' blank');
+    btn.title = `Page ${i + 1}`;
+    const img = document.createElement('img');
+    img.alt = '';
+    img.draggable = false;
+    img.src = pageIsPdf(pg) ? pg.background.data : makePageThumbUrl(pg);
+    btn.appendChild(img);
+    const num = document.createElement('span');
+    num.className = 'page-thumb-num';
+    num.textContent = String(i + 1);
+    btn.appendChild(num);
+    btn.onclick = () => goToPage(i);
+    wrap.appendChild(btn);
+  });
+  const active = wrap.querySelector('.page-thumb.active');
+  if (active) active.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+}
+
+function updatePresentTitle() {
+  const el = $('#nb-title-present');
+  if (el && S.notebook) el.textContent = S.notebook.title;
+}
+
+function setPresentMode(on) {
+  $('#editor').classList.toggle('present-mode', on);
+  const btn = $('#present-toggle');
+  btn.classList.toggle('brand-toggle-active', on);
+  btn.textContent = on ? 'Exit' : 'Present';
+  btn.title = on ? 'Exit present mode' : 'Present mode (classroom / projector)';
+  if (on) {
+    if (TOOL_TAB[S.tool] === 'maths') setTool('pen');
+    else setTab('draw');
+    fitPage();
+  }
+  updatePresentTitle();
+  requestAnimationFrame(resizeCanvas);
+}
+
 // ---- editor controls ---------------------------------------------------------
 function updatePageLabel() {
-  $('#page-label').textContent = `${S.pageIndex + 1} / ${S.notebook.pages.length}`;
-  const sel = $('#paper'); if (sel) sel.value = page().paper;   // grid selector follows current page
+  $('#page-label').textContent = `${S.pageIndex + 1} / ${pages().length}`;
+  const sel = $('#paper'); if (sel) sel.value = page().paper;
   const rb = $('#resultant'); if (rb) rb.classList.toggle('brand-toggle-active', !!page().showResultant);
+  const pb = $('#parallelogram'); if (pb) pb.classList.toggle('brand-toggle-active', !!page().showParallelogram);
   const cb = $('#conjugate'); if (cb) cb.classList.toggle('brand-toggle-active', !!page().showConjugate);
+  renderPageStrip();
+  renderSectionStrip();
 }
-function updateTitle() { $('#nb-name').value = S.notebook.title; }
+function updateTitle() { $('#nb-name').value = S.notebook.title; updatePresentTitle(); }
 
 const TOOL_TAB = {
-  pen: 'draw', highlighter: 'draw', eraser: 'draw', lasso: 'draw', select: 'draw', text: 'draw', line: 'draw', rect: 'draw', ellipse: 'draw',
+  pen: 'draw', highlighter: 'draw', eraser: 'draw', lasso: 'draw', select: 'draw', text: 'draw', equation: 'draw', line: 'draw', rect: 'draw', ellipse: 'draw',
   vector: 'maths', plotz: 'maths', circle: 'maths',
 };
 function setTab(name) {
@@ -1041,6 +1936,10 @@ function setTab(name) {
   });
 }
 function setTool(t) {
+  setGeoTool(null);
+  setInstTool(null);
+  setMechPlacing(null);
+  setCplxPlacing(null);
   S.tool = t;
   if (t !== 'lasso') clearSelection();
   if (cv) cv.classList.toggle('cur-select', t === 'select');
@@ -1048,40 +1947,82 @@ function setTool(t) {
   if (TOOL_TAB[t]) setTab(TOOL_TAB[t]);
 }
 
+function loadCustomColors() {
+  try { return JSON.parse(localStorage.getItem('mb-custom-colors') || '[]'); }
+  catch { return []; }
+}
+function saveCustomColor(c) {
+  let list = loadCustomColors().filter((x) => x.toLowerCase() !== c.toLowerCase());
+  list.unshift(c.toLowerCase());
+  if (list.length > 4) list = list.slice(0, 4);
+  localStorage.setItem('mb-custom-colors', JSON.stringify(list));
+}
+function allSwatchColors() {
+  return [...COLORS, ...loadCustomColors().filter((c) => !COLORS.includes(c))];
+}
+function pickColor(c, el) {
+  S.color = c;
+  document.querySelectorAll('#swatches .swatch').forEach((x) => x.classList.remove('active'));
+  if (el) el.classList.add('active');
+  const pick = $('#color-pick');
+  if (pick) pick.value = c;
+}
+function buildSwatches() {
+  const sw = $('#swatches');
+  if (!sw) return;
+  sw.innerHTML = '';
+  allSwatchColors().forEach((c) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'swatch' + (c === S.color ? ' active' : '');
+    b.style.background = c;
+    b.title = c;
+    b.onclick = () => pickColor(c, b);
+    sw.appendChild(b);
+  });
+}
+function setPenType(t) {
+  S.penType = t;
+  document.querySelectorAll('.pen-btn').forEach((b) => b.classList.toggle('active', b.dataset.pen === t));
+  S.width = PEN_WIDTHS[t] || 4;
+  const slider = $('#width'), val = $('#width-val');
+  if (slider) slider.value = S.width;
+  if (val) val.textContent = S.width;
+}
+
 function bindEditor() {
   document.querySelectorAll('[data-tool]').forEach((b) => b.onclick = () => setTool(b.dataset.tool));
   document.querySelectorAll('.tab-btn').forEach((b) => b.onclick = () => setTab(b.dataset.tab));
   setTab('draw');
-
-  const sw = $('#swatches');
-  COLORS.forEach((c, i) => {
-    const b = document.createElement('button');
-    b.className = 'swatch' + (i === 0 ? ' active' : '');
-    b.style.background = c;
-    b.onclick = () => {
-      S.color = c;
-      document.querySelectorAll('.swatch').forEach((x) => x.classList.remove('active'));
-      b.classList.add('active');
-    };
-    sw.appendChild(b);
-  });
+  buildSwatches();
+  document.querySelectorAll('.pen-btn').forEach((b) => { b.onclick = () => setPenType(b.dataset.pen); });
+  $('#color-more').onclick = () => $('#color-pick').click();
+  $('#color-pick').oninput = (e) => {
+    const c = e.target.value.toLowerCase();
+    saveCustomColor(c);
+    buildSwatches();
+    const el = [...$('#swatches').querySelectorAll('.swatch')].find((s) => s.title === c);
+    pickColor(c, el);
+  };
 
   $('#width').oninput = (e) => { S.width = +e.target.value; $('#width-val').textContent = e.target.value; };
   $('#undo').onclick = doUndo;
   $('#redo').onclick = doRedo;
   $('#fit').onclick = fitPage;
+  $('#present-toggle').onclick = () => setPresentMode(!$('#editor').classList.contains('present-mode'));
   $('#finger').onchange = (e) => { S.fingerDraw = e.target.checked; };
 
-  $('#prev').onclick = () => { if (S.pageIndex > 0) { S.pageIndex--; S.undo = []; S.redo = []; clearSelection(); updatePageLabel(); mark(); } };
-  $('#next').onclick = () => { if (S.pageIndex < S.notebook.pages.length - 1) { S.pageIndex++; S.undo = []; S.redo = []; clearSelection(); updatePageLabel(); mark(); } };
-  $('#addpage').onclick = () => {
-    const paper = $('#paper').value;
-    S.notebook.pages.splice(S.pageIndex + 1, 0, newPage(paper));
-    S.pageIndex++; S.undo = []; S.redo = []; clearSelection();
-    updatePageLabel(); persist(); mark();
+  $('#prev').onclick = () => goToPage(S.pageIndex - 1);
+  $('#next').onclick = () => goToPage(S.pageIndex + 1);
+  $('#strip-add').onclick = () => {
+    const paper = pageIsPdf(page()) ? 'plain' : (page().paper || $('#paper').value || 'graph');
+    addPagesAfterCurrent(newPage(paper));
   };
-  $('#paper').onchange = (e) => { page().paper = e.target.value; persist(); mark(); };
+  $('#addpage').onclick = () => addPagesAfterCurrent(newPage($('#paper').value));
+  $('#section-add')?.addEventListener('click', addSection);
+  $('#paper').onchange = (e) => { page().paper = e.target.value; thumbCache.delete(page().id); persist(); mark(); };
   $('#resultant').onclick = () => { page().showResultant = !page().showResultant; updatePageLabel(); persist(); mark(); };
+  $('#parallelogram').onclick = () => { page().showParallelogram = !page().showParallelogram; updatePageLabel(); persist(); mark(); };
   $('#conjugate').onclick = () => { page().showConjugate = !page().showConjugate; updatePageLabel(); persist(); mark(); };
   $('#snap').onchange = (e) => { S.snap = e.target.checked; };
   $('#radians').onchange = (e) => { S.radians = e.target.checked; mark(); };
@@ -1098,16 +2039,34 @@ function bindEditor() {
 
   $('#export-pdf').onclick = exportPDF;
   $('#export-png').onclick = exportPNG;
+  $('#export-json').onclick = () => { if (S.notebook) exportNotebookJSON(S.notebook); };
+  $('#share-lesson').onclick = async () => {
+    if (!S.notebook) return;
+    const r = await shareNotebook(S.notebook);
+    if (r === 'downloaded') { /* fallback export already ran */ }
+  };
   $('#insert-pdf').onclick = () => $('#pdf-file').click();
+  $('#insert-img').onclick = () => $('#img-file').click();
   $('#pdf-file').onchange = (e) => { const f = e.target.files[0]; if (f) insertPdfIntoNotebook(f); e.target.value = ''; };
-  $('#back').onclick = () => { show('library'); renderLibrary(); };
+  $('#img-file').onchange = (e) => { const f = e.target.files[0]; if (f) insertImageFile(f); e.target.value = ''; };
+  document.querySelectorAll('[data-geo]').forEach((b) => {
+    if (!b.dataset.geo) return;
+    b.onclick = () => { setInstTool(null); setGeoTool(b.dataset.geo); setTab('maths'); };
+  });
+  document.querySelectorAll('[data-inst]').forEach((b) => {
+    b.onclick = () => { setGeoTool(null); setInstTool(b.dataset.inst); setTab('maths'); };
+  });
+  $('#geo-clear').onclick = () => {
+    if (confirm('Clear all geometry on this page?')) clearGeoPage();
+  };
+  $('#back').onclick = () => { setPresentMode(false); setGeoTool(null); setInstTool(null); teardownGeo(); show('library'); renderLibrary(); };
 
   $('#nb-name').onchange = (e) => { S.notebook.title = e.target.value.trim() || 'Untitled lesson'; persist(); };
 
   // keyboard shortcuts (desktop)
   window.addEventListener('keydown', (e) => {
     if ($('#editor').classList.contains('hidden')) return;
-    if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;   // don't hijack typing in fields
+    if (/^(INPUT|TEXTAREA|SELECT|MATH-FIELD)$/.test(e.target.tagName)) return;
     if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); doUndo(); }
     else if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); doRedo(); }
     else if (e.key === 'p') setTool('pen');
@@ -1118,7 +2077,9 @@ function bindEditor() {
     else if (e.key === 'v') setTool('vector');
     else if (e.key === 'z') setTool('plotz');
     else if (e.key === 't') setTool('text');
-    else if ((e.key === 'Delete' || e.key === 'Backspace') && S.selObj) { e.preventDefault(); deleteSelectedObject(); }
+    else if (e.key === 'q') setTool('equation');
+    else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setPresentMode(!$('#editor').classList.contains('present-mode')); }
+    else if ((e.key === 'Delete' || e.key === 'Backspace') && (S.selObj || S.selStrokes.length)) { e.preventDefault(); deleteSelection(); }
   });
 }
 
@@ -1140,9 +2101,18 @@ function bindCanvas() {
 
 // ---- fx-991-equivalent scientific calculator --------------------------------
 let calcDeg = true, calcAns = 0, mathFrac = null, calcShift = false;
-let calcLastExpr = null, calcResultValue = null, calcShowFrac = false;
-const SHIFT_MAP = { 'sin(': 'asin(', 'cos(': 'acos(', 'tan(': 'atan(', 'log(': 'e^(', 'log10(': '10^(' };
-function showCalcTable(on) { $('#calc-table').classList.toggle('hidden', !on); $('#calc-keys').classList.toggle('hidden', on); }
+let calcLastExpr = null, calcResultValue = null, calcDisplayMode = 0; // 0=D 1=frac 2=surd
+const SHIFT_MAP = {
+  'sin(': 'asin(', 'cos(': 'acos(', 'tan(': 'atan(', 'log(': 'e^(', 'log10(': '10^(',
+  'table': 'matrix', '^': 'nthRoot(', ',': 'frac', ')': 'del',
+};
+const CALC_FMT = ['D', 'F', '√'];
+
+function showCalcView(view) {
+  $('#calc-keys').classList.toggle('hidden', view !== 'keys');
+  $('#calc-table').classList.toggle('hidden', view !== 'table');
+  $('#calc-matrix').classList.toggle('hidden', view !== 'matrix');
+}
 function calcScope() {
   const toRad = (x) => calcDeg ? x * Math.PI / 180 : x;
   const fromRad = (x) => calcDeg ? x * 180 / Math.PI : x;
@@ -1152,44 +2122,151 @@ function calcScope() {
     Ans: calcAns,
   };
 }
+function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { const t = b; b = a % b; a = t; } return a || 1; }
+function fracHtml(n, d) {
+  if (!d) return String(n);
+  if (d < 0) { n = -n; d = -d; }
+  const g = gcd(n, d); n /= g; d /= g;
+  if (d === 1) return String(n);
+  return `<span class="c-frac"><span class="c-num">${n}</span><span class="c-bar"></span><span class="c-den">${d}</span></span>`;
+}
+function surdHtml(k, n) {
+  const g = gcd(k, n); k /= g; n /= g;
+  let out = '';
+  if (k === -1) out = '−';
+  else if (k !== 1 && k !== -1) out = String(k);
+  if (n === 1) return out || '0';
+  out += `<span class="c-surd"><span class="c-sqrt">√</span>${n > 1 ? n : ''}</span>`;
+  return out;
+}
+function trySurdDecimal(x) {
+  if (!isFinite(x) || x === 0) return null;
+  const sign = x < 0 ? -1 : 1;
+  const ax = Math.abs(x);
+  for (let n = 2; n <= 500; n++) {
+    const k = ax / Math.sqrt(n);
+    if (Math.abs(k - Math.round(k)) < 1e-9) return surdHtml(sign * Math.round(k), n);
+  }
+  return null;
+}
+function calcFormatValue(val, mode) {
+  if (val == null) return '0';
+  const t = math.typeOf(val);
+  if (t === 'Complex' || (val && val.re != null && val.im != null)) {
+    const re = val.re ?? val, im = val.im ?? 0;
+    if (Math.abs(im) < 1e-12) return calcFormatValue(re, mode);
+    const rp = calcFormatValue(re, mode), ip = calcFormatValue(Math.abs(im), mode);
+    const sign = im < 0 ? ' − ' : ' + ';
+    const ii = Math.abs(im) === 1 ? 'i' : `${ip}i`;
+    return `${rp}${sign}${ii}`;
+  }
+  if (t === 'Matrix' || (val && val.size)) {
+    const s = val.size();
+    const rows = [];
+    for (let r = 0; r < s[0]; r++) {
+      const row = [];
+      for (let c = 0; c < s[1]; c++) row.push(calcFormatPlain(val.get([r, c])));
+      rows.push(`[${row.join(', ')}]`);
+    }
+    return rows.join('\n');
+  }
+  if (mode === 1) {
+    try {
+      const f = mathFrac.fraction(val);
+      if (f && Number.isFinite(f.n) && Number.isFinite(f.d)) return fracHtml(f.s * f.n, f.d);
+    } catch (_) { /* decimal */ }
+  }
+  if (mode === 2) {
+    if (typeof val === 'number') {
+      const s = trySurdDecimal(val);
+      if (s) return s;
+    }
+    try {
+      const simp = math.simplify(math.parse(String(calcLastExpr || val)));
+      const str = simp.toString();
+      if (/sqrt|√/.test(str)) return str.replace(/sqrt\((\d+)\)/g, '<span class="c-surd"><span class="c-sqrt">√</span>$1</span>');
+    } catch (_) { /* fall through */ }
+  }
+  return calcFormatPlain(val);
+}
+function calcFormatPlain(val) {
+  if (typeof val === 'number' && isFinite(val)) {
+    if (Math.abs(val) >= 1e10 || (Math.abs(val) > 0 && Math.abs(val) < 1e-4)) return val.toExponential(6).replace('+', '');
+    return math.format(val, { precision: 10 });
+  }
+  return math.format(val, { precision: 10 });
+}
+function calcRenderResult() {
+  const out = $('#calc-result'), ind = $('#calc-fmt-ind');
+  if (!out) return;
+  if (calcResultValue == null) { out.textContent = '0'; if (ind) ind.textContent = 'D'; return; }
+  if (ind) ind.textContent = CALC_FMT[calcDisplayMode] || 'D';
+  out.innerHTML = calcFormatValue(calcResultValue, calcDisplayMode);
+}
+function calcExprEl() { return $('#calc-expr'); }
+function calcGetExpr() {
+  const el = calcExprEl();
+  if (!el) return '';
+  if (typeof el.getValue === 'function') {
+    try { return (el.getValue('ASCIIMath') || el.getValue() || '').trim(); } catch (_) { return (el.value || '').trim(); }
+  }
+  return (el.value || '').trim();
+}
+function calcSetExpr(v) {
+  const el = calcExprEl();
+  if (!el) return;
+  if (typeof el.setValue === 'function') el.setValue(v);
+  else el.value = v;
+  el.focus?.();
+}
+function calcInsert(token) {
+  const el = calcExprEl();
+  if (!el) return;
+  if (typeof el.executeCommand === 'function') { el.executeCommand('insert', token); el.focus(); return; }
+  el.value = (el.value || '') + token;
+  el.focus();
+}
 function calcEvaluate() {
-  const inp = $('#calc-expr'), out = $('#calc-result');
-  const expr = inp.value.trim();
+  const hist = $('#calc-history');
+  const expr = calcGetExpr();
   if (!expr) return;
   try {
     const res = math.evaluate(expr, calcScope());
-    if (typeof res === 'function' || res === undefined) { out.textContent = 'Error'; return; }
-    calcAns = res; calcLastExpr = expr; calcResultValue = res; calcShowFrac = false;
-    out.textContent = math.format(res, { precision: 10 });
-  } catch (e) { out.textContent = 'Error'; }
+    if (typeof res === 'function' || res === undefined) { $('#calc-result').textContent = 'Error'; return; }
+    calcAns = res; calcLastExpr = expr; calcResultValue = res; calcDisplayMode = 0;
+    if (hist) hist.textContent = `${expr} =`;
+    calcRenderResult();
+  } catch (e) { $('#calc-result').textContent = 'Error'; }
 }
-function calcToggleSD() {                          // S⇔D: toggle result between decimal and exact fraction
-  if (calcLastExpr == null) return;
-  const out = $('#calc-result');
-  calcShowFrac = !calcShowFrac;
-  if (calcShowFrac) {
-    try {
-      const f = mathFrac.evaluate(calcLastExpr, calcScope());
-      if (mathFrac.typeOf(f) === 'Fraction') { out.textContent = mathFrac.format(f, { fraction: 'ratio' }); return; }
-    } catch (e) { /* fall through to decimal */ }
-    calcShowFrac = false;   // no nice fraction — stay decimal
-  }
-  out.textContent = math.format(calcResultValue, { precision: 10 });
+function calcToggleSD() {
+  if (calcResultValue == null) return;
+  calcDisplayMode = (calcDisplayMode + 1) % CALC_FMT.length;
+  calcRenderResult();
+}
+function calcRecall() {
+  if (!calcLastExpr) return;
+  calcSetExpr(calcLastExpr);
 }
 function calcKey(k) {
-  const inp = $('#calc-expr');
+  const inp = calcExprEl();
   if (k === 'shift') { calcShift = !calcShift; $('#calc-shift-ind').classList.toggle('on', calcShift); return; }
   const sh = calcShift;
   if (sh) { calcShift = false; $('#calc-shift-ind').classList.remove('on'); }
-  if (k === 'ac') { inp.value = ''; $('#calc-result').textContent = '0'; inp.focus(); return; }
-  if (k === 'del') { inp.value = inp.value.slice(0, -1); inp.focus(); return; }
-  if (k === 'table') { showCalcTable($('#calc-table').classList.contains('hidden')); return; }
+  if (k === 'ac') { calcSetExpr(''); $('#calc-result').textContent = '0'; $('#calc-history').textContent = ''; calcResultValue = null; inp?.focus(); return; }
+  if (k === 'matrix') { showCalcView('matrix'); return; }
+  if (k === 'table') { showCalcView('table'); return; }
+  if (k === 'calc') { calcRecall(); return; }
   if (k === 'eq') { calcEvaluate(); return; }
   if (k === 'sd') { calcToggleSD(); return; }
-  let token = (k === 'ans') ? 'Ans' : (k === 'frac') ? '/' : k;
+  let token = (k === 'ans') ? 'Ans' : k;
   if (sh && SHIFT_MAP[k]) token = SHIFT_MAP[k];
-  inp.value += token;
-  inp.focus();
+  if (token === 'del') {
+    if (inp?.executeCommand) inp.executeCommand('deleteBackward');
+    else if (inp) inp.value = inp.value.slice(0, -1);
+    inp?.focus(); return;
+  }
+  if (token === 'frac') { calcInsert('()/()'); return; }
+  calcInsert(token);
 }
 function calcGenTable() {
   const out = $('#ct-out');
@@ -1207,6 +2284,75 @@ function calcGenTable() {
     if (++n > 250) break;
   }
   out.innerHTML = rows + '</table>';
+}
+function mxRead(id) { return Number($('#' + id).value || '0'); }
+function mxMat2(prefix) {
+  return math.matrix([[mxRead(prefix + '00'), mxRead(prefix + '01')], [mxRead(prefix + '10'), mxRead(prefix + '11')]]);
+}
+function mxShow(m) {
+  const out = $('#mx-out');
+  if (m == null) { out.innerHTML = '<div class="ct-err">Error</div>'; return; }
+  if (Array.isArray(m)) {
+    out.textContent = '(' + m.map((v) => calcFormatPlain(v)).join(', ') + ')';
+    return;
+  }
+  if (m.size && typeof m.get === 'function') {
+    const s = m.size();
+    if (s.length === 2) {
+      let html = '<div class="mx-mat">';
+      for (let r = 0; r < s[0]; r++) {
+        const row = [];
+        for (let c = 0; c < s[1]; c++) row.push(calcFormatPlain(m.get([r, c])));
+        html += row.join('  ') + '\n';
+      }
+      out.innerHTML = html + '</div>';
+      return;
+    }
+  }
+  out.textContent = calcFormatPlain(m);
+}
+function calcMatrixOp(op) {
+  const A = mxMat2('ma'), B = mxMat2('mb');
+  try {
+    if (op === 'detA') mxShow(math.det(A));
+    else if (op === 'invA') mxShow(math.inv(A));
+    else if (op === 'tA') mxShow(math.transpose(A));
+    else if (op === 'AB') mxShow(math.multiply(A, B));
+    else if (op === 'ApB') mxShow(math.add(A, B));
+  } catch (e) { $('#mx-out').innerHTML = '<div class="ct-err">Error</div>'; }
+}
+function calcVectorOp(op) {
+  const u = math.matrix([mxRead('vu0'), mxRead('vu1'), mxRead('vu2')]);
+  const v = math.matrix([mxRead('vv0'), mxRead('vv1'), mxRead('vv2')]);
+  try {
+    if (op === 'dot') mxShow(math.dot(u, v));
+    else if (op === 'cross') mxShow(math.cross(u, v));
+    else if (op === 'mag') mxShow(math.norm(u));
+    else if (op === 'ang') {
+      const d = math.dot(u, v), nu = math.norm(u), nv = math.norm(v);
+      const ang = math.acos(d / (nu * nv)) * (calcDeg ? 180 / Math.PI : 1);
+      mxShow(ang);
+    }
+  } catch (e) { $('#mx-out').innerHTML = '<div class="ct-err">Error</div>'; }
+}
+function setupCalculator() {
+  if (!window.math) { $('#calc-toggle').style.display = 'none'; return; }
+  mathFrac = math.create(math.all); mathFrac.config({ number: 'Fraction' });
+  document.querySelectorAll('#calc-keys .ck').forEach((b) => b.onclick = () => calcKey(b.dataset.k));
+  $('#calc-toggle').onclick = () => { $('#calc').classList.toggle('hidden'); calcExprEl()?.focus(); };
+  $('#calc-close').onclick = () => $('#calc').classList.add('hidden');
+  $('#calc-mode').onclick = () => { calcDeg = !calcDeg; $('#calc-mode').textContent = calcDeg ? 'DEG' : 'RAD'; };
+  const mf = calcExprEl();
+  if (mf?.setOptions) mf.setOptions({ smartMode: false, virtualKeyboardMode: 'manual' });
+  mf?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); calcEvaluate(); } });
+  $('#ct-back').onclick = () => showCalcView('keys');
+  $('#cm-back').onclick = () => showCalcView('keys');
+  $('#ct-gen').onclick = calcGenTable;
+  $('#mx-tab-mat').onclick = () => { $('#mx-tab-mat').classList.add('active'); $('#mx-tab-vec').classList.remove('active'); $('#mx-mat').classList.remove('hidden'); $('#mx-vec').classList.add('hidden'); };
+  $('#mx-tab-vec').onclick = () => { $('#mx-tab-vec').classList.add('active'); $('#mx-tab-mat').classList.remove('active'); $('#mx-vec').classList.remove('hidden'); $('#mx-mat').classList.add('hidden'); };
+  document.querySelectorAll('[data-mx]').forEach((b) => b.onclick = () => calcMatrixOp(b.dataset.mx));
+  document.querySelectorAll('[data-vx]').forEach((b) => b.onclick = () => calcVectorOp(b.dataset.vx));
+  makeDraggable($('#calc'), $('#calc-head'));
 }
 function makeDraggable(panel, handle) {
   let sx, sy, ox, oy, dragging = false;
@@ -1226,39 +2372,69 @@ function makeDraggable(panel, handle) {
   });
   handle.addEventListener('pointerup', () => { dragging = false; });
 }
-function setupCalculator() {
-  if (!window.math) { $('#calc-toggle').style.display = 'none'; return; }
-  mathFrac = math.create(math.all); mathFrac.config({ number: 'Fraction' });   // exact-fraction engine for S⇔D
-  document.querySelectorAll('#calc-keys .ck').forEach((b) => b.onclick = () => calcKey(b.dataset.k));
-  $('#calc-toggle').onclick = () => { $('#calc').classList.toggle('hidden'); $('#calc-expr').focus(); };
-  $('#calc-close').onclick = () => $('#calc').classList.add('hidden');
-  $('#calc-mode').onclick = () => { calcDeg = !calcDeg; $('#calc-mode').textContent = calcDeg ? 'DEG' : 'RAD'; };
-  $('#calc-expr').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); calcEvaluate(); } });
-  $('#ct-back').onclick = () => showCalcTable(false);
-  $('#ct-gen').onclick = calcGenTable;
-  makeDraggable($('#calc'), $('#calc-head'));
-}
 
 // ---- function grapher panel -------------------------------------------------
 function renderGraphList() {
   const list = $('#gp-list'); list.innerHTML = '';
   fns().forEach((f, i) => {
-    const row = document.createElement('div'); row.className = 'gp-row';
+    const row = document.createElement('div');
+    row.className = 'gp-row' + (f.mode === 'param' ? ' gp-row-param' : '');
     const dot = document.createElement('span'); dot.className = 'gp-dot'; dot.style.background = f.color;
-    const eq = document.createElement('span'); eq.className = 'gp-eq'; eq.textContent = 'y =';
-    const inp = document.createElement('input'); inp.className = 'gp-in'; inp.type = 'text'; inp.value = f.expr; inp.placeholder = 'sin(x)';
-    inp.oninput = () => { f.expr = inp.value; persist(); mark(); };
+    const mode = document.createElement('select'); mode.className = 'gp-mode';
+    mode.innerHTML = '<option value="y">y(x)</option><option value="param">param</option>';
+    mode.value = f.mode === 'param' ? 'param' : 'y';
+    mode.onchange = () => {
+      f.mode = mode.value;
+      if (f.mode === 'param' && !f.exprX) { f.exprX = 'cos(t)'; f.exprY = 'sin(t)'; f.tMin = 0; f.tMax = 6.283; }
+      renderGraphList(); persist(); mark();
+    };
     const del = document.createElement('button'); del.className = 'gp-del'; del.textContent = '×'; del.title = 'Remove';
-    del.onclick = () => { fns().splice(i, 1); renderGraphList(); persist(); mark(); };
-    row.append(dot, eq, inp, del); list.appendChild(row);
+    del.onclick = () => { beginAction(); fns().splice(i, 1); commitAction(); renderGraphList(); persist(); mark(); };
+    row.append(dot, mode);
+    if (f.mode === 'param') {
+      const mkIn = (ph, val, key) => {
+        const wrap = document.createElement('div'); wrap.className = 'gp-param-line';
+        const lab = document.createElement('span'); lab.className = 'gp-eq'; lab.textContent = key;
+        const inp = document.createElement('input'); inp.className = 'gp-in'; inp.placeholder = ph; inp.value = val || '';
+        inp.oninput = () => { f[key] = inp.value; persist(); mark(); };
+        wrap.append(lab, inp); return wrap;
+      };
+      row.append(mkIn('cos(t)', f.exprX, 'exprX'), mkIn('sin(t)', f.exprY, 'exprY'));
+      const tr = document.createElement('div'); tr.className = 'gp-param-line';
+      ['tMin', 'tMax'].forEach((k) => {
+        const inp = document.createElement('input'); inp.className = 'gp-in'; inp.style.flex = '1';
+        inp.value = f[k] ?? (k === 'tMin' ? 0 : 6.283);
+        inp.oninput = () => { f[k] = +inp.value || 0; persist(); mark(); };
+        tr.appendChild(inp);
+      });
+      row.append(tr);
+    } else {
+      const eq = document.createElement('span'); eq.className = 'gp-eq'; eq.textContent = 'y =';
+      const inp = document.createElement('input'); inp.className = 'gp-in'; inp.type = 'text'; inp.value = f.expr || ''; inp.placeholder = 'sin(x)';
+      inp.oninput = () => { f.expr = inp.value; persist(); mark(); };
+      const ampWrap = document.createElement('div'); ampWrap.className = 'gp-param-line';
+      const ampLab = document.createElement('span'); ampLab.className = 'gp-eq'; ampLab.textContent = 'A';
+      const ampIn = document.createElement('input'); ampIn.className = 'gp-in'; ampIn.type = 'text'; ampIn.placeholder = '1'; ampIn.value = f.amp ?? '';
+      ampIn.oninput = () => { f.amp = ampIn.value.trim(); applyGraphAmp(f); persist(); mark(); };
+      const perLab = document.createElement('span'); perLab.className = 'gp-eq'; perLab.textContent = 'k';
+      const perIn = document.createElement('input'); perIn.className = 'gp-in'; perIn.type = 'text'; perIn.placeholder = '1'; perIn.value = f.period ?? '';
+      perIn.oninput = () => { f.period = perIn.value.trim(); applyGraphAmp(f); persist(); mark(); };
+      ampWrap.append(ampLab, ampIn, perLab, perIn);
+      row.append(eq, inp, ampWrap);
+    }
+    row.append(del); list.appendChild(row);
   });
 }
-function addFunction(expr) {
-  fns().push({ expr: expr || '', color: COLORS[fns().length % COLORS.length] });
+function addFunction(expr, param) {
+  if (param) {
+    fns().push({ mode: 'param', exprX: 'cos(t)', exprY: 'sin(t)', tMin: 0, tMax: 6.283, color: COLORS[fns().length % COLORS.length] });
+  } else {
+    fns().push({ mode: 'y', expr: expr || '', color: COLORS[fns().length % COLORS.length] });
+  }
   renderGraphList(); persist(); mark();
 }
 function openGraph() {
-  if (!GRID_PAPERS.includes(page().paper)) { page().paper = 'axes'; updatePageLabel(); persist(); }  // ensure visible axes
+  if (!GRID_PAPERS.includes(page().paper)) { page().paper = 'axes'; updatePageLabel(); persist(); }
   $('#graph').classList.remove('hidden');
   if (!fns().length) addFunction('sin(x)'); else renderGraphList();
   mark();
@@ -1268,7 +2444,13 @@ function setupGraph() {
   $('#graph-toggle').onclick = () => { $('#graph').classList.contains('hidden') ? openGraph() : $('#graph').classList.add('hidden'); };
   $('#graph-close').onclick = () => $('#graph').classList.add('hidden');
   $('#gp-add').onclick = () => addFunction('');
-  document.querySelectorAll('.gp-quick').forEach((b) => b.onclick = () => addFunction(b.dataset.fn));
+  $('#gp-point').onclick = () => addGraphPoint(0);
+  $('#gp-tangent').onclick = () => addTangentAtSelection();
+  $('#gp-intersect').onclick = () => markIntersections();
+  document.querySelectorAll('.gp-quick').forEach((b) => {
+    if (b.dataset.param) b.onclick = () => addFunction('', true);
+    else b.onclick = () => addFunction(b.dataset.fn);
+  });
   makeDraggable($('#graph'), $('#gp-head'));
 }
 
@@ -1354,19 +2536,100 @@ function setupStats() {
   makeDraggable($('#stats'), $('#stats-head'));
 }
 
+function addComplexPoint(re, im, tag, omega) {
+  const at = { x: PAGE_W / 2 + re * UNIT, y: PAGE_H / 2 - im * UNIT };
+  objs().push({
+    id: uid(), kind: 'complex', at: snapPt(at), color: S.color,
+    ctag: tag || null, omega: omega ? { re: omega.re, im: omega.im } : null,
+  });
+  mark();
+}
+
+function setupPanelMenu() {
+  const wrap = $('#panel-menu');
+  const drop = $('#panel-drop');
+  if (!wrap || !drop) return;
+  wrap.onclick = (e) => { e.stopPropagation(); drop.classList.toggle('hidden'); };
+  drop.querySelectorAll('[data-panel]').forEach((b) => {
+    b.onclick = () => {
+      const id = b.dataset.panel;
+      const el = $(id);
+      if (el) el.classList.toggle('hidden');
+      drop.classList.add('hidden');
+    };
+  });
+  document.addEventListener('click', () => drop.classList.add('hidden'));
+}
+
+function setupSyncSettings() {
+  const dlg = $('#sync-dialog');
+  const urlIn = $('#sync-url');
+  if (!dlg || !urlIn) return;
+  urlIn.value = getSyncBaseUrl();
+  $('#sync-settings')?.addEventListener('click', () => {
+    urlIn.value = getSyncBaseUrl();
+    dlg.classList.remove('hidden');
+  });
+  $('#sync-close')?.addEventListener('click', () => dlg.classList.add('hidden'));
+  $('#sync-save')?.addEventListener('click', () => {
+    setSyncBaseUrl(urlIn.value);
+    dlg.classList.add('hidden');
+    updateSyncStatus({ state: getSyncBaseUrl() ? 'configured' : 'saved', mode: getSyncBaseUrl() ? 'remote' : 'local' });
+  });
+  $('#sync-push')?.addEventListener('click', async () => {
+    try {
+      setSyncBaseUrl(urlIn.value);
+      const n = await syncAllToRemote();
+      alert(`Uploaded ${n} lesson(s) to cloud.`);
+    } catch (e) { alert(e.message); }
+  });
+  $('#sync-pull')?.addEventListener('click', async () => {
+    try {
+      setSyncBaseUrl(urlIn.value);
+      const n = await pullRemoteCatalog();
+      renderLibrary();
+      alert(`Pulled ${n} lesson(s) from cloud.`);
+    } catch (e) { alert(e.message); }
+  });
+}
+
 // ---- boot --------------------------------------------------------------------
 function init() {
   cv = $('#board');
   ctx = cv.getContext('2d');
+  setupGeo({ page, snapPt, beginAction, commitAction, persist, mark, cancelAction: () => { S.actionBefore = null; }, setInstTool: () => setInstTool(null) });
+  setupMech({ page, snapPt, beginAction, commitAction, persist, mark, setGeoTool: () => setGeoTool(null), setCplxPlacing: () => setCplxPlacing(null) });
+  setupMechPanel();
+  makeDraggable($('#mech'), $('#mech-head'));
+  setupCplx({
+    page, snapPt, beginAction, commitAction, persist, mark, unit: UNIT, pageW: PAGE_W, pageH: PAGE_H,
+    setGeoTool: () => setGeoTool(null), setMechPlacing: () => setMechPlacing(null),
+    selObj: () => S.selObj, addComplex: addComplexPoint,
+  });
+  setupInstruments({
+    page, snapPt, beginAction, commitAction, persist, mark, unit: UNIT,
+    setGeoTool: () => setGeoTool(null), setMechPlacing: () => setMechPlacing(null), setCplxPlacing: () => setCplxPlacing(null),
+  });
+  setupCplxPanel();
+  makeDraggable($('#cplx'), $('#cplx-head'));
+  onSyncStatus(updateSyncStatus);
+  window.MathBoard = getPortalAPI();
+  if (!window.JXG) document.querySelector('.geo-group')?.classList.add('hidden');
   bindEditor();
   bindCanvas();
   setupCalculator();
   setupGraph();
   setupStats();
   setupText();
+  setupPanelMenu();
+  setupSyncSettings();
   $('#new-nb').onclick = createNotebook;
+  document.querySelectorAll('.lib-tab').forEach((b) => { b.onclick = () => setLibTab(b.dataset.lib); });
+  setLibTab('lesson');
   $('#import-pdf-lib').onclick = () => $('#pdf-file-lib').click();
+  $('#import-json-lib').onclick = () => $('#json-file-lib').click();
   $('#pdf-file-lib').onchange = (e) => { const f = e.target.files[0]; if (f) importPdfAsNotebook(f); e.target.value = ''; };
+  $('#json-file-lib').onchange = (e) => { const f = e.target.files[0]; if (f) importJsonAsNotebook(f); e.target.value = ''; };
   if (window.pdfjsLib) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js';
   }

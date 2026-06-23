@@ -1,17 +1,27 @@
 // sw.js — offline support.
 // Same-origin app files: network-first (always get the latest, fall back to cache offline).
 // Cross-origin CDN (jsPDF): cache-first (immutable, fine to pin).
-const CACHE = 'mathboard-v7';
+const CACHE = 'mathboard-v31';
 const ASSETS = [
   './',
   './index.html',
   './css/app.css',
   './js/app.js',
+  './js/geo.js',
+  './js/mech.js',
+  './js/cplx.js',
+  './js/instruments.js',
+  './js/model.js',
+  './js/share.js',
   './js/storage.js',
   './manifest.json',
   './assets/icon.svg',
   './assets/waseem.jpg',
   './vendor/jspdf.umd.min.js',
+  './vendor/jsxgraphcore.js',
+  './vendor/jsxgraph.css',
+  './vendor/mathlive.min.js',
+  './vendor/mathlive.css',
   './vendor/pdf.min.js',
   './vendor/pdf.worker.min.js',
   './vendor/math.min.js',
@@ -37,7 +47,6 @@ self.addEventListener('fetch', (e) => {
   const sameOrigin = new URL(req.url).origin === self.location.origin;
 
   if (sameOrigin) {
-    // network-first: latest code wins; cache is the offline safety net
     e.respondWith(
       fetch(req).then((res) => {
         const copy = res.clone();
@@ -46,7 +55,6 @@ self.addEventListener('fetch', (e) => {
       }).catch(() => caches.match(req))
     );
   } else {
-    // cache-first for CDN assets
     e.respondWith(
       caches.match(req).then((hit) => hit || fetch(req).then((res) => {
         const copy = res.clone();

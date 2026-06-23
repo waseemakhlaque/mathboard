@@ -12,7 +12,11 @@
 <link rel="manifest" href="./manifest.json" />
 <link rel="apple-touch-icon" href="./assets/icon.svg" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
-<link rel="stylesheet" href="./css/app.css?v=15" />
+<link rel="stylesheet" href="./vendor/jsxgraph.css" />
+<link rel="stylesheet" href="./css/app.css?v=31" />
+<link rel="stylesheet" href="./vendor/mathlive.css" />
+<script src="./vendor/jsxgraphcore.js" defer></script>
+<script src="./vendor/mathlive.min.js" defer></script>
 <script src="./vendor/jspdf.umd.min.js" defer></script>
 <script src="./vendor/pdf.min.js" defer></script>
 <script src="./vendor/math.min.js" defer></script>
@@ -23,16 +27,39 @@
 
 <!-- ===== Library view ===== -->
 <section id="library" class="view">
-  <header class="lib-head">
-    <h1>MathBoard</h1>
+  <header class="lib-head lib-lesson">
+    <div class="lib-head-left">
+      <h1>MathBoard</h1>
+      <div class="lib-tabs">
+        <button type="button" class="lib-tab active" data-lib="lesson">Blank lessons</button>
+        <button type="button" class="lib-tab" data-lib="paper">Past papers (PDF)</button>
+      </div>
+    </div>
     <div class="lib-actions">
-      <button id="import-pdf-lib">Import past paper (PDF)</button>
-      <button id="new-nb" class="primary">+ New lesson</button>
+      <button type="button" id="import-json-lib" class="lib-act-lesson">Import lesson</button>
+      <button type="button" id="import-pdf-lib" class="lib-act-paper">Import PDF</button>
+      <button type="button" id="sync-settings" class="lib-act-lesson" title="Cloud sync settings">Sync</button>
+      <button type="button" id="new-nb" class="lib-act-lesson primary">+ New lesson</button>
     </div>
   </header>
+  <div id="sync-dialog" class="sync-dialog hidden">
+    <div class="sync-box">
+      <h3>Cloud sync</h3>
+      <p class="muted">Lessons save locally first. Set your API base URL when ready (Phase 3 backend).</p>
+      <label class="ct-lab" for="sync-url">API base URL</label>
+      <input id="sync-url" class="ct-in" type="url" placeholder="https://your-api.example.com" autocomplete="off" />
+      <div class="sync-btns">
+        <button type="button" id="sync-save" class="primary">Save URL</button>
+        <button type="button" id="sync-push">Upload all</button>
+        <button type="button" id="sync-pull">Pull catalog</button>
+        <button type="button" id="sync-close" class="ghost">Close</button>
+      </div>
+    </div>
+  </div>
   <input id="pdf-file-lib" type="file" accept="application/pdf" hidden />
+  <input id="json-file-lib" type="file" accept=".json,.mathboard.json,application/json" hidden />
   <div id="nb-list" class="nb-grid"></div>
-  <p class="muted footnote">Paginated notebook whiteboard · works offline · add to Home Screen on iPad</p>
+  <p class="muted footnote"><span id="sync-status" class="sync-status" title="Offline · saved on this device">● Local</span> · Paginated notebook whiteboard · works offline · add to Home Screen on iPad</p>
 </section>
 
 <!-- ===== Editor view ===== -->
@@ -40,8 +67,9 @@
   <div class="toolbar">
     <div class="tbar-row tbar-top">
       <button id="back" class="ghost" title="Back to lessons">‹ Lessons</button>
-      <input id="nb-name" class="nb-name" type="text" />
-      <div class="tabs">
+      <input id="nb-name" class="nb-name present-hide" type="text" />
+      <span id="nb-title-present" class="nb-title-present"></span>
+      <div class="tabs present-hide">
         <button class="tab-btn active" data-tab="draw">Draw</button>
         <button class="tab-btn" data-tab="maths">Maths</button>
         <button class="tab-btn" data-tab="page">Page</button>
@@ -50,10 +78,28 @@
       <button id="undo" title="Undo (⌘Z)">Undo</button>
       <button id="redo" title="Redo (⇧⌘Z)">Redo</button>
       <button id="fit" title="Fit page">Fit</button>
+      <button id="present-toggle" title="Present mode (classroom / projector)">Present</button>
+      <button id="brand-toggle" title="Show/hide branding overlay">Brand</button>
+      <div class="panel-menu-wrap present-hide">
+        <button type="button" id="panel-menu" title="Panels menu">Panels ▾</button>
+        <div id="panel-drop" class="panel-drop hidden">
+          <button type="button" data-panel="#graph">Graph f(x)</button>
+          <button type="button" data-panel="#stats">Statistics</button>
+          <button type="button" data-panel="#calc">Calculator</button>
+          <button type="button" data-panel="#mech">Mechanics</button>
+          <button type="button" data-panel="#cplx">Complex</button>
+        </div>
+      </div>
+      <span class="panel-btns present-hide">
       <button id="graph-toggle" title="Graph functions y = f(x)">f(x)</button>
       <button id="stats-toggle" title="Statistics">Stats</button>
       <button id="calc-toggle" title="Scientific calculator">Calc</button>
-      <button id="export-pdf" class="primary">Export PDF</button>
+      <button id="mech-toggle" title="Mechanics diagrams">Mech</button>
+      <button id="cplx-toggle" title="Complex loci &amp; ω·z">Complex</button>
+      </span>
+      <button id="share-lesson" class="present-hide" title="Share or export lesson file">Share</button>
+      <button id="export-json" class="present-hide" title="Download portable .mathboard.json backup">Backup</button>
+      <button id="export-pdf" class="present-hide primary">Export PDF</button>
     </div>
 
     <div class="tbar-row tbar-tools">
@@ -66,6 +112,12 @@
         <button data-tool="eraser" class="tool" title="Eraser (e)">Erase</button>
         <button data-tool="lasso" class="tool" title="Lasso select (l)">Lasso</button>
         <button data-tool="text" class="tool" title="Text box (t)">Text</button>
+        <button data-tool="equation" class="tool" title="Equation (LaTeX via MathLive) (q)">Eq</button>
+      </div>
+      <div class="group pen-group" data-tabs="draw">
+        <button type="button" class="pen-btn active" data-pen="fine" title="Fine pen — pressure sensitive">Fine</button>
+        <button type="button" class="pen-btn" data-pen="marker" title="Marker — bold flat stroke">Marker</button>
+        <button type="button" class="pen-btn" data-pen="calligraphy" title="Calligraphy — angle-sensitive nib">Italic</button>
       </div>
       <div class="group" data-tabs="draw">
         <button data-tool="line" class="tool" title="Straight line">Line</button>
@@ -79,24 +131,43 @@
         <button data-tool="circle" class="tool" title="Circle locus |z − c| = r">Circle</button>
         <button data-tool="line" class="tool" title="Straight line">Line</button>
       </div>
+      <div class="group geo-group" data-tabs="maths">
+        <button type="button" data-geo="point" class="geo-btn" title="Plot a point">Point</button>
+        <button type="button" data-geo="segment" class="geo-btn" title="Segment — two clicks">Seg</button>
+        <button type="button" data-geo="line" class="geo-btn" title="Infinite line — two clicks">Line</button>
+        <button type="button" data-geo="circle" class="geo-btn" title="Circle — centre then rim">Circle</button>
+        <button type="button" data-geo="ellipse" class="geo-btn" title="Ellipse — three clicks">Ellipse</button>
+        <button type="button" data-geo="angle" class="geo-btn" title="Angle ∠ABC — 2nd click is vertex">∠</button>
+        <button type="button" data-geo="perp" class="geo-btn" title="Perpendicular — line then point">⊥</button>
+        <button type="button" data-geo="parallel" class="geo-btn" title="Parallel — line then point">∥</button>
+        <button type="button" data-inst="ruler" class="geo-btn" title="Ruler — measure distance">Ruler</button>
+        <button type="button" data-inst="protractor" class="geo-btn" title="Protractor — angle ABC">Protractor</button>
+        <button type="button" data-inst="compass" class="geo-btn" title="Compass — circle">Compass</button>
+        <button type="button" id="geo-clear" class="geo-btn geo-warn" title="Clear all geometry on this page">Clear</button>
+      </div>
       <div class="group" data-tabs="maths">
         <button id="resultant" title="Show resultant of all vectors on this page">Resultant</button>
+        <button id="parallelogram" title="Parallelogram for first two vectors (shared tail)">▱</button>
         <button id="conjugate" title="Show conjugate of plotted complex numbers">Conjugate</button>
         <label class="ctl-label"><input id="snap" type="checkbox" checked /> Snap</label>
         <label class="ctl-label"><input id="radians" type="checkbox" /> Rad</label>
       </div>
 
-      <div class="group" data-tabs="draw maths" id="swatches"></div>
+      <div class="group color-group" data-tabs="draw maths">
+        <div id="swatches" class="swatches"></div>
+        <button type="button" id="color-more" class="swatch swatch-more" title="Pick custom colour">+</button>
+        <input type="color" id="color-pick" hidden value="#1b1b1b" />
+      </div>
       <div class="group width-group" data-tabs="draw maths">
         <label>Size</label>
         <input id="width" type="range" min="1" max="24" value="4" />
         <span id="width-val">4</span>
       </div>
-      <div class="group" data-tabs="draw">
+      <div class="group present-hide" data-tabs="draw">
         <label class="finger"><input id="finger" type="checkbox" /> Finger draws</label>
       </div>
 
-      <div class="group" data-tabs="page">
+      <div class="group present-hide" data-tabs="page">
         <button id="prev" title="Previous page">‹</button>
         <span id="page-label" class="page-label">1 / 1</span>
         <button id="next" title="Next page">›</button>
@@ -112,17 +183,29 @@
         </select>
         <button id="addpage" title="Add page">+ Page</button>
       </div>
-      <div class="group" data-tabs="page">
-        <button id="brand-toggle" title="Show/hide branding overlay">Brand</button>
+      <div class="group present-hide" data-tabs="page">
         <button id="insert-pdf">Insert PDF</button>
+        <button id="insert-img">Insert image</button>
         <button id="export-png">PNG</button>
       </div>
     </div>
   </div>
   <input id="pdf-file" type="file" accept="application/pdf" hidden />
+  <input id="img-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+
+  <div id="section-strip" class="section-strip present-hide">
+    <div id="section-tabs" class="section-tabs"></div>
+    <button type="button" id="section-add" class="section-add" title="Add section (OneNote-style tab)">+ Section</button>
+  </div>
+
+  <div id="page-strip" class="page-strip present-hide">
+    <div id="page-thumbs" class="page-thumbs"></div>
+    <button type="button" id="strip-add" class="strip-add" title="Add page after current">+</button>
+  </div>
 
   <div class="canvas-wrap">
     <canvas id="board"></canvas>
+    <div id="geo-layer" class="geo-layer"><div id="geo-inner" class="geo-inner"></div></div>
     <div id="brand" class="brand">
       <img class="brand-photo" src="./assets/waseem.jpg" alt="Waseem Akhlaque" />
       <div class="brand-text">
@@ -162,15 +245,17 @@
       <div class="calc-inds">
         <span id="calc-shift-ind" class="ind ind-shift">SHIFT</span>
         <span id="calc-mode" class="ind">DEG</span>
+        <span id="calc-fmt-ind" class="ind ind-fmt">D</span>
       </div>
-      <input id="calc-expr" class="calc-expr" type="text" placeholder="0" autocomplete="off" autocapitalize="off" spellcheck="false" />
+      <div id="calc-history" class="calc-history"></div>
+      <math-field id="calc-expr" class="calc-expr" virtual-keyboard-mode="manual"></math-field>
       <div id="calc-result" class="calc-result">0</div>
     </div>
     <div class="calc-keys" id="calc-keys">
       <button data-k="shift" class="ck ck-shift">SHIFT</button>
-      <button data-k="table" class="ck ck-ctl">TABLE</button>
+      <button data-k="table" class="ck ck-ctl"><span class="sh">MATRIX</span>TABLE</button>
+      <button data-k="calc" class="ck ck-ctl" title="Recall last expression">CALC</button>
       <button data-k="sd" class="ck ck-ctl">S⇔D</button>
-      <button data-k="del" class="ck ck-ctl">DEL</button>
       <button data-k="ac" class="ck ck-warn">AC</button>
 
       <button data-k="sin(" class="ck ck-fn"><span class="sh">sin⁻¹</span>sin</button>
@@ -183,7 +268,7 @@
       <button data-k="sqrt(" class="ck ck-fn">√</button>
       <button data-k="^2" class="ck ck-fn">x²</button>
       <button data-k="(" class="ck ck-fn">(</button>
-      <button data-k=")" class="ck ck-fn">)</button>
+      <button data-k=")" class="ck ck-fn"><span class="sh">DEL</span>)</button>
 
       <button data-k="pi" class="ck ck-fn">π</button>
       <button data-k="e" class="ck ck-fn">e</button>
@@ -211,12 +296,12 @@
 
       <button data-k="0" class="ck">0</button>
       <button data-k="." class="ck">.</button>
-      <button data-k="," class="ck">,</button>
+      <button data-k="," class="ck"><span class="sh">a b/c</span>,</button>
       <button data-k="+" class="ck ck-op">+</button>
       <button data-k="eq" class="ck ck-eq">=</button>
     </div>
 
-    <div id="calc-table" class="calc-table hidden">
+    <div id="calc-table" class="calc-sub hidden">
       <label class="ct-lab">f(x) =</label>
       <input id="ct-fx" class="ct-in" type="text" placeholder="x^2 - 3" autocomplete="off" spellcheck="false" />
       <div class="ct-row3">
@@ -230,24 +315,196 @@
       </div>
       <div id="ct-out" class="ct-out"></div>
     </div>
+
+    <div id="calc-matrix" class="calc-sub hidden">
+      <div class="mx-tabs">
+        <button type="button" id="mx-tab-mat" class="mx-tab active">2×2</button>
+        <button type="button" id="mx-tab-vec" class="mx-tab">Vector</button>
+      </div>
+      <div id="mx-mat">
+        <div class="mx-block">
+          <span class="ct-lab">A</span>
+          <div class="mx-grid">
+            <input id="ma00" class="mx-in" value="1" /><input id="ma01" class="mx-in" value="0" />
+            <input id="ma10" class="mx-in" value="0" /><input id="ma11" class="mx-in" value="1" />
+          </div>
+        </div>
+        <div class="mx-block">
+          <span class="ct-lab">B</span>
+          <div class="mx-grid">
+            <input id="mb00" class="mx-in" value="1" /><input id="mb01" class="mx-in" value="1" />
+            <input id="mb10" class="mx-in" value="0" /><input id="mb11" class="mx-in" value="1" />
+          </div>
+        </div>
+        <div class="mx-btns">
+          <button type="button" data-mx="detA" class="ck ck-fn">det A</button>
+          <button type="button" data-mx="invA" class="ck ck-fn">A⁻¹</button>
+          <button type="button" data-mx="tA" class="ck ck-fn">Aᵀ</button>
+          <button type="button" data-mx="AB" class="ck ck-fn">A×B</button>
+          <button type="button" data-mx="ApB" class="ck ck-fn">A+B</button>
+        </div>
+      </div>
+      <div id="mx-vec" class="hidden">
+        <div class="mx-block">
+          <span class="ct-lab">u = (x, y, z)</span>
+          <div class="mx-row3">
+            <input id="vu0" class="mx-in" value="1" /><input id="vu1" class="mx-in" value="0" /><input id="vu2" class="mx-in" value="0" />
+          </div>
+        </div>
+        <div class="mx-block">
+          <span class="ct-lab">v = (x, y, z)</span>
+          <div class="mx-row3">
+            <input id="vv0" class="mx-in" value="0" /><input id="vv1" class="mx-in" value="1" /><input id="vv2" class="mx-in" value="0" />
+          </div>
+        </div>
+        <div class="mx-btns">
+          <button type="button" data-vx="dot" class="ck ck-fn">u·v</button>
+          <button type="button" data-vx="cross" class="ck ck-fn">u×v</button>
+          <button type="button" data-vx="mag" class="ck ck-fn">|u|</button>
+          <button type="button" data-vx="ang" class="ck ck-fn">angle</button>
+        </div>
+      </div>
+      <div class="ct-btns">
+        <button type="button" id="cm-back" class="ck ck-fn">‹ Keys</button>
+      </div>
+      <div id="mx-out" class="ct-out"></div>
+    </div>
   </div>
 
   <div id="graph" class="gpanel hidden">
     <div class="gp-head" id="gp-head">
-      <span class="calc-title">Graph &nbsp;y = f(x)</span>
+      <span class="calc-title">Graph</span>
       <button class="calc-x" id="graph-close" title="Close" aria-label="Close grapher">×</button>
     </div>
     <div id="gp-list" class="gp-list"></div>
+    <div class="gp-tools">
+      <button id="gp-point" class="ck ck-fn" title="Draggable point on curve 1">+ Point</button>
+      <button id="gp-tangent" class="ck ck-fn" title="Tangent at selected point">Tangent</button>
+      <button id="gp-intersect" class="ck ck-fn" title="Mark intersections of curves 1 &amp; 2">∩</button>
+    </div>
     <div class="gp-actions">
       <button id="gp-add" class="ck ck-fn">+ Add</button>
       <button data-fn="sin(x)" class="gp-quick ck ck-fn">sin</button>
       <button data-fn="cos(x)" class="gp-quick ck ck-fn">cos</button>
       <button data-fn="tan(x)" class="gp-quick ck ck-fn">tan</button>
+      <button data-fn="2*sin(x)" class="gp-quick ck ck-fn">2sin</button>
+      <button data-fn="sin(2*x)" class="gp-quick ck ck-fn">sin2x</button>
+      <button data-param="1" class="gp-quick ck ck-fn" title="Add circle parametric">○</button>
     </div>
-    <div class="gp-hint">x-axis in radians · variable is x · e.g. 2*sin(x)+1, x^2-3, e^x</div>
+    <div class="gp-hint">y(x) or parametric x(t), y(t) · drag points with Select · radians</div>
+  </div>
+
+  <div id="mech" class="gpanel mech-panel panel-mech hidden">
+    <div class="gp-head" id="mech-head">
+      <span class="calc-title">Mechanics</span>
+      <button class="calc-x" id="mech-close" title="Close" aria-label="Close mechanics">×</button>
+    </div>
+    <div class="mech-tabs">
+      <button type="button" data-mtab="forces" class="mech-tab active">Forces</button>
+      <button type="button" data-mtab="incline" class="mech-tab">Incline</button>
+      <button type="button" data-mtab="projectile" class="mech-tab">Projectile</button>
+      <button type="button" data-mtab="motion" class="mech-tab">v–t / s–t</button>
+    </div>
+    <div id="mech-forces" class="mech-pane">
+      <div id="mf-list" class="mech-list"></div>
+      <button type="button" id="mf-add" class="ck ck-fn mech-add">+ Force</button>
+      <label class="mech-chk"><input type="checkbox" id="mf-resultant" checked /> Show resultant R</label>
+      <button type="button" data-mplace="forces" class="ck ck-eq2 mech-place">Tap page to place</button>
+    </div>
+    <div id="mech-incline" class="mech-pane hidden">
+      <label class="ct-lab">Angle α (°)</label>
+      <input id="mi-angle" class="mech-in full" type="text" value="30" />
+      <label class="ct-lab">Mass (kg)</label>
+      <input id="mi-mass" class="mech-in full" type="text" value="2" />
+      <label class="ct-lab">Friction μ (0 = none)</label>
+      <input id="mi-mu" class="mech-in full" type="text" value="0" />
+      <label class="mech-chk"><input type="checkbox" id="mi-comp" checked /> Show mg sinα / mg cosα</label>
+      <button type="button" data-mplace="incline" class="ck ck-eq2 mech-place">Tap page to place</button>
+    </div>
+    <div id="mech-projectile" class="mech-pane hidden">
+      <label class="ct-lab">Initial speed u (m/s)</label>
+      <input id="mp-u" class="mech-in full" type="text" value="12" />
+      <label class="ct-lab">Angle θ (°)</label>
+      <input id="mp-theta" class="mech-in full" type="text" value="40" />
+      <label class="ct-lab">g (m/s²)</label>
+      <input id="mp-g" class="mech-in full" type="text" value="9.8" />
+      <label class="mech-chk"><input type="checkbox" id="mp-vel" checked /> Velocity vectors along path</label>
+      <button type="button" data-mplace="projectile" class="ck ck-eq2 mech-place">Tap page to place</button>
+    </div>
+    <div id="mech-motion" class="mech-pane hidden">
+      <div class="mech-tabs mech-subtabs">
+        <button type="button" data-mgraph="vt" class="mech-tab active">v–t</button>
+        <button type="button" data-mgraph="st" class="mech-tab">s–t</button>
+      </div>
+      <label class="ct-lab" id="mm-u-lab">Initial velocity u (m/s)</label>
+      <input id="mm-u" class="mech-in full" type="text" value="5" />
+      <label class="ct-lab">Acceleration a (m/s²)</label>
+      <input id="mm-a" class="mech-in full" type="text" value="-2" />
+      <label class="ct-lab">Time range (s)</label>
+      <input id="mm-t" class="mech-in full" type="text" value="6" />
+      <button type="button" data-mplace="motion" class="ck ck-eq2 mech-place">Tap page to place</button>
+    </div>
+    <div class="mech-foot">
+      <button type="button" id="mech-clear" class="ck ck-warn mech-clear">Clear page mechanics</button>
+      <p class="gp-hint">Vector grid paper recommended · diagrams export with PNG/PDF</p>
+    </div>
+  </div>
+
+  <div id="cplx" class="gpanel mech-panel panel-cplx hidden">
+    <div class="gp-head" id="cplx-head">
+      <span class="calc-title">Complex</span>
+      <button class="calc-x" id="cplx-close" title="Close" aria-label="Close complex tools">×</button>
+    </div>
+    <div class="mech-tabs">
+      <button type="button" data-ctab="omega" class="mech-tab active">ω·z</button>
+      <button type="button" data-ctab="bisect" class="mech-tab">|z−a|=|z−b|</button>
+      <button type="button" data-ctab="arg" class="mech-tab">arg</button>
+    </div>
+    <div id="cplx-omega" class="cplx-pane mech-pane">
+      <p class="cplx-hint">Multiply z by ω (rotation + scale). Use Argand paper.</p>
+      <div id="cw-cart" class="cw-row">
+        <label class="ct-lab">ω = a + bi</label>
+        <div class="cw-pair">
+          <input id="cw-re" class="mech-in" type="text" value="0" />
+          <span class="cw-plus">+</span>
+          <input id="cw-im" class="mech-in" type="text" value="1" />
+          <span class="cw-i">i</span>
+        </div>
+      </div>
+      <label class="mech-chk"><input type="checkbox" id="cw-polar" /> Polar r∠θ</label>
+      <div id="cw-pol" class="cw-row hidden">
+        <div class="cw-pair">
+          <input id="cw-r" class="mech-in" type="text" value="1" />
+          <span class="cw-plus">∠</span>
+          <input id="cw-theta" class="mech-in" type="text" value="90" />
+          <span class="cw-i">°</span>
+        </div>
+      </div>
+      <div class="cplx-presets">
+        <button type="button" data-omega="i" class="ck ck-fn">×i</button>
+        <button type="button" data-omega="neg" class="ck ck-fn">×(−1)</button>
+        <button type="button" data-omega="2" class="ck ck-fn">×2</button>
+        <button type="button" data-omega="half" class="ck ck-fn">×½</button>
+      </div>
+      <button type="button" id="cplx-omega-sel" class="ck ck-eq2 mech-place">ω·z on selected</button>
+      <button type="button" data-cplace="omega" class="ck ck-fn mech-place">Pick z on page → ω·z</button>
+    </div>
+    <div id="cplx-bisect" class="cplx-pane mech-pane hidden">
+      <p class="cplx-hint">Perpendicular bisector locus — click point <b>a</b>, then <b>b</b>.</p>
+      <button type="button" data-cplace="bisect" class="ck ck-eq2 mech-place">Pick a, then b</button>
+    </div>
+    <div id="cplx-arg" class="cplx-pane mech-pane hidden">
+      <label class="ct-lab">arg(z − a) = θ (degrees)</label>
+      <input id="ca-angle" class="mech-in full" type="text" value="45" />
+      <p class="cplx-hint">Ray from <b>a</b> at angle θ from the positive real axis.</p>
+      <button type="button" data-cplace="arg" class="ck ck-eq2 mech-place">Pick point a on page</button>
+    </div>
+    <div class="mech-foot">
+      <button type="button" id="cplx-clear" class="ck ck-warn mech-clear">Clear loci on page</button>
+      <p class="gp-hint">Loci export with PNG/PDF · combine with Plot z &amp; Circle tools</p>
+    </div>
   </div>
 </section>
 
-<script type="module" src="./js/app.js?v=15"></script>
-</body>
+<script type="module" src="./js/app.js?v=31"></script>
 </html>
