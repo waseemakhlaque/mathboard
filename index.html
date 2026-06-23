@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=34" />
+<link rel="stylesheet" href="./css/app.css?v=35" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <script src="./vendor/jsxgraphcore.js" defer></script>
 <script src="./vendor/mathlive.min.js" defer></script>
@@ -298,39 +298,45 @@
     <div class="calc-keys" id="calc-keys">
       <button data-k="calc" class="ck ck-fn"><span class="sh sh-y">SOLVE</span>CALC</button>
       <button data-k="int" class="ck ck-fn"><span class="sh sh-y">d/dx</span>∫dx</button>
-      <button data-k="sqrt(" class="ck ck-fn"><span class="sh sh-y">∛</span>√▯</button>
+      <button data-k="sum" class="ck ck-fn"><span class="sh sh-y">Π</span>Σ</button>
+      <button data-k="pol" class="ck ck-fn"><span class="sh sh-y">Rec</span>Pol</button>
+      <button data-k="ran" class="ck ck-fn"><span class="sh sh-y">RanInt</span>Ran#</button>
+
+      <button data-k="frac" class="ck ck-fn"><span class="sh sh-y">a b/c</span>▯/▯</button>
+      <button data-k="sqrt(" class="ck ck-fn"><span class="sh sh-y">∛▯</span>√▯</button>
       <button data-k="^2" class="ck ck-fn"><span class="sh sh-y">x³</span>x²</button>
-      <button data-k="^" class="ck ck-fn"><span class="sh sh-y">ˣ√</span>x▪</button>
-
+      <button data-k="^" class="ck ck-fn"><span class="sh sh-y">ˣ√▯</span>x▪</button>
       <button data-k="log10(" class="ck ck-fn"><span class="sh sh-y">10ˣ</span>log</button>
-      <button data-k="log(" class="ck ck-fn"><span class="sh sh-y">eˣ</span>ln</button>
+
       <button data-k="inv" class="ck ck-fn"><span class="sh sh-y">x!</span>x⁻¹</button>
-      <button data-k="neg" class="ck ck-fn"><span class="sh sh-y">Pol</span>(−)</button>
-      <button data-k="abs(" class="ck ck-fn"><span class="sh sh-y">Rec</span>|x|</button>
+      <button data-k="log(" class="ck ck-fn"><span class="sh sh-y">eˣ</span>ln</button>
+      <button data-k="neg" class="ck ck-fn"><span class="al">A</span>(−)</button>
+      <button data-k="dms" class="ck ck-fn"><span class="sh sh-y">DRG►</span><span class="al">B</span>°’”</button>
+      <button data-k="hyp" class="ck ck-fn"><span class="sh sh-y">Abs</span><span class="al">C</span>hyp</button>
 
-      <button data-k="sin(" class="ck ck-fn"><span class="sh sh-y">sin⁻¹</span>sin</button>
-      <button data-k="cos(" class="ck ck-fn"><span class="sh sh-y">cos⁻¹</span>cos</button>
-      <button data-k="tan(" class="ck ck-fn"><span class="sh sh-y">tan⁻¹</span>tan</button>
-      <button data-k="(" class="ck ck-fn">(</button>
-      <button data-k=")" class="ck ck-fn">)</button>
+      <button data-k="sin(" class="ck ck-fn"><span class="sh sh-y">sin⁻¹</span><span class="al">D</span>sin</button>
+      <button data-k="cos(" class="ck ck-fn"><span class="sh sh-y">cos⁻¹</span><span class="al">E</span>cos</button>
+      <button data-k="tan(" class="ck ck-fn"><span class="sh sh-y">tan⁻¹</span><span class="al">F</span>tan</button>
+      <button data-k="rcl" class="ck ck-fn"><span class="sh sh-y">STO</span>RCL</button>
+      <button data-k="eng" class="ck ck-fn"><span class="al">i</span>ENG</button>
 
-      <button data-k="pi" class="ck ck-fn"><span class="sh sh-y">e</span>π</button>
-      <button data-k="i" class="ck ck-fn">i</button>
-      <button data-k="combinations(" class="ck ck-fn">nCr</button>
-      <button data-k="permutations(" class="ck ck-fn">nPr</button>
-      <button data-k="!" class="ck ck-fn">x!</button>
+      <button data-k="(" class="ck ck-fn"><span class="sh sh-y">%</span>(</button>
+      <button data-k=")" class="ck ck-fn"><span class="al">X</span>)</button>
+      <button data-k="," class="ck ck-fn">,</button>
+      <button data-k="sd" class="ck ck-fn"><span class="al">Y</span>S⇔D</button>
+      <button data-k="mplus" class="ck ck-fn"><span class="sh sh-y">M−</span><span class="al">M</span>M+</button>
 
       <button data-k="7" class="ck ck-num">7</button>
       <button data-k="8" class="ck ck-num">8</button>
       <button data-k="9" class="ck ck-num">9</button>
       <button data-k="del" class="ck ck-warn">DEL</button>
-      <button data-k="ac" class="ck ck-warn">AC</button>
+      <button data-k="ac" class="ck ck-warn"><span class="sh sh-y">OFF</span>AC</button>
 
       <button data-k="4" class="ck ck-num">4</button>
       <button data-k="5" class="ck ck-num">5</button>
       <button data-k="6" class="ck ck-num">6</button>
-      <button data-k="*" class="ck ck-op">×</button>
-      <button data-k="/" class="ck ck-op">÷</button>
+      <button data-k="*" class="ck ck-op"><span class="sh sh-y">nPr</span>×</button>
+      <button data-k="/" class="ck ck-op"><span class="sh sh-y">nCr</span>÷</button>
 
       <button data-k="1" class="ck ck-num">1</button>
       <button data-k="2" class="ck ck-num">2</button>
@@ -339,16 +345,15 @@
       <button data-k="-" class="ck ck-op">−</button>
 
       <button data-k="0" class="ck ck-num">0</button>
-      <button data-k="." class="ck ck-num">.</button>
-      <button data-k="e10" class="ck ck-num">×10ˣ</button>
-      <button data-k="ans" class="ck ck-fn">Ans</button>
+      <button data-k="." class="ck ck-num"><span class="sh sh-y">Ran#</span>.</button>
+      <button data-k="e10" class="ck ck-num"><span class="sh sh-y">π</span><span class="al">e</span>×10ˣ</button>
+      <button data-k="ans" class="ck ck-num">Ans</button>
       <button data-k="eq" class="ck ck-eq">=</button>
     </div>
 
     <div class="calc-funcs">
       <button data-k="table" class="ck ck-ctl">TABLE</button>
-      <button data-k="matrix" class="ck ck-ctl">MATRIX/VCT</button>
-      <button data-k="sd" class="ck ck-ctl">S⇔D</button>
+      <button data-k="matrix" class="ck ck-ctl">MATRIX / VCT</button>
     </div>
 
     <div id="calc-mode-menu" class="calc-mode-menu hidden">
@@ -671,5 +676,5 @@
   </div>
 </section>
 
-<script type="module" src="./js/app.js?v=34"></script>
+<script type="module" src="./js/app.js?v=35"></script>
 </html>

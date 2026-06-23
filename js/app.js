@@ -2110,9 +2110,13 @@ function bindCanvas() {
 let calcDeg = true, calcAns = 0, mathFrac = null, calcShift = false, calcAlpha = false;
 let calcLastExpr = null, calcResultValue = null, calcDisplayMode = 0; // 0=D 1=frac 2=surd
 let intgMode = 'integral';
+const calcVars = {};            // STO/RCL/ALPHA variables A–F, X, Y, M
+let stoPending = false, rclAlpha = false;
 const SHIFT_MAP = {
   'sin(': 'asin(', 'cos(': 'acos(', 'tan(': 'atan(', 'log(': 'e^(', 'log10(': '10^(',
-  '^': 'nthRoot(', 'sqrt(': 'cbrt(', '^2': '^3', 'inv': '!', 'pi': 'e', 'int': 'diff',
+  '^': 'nthRoot(', 'sqrt(': 'cbrt(', '^2': '^3', 'inv': '!', 'e10': 'pi', 'int': 'diff',
+  'hyp': 'abs(', '*': 'permutations(', '/': 'combinations(', 'rcl': 'sto', 'mplus': 'mminus',
+  'ran': 'ranint', 'ac': 'off',
 };
 const CALC_FMT = ['D', 'F', '√'];
 
@@ -2128,7 +2132,7 @@ function showCalcView(view) {
 }
 function calcReset() {
   calcSetExpr(''); $('#calc-result').textContent = '0'; $('#calc-history').textContent = '';
-  calcResultValue = null; calcShift = false; calcAlpha = false;
+  calcResultValue = null; calcShift = false; calcAlpha = false; stoPending = false; rclAlpha = false;
   $('#calc-shift-ind')?.classList.remove('on'); $('#calc-alpha-ind')?.classList.remove('on');
   $('#calc-mode-menu')?.classList.add('hidden');
   showCalcView('keys');
@@ -2205,7 +2209,7 @@ function calcScope() {
   return {
     sin: (x) => Math.sin(toRad(x)), cos: (x) => Math.cos(toRad(x)), tan: (x) => Math.tan(toRad(x)),
     asin: (x) => fromRad(Math.asin(x)), acos: (x) => fromRad(Math.acos(x)), atan: (x) => fromRad(Math.atan(x)),
-    Ans: calcAns,
+    Ans: calcAns, ...calcVars,
   };
 }
 function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { const t = b; b = a % b; a = t; } return a || 1; }
@@ -2290,13 +2294,71 @@ function calcRenderResult() {
   out.innerHTML = calcFormatValue(calcResultValue, calcDisplayMode);
 }
 function calcExprEl() { return $('#calc-expr'); }
+// read one {..} group starting at s[i]==='{'; returns [content, indexAfterClosingBrace]
+function readBraceGroup(s, i) {
+  let depth = 0, j = i, out = '';
+  for (; j < s.length; j++) {
+    const c = s[j];
+    if (c === '{') { depth++; if (depth === 1) continue; }
+    else if (c === '}') { depth--; if (depth === 0) return [out, j + 1]; }
+    out += c;
+  }
+  return [out, j];
+}
+// convert MathLive LaTeX into a mathjs-evaluable string (handles \frac, \sqrt, ^{}, etc.)
+function latexToMath(src) {
+  if (!src) return '';
+  let s = src
+    .replace(/\\left|\\right/g, '')
+    .replace(/\\cdot|\\times/g, '*')
+    .replace(/\\div/g, '/')
+    .replace(/\\pi/g, 'pi')
+    .replace(/\\operatorname\{([^}]*)\}/g, '$1')
+    .replace(/\\mathrm\{([^}]*)\}/g, '$1')
+    .replace(/\\placeholder\{\}|\\!|\\,|\\;|\\:|\\ /g, '')
+    .replace(/\\%/g, '%');
+  // read either a {group} or a single token (char or \command) for \frac / \sqrt args
+  const readArg = (str, i) => {
+    while (str[i] === ' ') i++;
+    if (str[i] === '{') return readBraceGroup(str, i);
+    if (str[i] === '\\') { let j = i + 1; while (j < str.length && /[a-zA-Z]/.test(str[j])) j++; return [str.slice(i, j), j]; }
+    return [str[i] || '', i + 1];
+  };
+  const conv = (str) => {
+    let out = '';
+    for (let i = 0; i < str.length;) {
+      if (str.startsWith('\\frac', i)) {
+        i += 5;
+        const [num, a] = readArg(str, i); i = a;
+        const [den, b] = readArg(str, i); i = b;
+        out += '((' + conv(num) + ')/(' + conv(den) + '))';
+      } else if (str.startsWith('\\sqrt', i)) {
+        i += 5;
+        if (str[i] === '[') { const j = str.indexOf(']', i); const n = str.slice(i + 1, j); i = j + 1; const [g, a] = readArg(str, i); i = a; out += 'nthRoot((' + conv(g) + '),(' + conv(n) + '))'; }
+        else { const [g, a] = readArg(str, i); i = a; out += 'sqrt(' + conv(g) + ')'; }
+      } else if (str[i] === '^') {
+        i++;
+        if (str[i] === '{') { const [g, a] = readBraceGroup(str, i); i = a; out += '^(' + conv(g) + ')'; }
+        else { out += '^' + (str[i] || ''); i++; }
+      } else if (str[i] === '_') {
+        i++;
+        if (str[i] === '{') { const [, a] = readBraceGroup(str, i); i = a; } else i++;
+      } else if (str[i] === '{') {
+        const [g, a] = readBraceGroup(str, i); i = a; out += '(' + conv(g) + ')';
+      } else if (str[i] === '\\') {
+        // strip an unknown leading backslash but keep the command letters
+        i++;
+      } else { out += str[i]; i++; }
+    }
+    return out;
+  };
+  return conv(s).trim();
+}
 function calcGetExpr() {
   const el = calcExprEl();
   if (!el) return '';
   if (typeof el.getValue === 'function') {
-    for (const fmt of ['ascii-math', 'ASCIIMath']) {
-      try { const v = el.getValue(fmt); if (v) return v.trim(); } catch (_) { /* try next */ }
-    }
+    try { const tex = el.getValue('latex'); if (tex) return latexToMath(tex); } catch (_) { /* fall back */ }
     try { return (el.getValue() || '').trim(); } catch (_) { return (el.value || '').trim(); }
   }
   return (el.value || '').trim();
@@ -2336,38 +2398,59 @@ function calcRecall() {
   if (!calcLastExpr) return;
   calcSetExpr(calcLastExpr);
 }
-function calcKey(k) {
+function calcKey(k, el) {
   const inp = calcExprEl();
   if (k === 'shift') { calcShift = !calcShift; $('#calc-shift-ind').classList.toggle('on', calcShift); return; }
   if (k === 'alpha') { calcAlpha = !calcAlpha; $('#calc-alpha-ind')?.classList.toggle('on', calcAlpha); return; }
   const sh = calcShift;
   if (sh) { calcShift = false; $('#calc-shift-ind').classList.remove('on'); }
-  if (calcAlpha) { calcAlpha = false; $('#calc-alpha-ind')?.classList.remove('on'); }
-  if (k === 'on' || k === 'ac') { calcReset(); return; }
+  const al = calcAlpha || rclAlpha;
+  if (calcAlpha) { calcAlpha = false; }
+  // control keys (work regardless of shift/alpha)
+  if (k === 'on') { calcReset(); return; }
+  if (k === 'ac') { if (sh) return; calcReset(); return; } // SHIFT+AC = OFF (ignored)
   if (k === 'mode') { toggleModeMenu(); return; }
   if (k === 'up') { calcRecall(); return; }
   if (k === 'down') { return; }
   if (k === 'left') { inp?.executeCommand?.('moveToPreviousChar'); inp?.focus?.(); return; }
   if (k === 'right') { inp?.executeCommand?.('moveToNextChar'); inp?.focus?.(); return; }
+  if (k === 'del') {
+    if (inp?.executeCommand) inp.executeCommand('deleteBackward');
+    else if (inp) inp.value = inp.value.slice(0, -1);
+    inp?.focus(); rclAlpha = false; $('#calc-alpha-ind')?.classList.remove('on'); return;
+  }
+  // ALPHA variable letters (A–F, X, Y, M, i, e) read from the key's red label
+  const letter = el?.querySelector?.('.al')?.textContent?.trim();
+  if (stoPending) {
+    if (letter && /^[A-FXYM]$/.test(letter)) { calcVars[letter] = Number(calcAns) || 0; $('#calc-history').textContent = `${calcAns} → ${letter}`; }
+    stoPending = false; return;
+  }
+  if (al && letter) { rclAlpha = false; $('#calc-alpha-ind')?.classList.remove('on'); calcInsert(letter); return; }
+  rclAlpha = false; $('#calc-alpha-ind')?.classList.remove('on');
   if (k === 'matrix') { showCalcView('matrix'); return; }
   if (k === 'table') { showCalcView('table'); return; }
-  if (k === 'calc') { calcRecall(); return; }
+  if (k === 'calc') { if (sh) { alert('SOLVE: use the Graph or Calculus tools to solve / find roots.'); return; } calcRecall(); return; }
   if (k === 'eq') { calcEvaluate(); return; }
   if (k === 'sd') { calcToggleSD(); return; }
+  if (k === 'rcl') { if (sh) { stoPending = true; $('#calc-history').textContent = 'STO _'; } else { rclAlpha = true; $('#calc-alpha-ind')?.classList.add('on'); } return; }
+  if (k === 'mplus') { const v = Number(calcResultValue) || 0; calcVars.M = (Number(calcVars.M) || 0) + (sh ? -v : v); $('#calc-history').textContent = `M = ${calcVars.M}`; return; }
   let token = (k === 'ans') ? 'Ans' : k;
   if (sh && SHIFT_MAP[k]) token = SHIFT_MAP[k];
   if (token === 'int') { openIntg('integral'); return; }
   if (token === 'diff') { openIntg('derivative'); return; }
-  if (token === 'del') {
-    if (inp?.executeCommand) inp.executeCommand('deleteBackward');
-    else if (inp) inp.value = inp.value.slice(0, -1);
-    inp?.focus(); return;
+  if (token === 'frac') {
+    if (inp?.executeCommand) inp.executeCommand('insert', '\\frac{\\placeholder{}}{\\placeholder{}}');
+    else calcInsert('()/()');
+    inp?.focus?.(); return;
   }
   if (token === 'inv') { calcInsert('^(-1)'); return; }
   if (token === 'neg') { calcInsert('-'); return; }
   if (token === 'e10') { calcInsert('*10^('); return; }
-  if (token === 'frac') { calcInsert('()/()'); return; }
-  if (token === 'hyp' || token === 'rcl' || token === 'dms') { return; }
+  if (token === 'ran') { calcInsert('random()'); return; }
+  if (token === 'ranint') { calcInsert('randomInt('); return; }
+  if (token === 'mminus') { const v = Number(calcResultValue) || 0; calcVars.M = (Number(calcVars.M) || 0) - v; $('#calc-history').textContent = `M = ${calcVars.M}`; return; }
+  // keys present on the faceplate but not wired to an engine action (visual fidelity)
+  if (['hyp', 'dms', 'eng', 'pol', 'rec', 'sum', 'prod', 'drg', 'off'].includes(token)) return;
   calcInsert(token);
 }
 function calcGenTable() {
@@ -2440,12 +2523,15 @@ function calcVectorOp(op) {
 function setupCalculator() {
   if (!window.math) { $('#calc-toggle').style.display = 'none'; return; }
   mathFrac = math.create(math.all); mathFrac.config({ number: 'Fraction' });
-  document.querySelectorAll('#calc [data-k]').forEach((b) => b.onclick = () => calcKey(b.dataset.k));
+  document.querySelectorAll('#calc [data-k]').forEach((b) => b.onclick = () => calcKey(b.dataset.k, b));
   $('#calc-toggle').onclick = () => { $('#calc').classList.toggle('hidden'); calcExprEl()?.focus(); };
   $('#calc-close').onclick = () => $('#calc').classList.add('hidden');
   $('#calc-mode').onclick = () => setCalcDeg(!calcDeg);
   const mf = calcExprEl();
-  if (mf?.setOptions) mf.setOptions({ smartMode: false, virtualKeyboardMode: 'manual' });
+  if (mf) {
+    try { mf.smartMode = false; mf.smartFence = false; mf.mathVirtualKeyboardPolicy = 'manual'; } catch (_) {}
+    if (mf.setOptions) { try { mf.setOptions({ smartMode: false, smartFence: false }); } catch (_) {} }
+  }
   mf?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); calcEvaluate(); } });
   document.querySelectorAll('[data-cmode]').forEach((b) => b.onclick = () => setCalcMode(b.dataset.cmode));
   $('#intg-back').onclick = () => showCalcView('keys');

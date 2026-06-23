@@ -1059,6 +1059,7 @@ math-field.calc-expr:focus-within { outline: none; }
   #cplx.panel-cplx { right: 12px; top: auto; bottom: 80px; max-height: 45vh; }
   #calculus.panel-calculus { right: 12px; top: auto; bottom: 80px; max-height: 45vh; }
   .calc { width: min(328px, calc(100vw - 24px)); right: 12px; bottom: 12px; }
+  .calc.casio { width: min(360px, calc(100vw - 16px)); right: 8px; }
   .stats-panel { width: min(340px, calc(100vw - 24px)); left: 12px; bottom: 12px; }
   .nb-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; padding: 14px 16px; }
   .lib-head { padding: max(env(safe-area-inset-top), 14px) 16px 10px; }
@@ -1594,7 +1595,7 @@ select:focus {
 
 /* ---------- fx-991ES PLUS faceplate ---------- */
 .calc.casio {
-  width: 344px;
+  width: 366px;
   background: linear-gradient(180deg, #2b2f36 0%, #1f2228 100%);
   border: 1px solid #0e1013;
   border-radius: 18px;
@@ -1660,8 +1661,10 @@ select:focus {
   pointer-events: none;
 }
 
-.calc.casio .calc-keys { padding: 2px 12px 8px; gap: 6px; }
-.calc.casio .ck { background: #3a4048; color: #eef1f5; box-shadow: 0 2px 0 #1b1f25; font-size: 13.5px; padding: 9px 0 8px; }
+.calc.casio .calc-keys { padding: 2px 12px 8px; gap: 5px; }
+.calc.casio .ck { position: relative; background: #3a4048; color: #eef1f5; box-shadow: 0 2px 0 #1b1f25; font-size: 13px; padding: 13px 0 6px; }
+.calc.casio .ck .sh { left: 4px; right: auto; text-align: left; }
+.calc.casio .ck .al { position: absolute; top: 2px; right: 4px; font-size: 8px; line-height: 1; color: #e07a6b; }
 .calc.casio .ck-num { background: #eef1f5; color: #14181d; box-shadow: 0 2px 0 #aeb6c0; font-weight: 600; font-size: 15px; }
 .calc.casio .ck-op { background: #cdd6e0; color: #14181d; box-shadow: 0 2px 0 #98a2ad; font-weight: 700; }
 .calc.casio .ck-eq { background: var(--accent); color: #fff; box-shadow: 0 2px 0 #1a4e9c; font-weight: 700; font-size: 17px; }
@@ -1671,7 +1674,7 @@ select:focus {
 .sh.sh-y { color: #f0c33a; }
 .sh.sh-r { color: #e0796b; }
 
-.calc-funcs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 0 12px 8px; }
+.calc-funcs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 0 12px 8px; }
 
 .calc-mode-menu {
   margin: 0 12px 10px; padding: 10px; border-radius: 10px;
