@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=41" />
+<link rel="stylesheet" href="./css/app.css?v=42" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <script src="./vendor/jsxgraphcore.js" defer></script>
 <script src="./vendor/mathlive.min.js" defer></script>
@@ -160,6 +160,9 @@
         <button type="button" data-geo="angle" class="geo-btn" title="Angle ∠ABC — 2nd click is vertex">∠</button>
         <button type="button" data-geo="perp" class="geo-btn" title="Perpendicular — line then point">⊥</button>
         <button type="button" data-geo="parallel" class="geo-btn" title="Parallel — line then point">∥</button>
+        <button type="button" data-geo="midpoint" class="geo-btn" title="Midpoint of two points">Midpt</button>
+        <button type="button" data-geo="perpbisect" class="geo-btn" title="Perpendicular bisector of two points">⊥bis</button>
+        <button type="button" data-geo="anglebisect" class="geo-btn" title="Angle bisector ∠ABC (2nd click = vertex)">∠bis</button>
         <button type="button" data-inst="ruler" class="geo-btn" title="Ruler — measure distance">Ruler</button>
         <button type="button" data-inst="protractor" class="geo-btn" title="Protractor — angle ABC">Protractor</button>
         <button type="button" data-inst="compass" class="geo-btn" title="Compass — circle">Compass</button>
@@ -171,6 +174,7 @@
         <button id="conjugate" title="Show conjugate of plotted complex numbers">Conjugate</button>
         <label class="ctl-label"><input id="snap" type="checkbox" checked /> Snap</label>
         <label class="ctl-label"><input id="radians" type="checkbox" /> Rad</label>
+        <label class="ctl-label" title="Show complex numbers in polar form r∠θ"><input id="polar" type="checkbox" /> Polar</label>
       </div>
 
       <div class="group color-group" data-tabs="draw maths">
@@ -732,5 +736,5 @@
   </div>
 </section>
 
-<script type="module" src="./js/app.js?v=41"></script>
+<script type="module" src="./js/app.js?v=42"></script>
 </html>

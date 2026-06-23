@@ -58,6 +58,7 @@ const S = {
   creating: null,           // active math object (vector / line) being drawn
   snap: true,               // snap vector endpoints to grid
   radians: false,           // angle display: radians vs degrees
+  polar: false,             // complex numbers shown in polar (r∠θ) vs Cartesian (a+bi)
   editingId: null,          // id of text object currently being edited (hidden on canvas)
   actionBefore: null,       // page snapshot taken at action start (for undo)
   undo: [], redo: [],
@@ -128,6 +129,7 @@ function snapshotPage() {
     paper: p.paper,
     background: p.background ? clone(p.background) : null,
     geoItems: clone(p.geoItems || []),
+    geoConstructs: clone(p.geoConstructs || []),
     geoLabelN: p.geoLabelN || 0,
     mechItems: clone(p.mechItems || []),
     cplxLoci: clone(p.cplxLoci || []),
@@ -150,6 +152,7 @@ function restorePage(s) {
   if (bgChanged) imgCache.delete(p.id);
   thumbCache.delete(p.id);
   p.geoItems = clone(s.geoItems || []);
+  p.geoConstructs = clone(s.geoConstructs || []);
   p.geoLabelN = s.geoLabelN || 0;
   p.mechItems = clone(s.mechItems || []);
   p.cplxLoci = clone(s.cplxLoci || []);
@@ -443,7 +446,8 @@ function drawComplex(c, o, col) {
   const lx = o.at.x + 12, ly = o.at.y - 10;
   const tag = o.ctag ? `${o.ctag} = ` : 'z = ';
   c.fillStyle = col; c.font = '600 24px sans-serif';
-  c.fillText(`${tag}${fmt(z.a)} ${z.b < 0 ? '−' : '+'} ${fmt(Math.abs(z.b))}i`, lx, ly);
+  if (S.polar) c.fillText(`${tag}${z.mod.toFixed(2)} ∠ ${formatAngle(z.argRad)}`, lx, ly);
+  else c.fillText(`${tag}${fmt(z.a)} ${z.b < 0 ? '−' : '+'} ${fmt(Math.abs(z.b))}i`, lx, ly);
   if (o.omega) {
     c.font = '16px sans-serif';
     const ow = o.omega;
@@ -2179,6 +2183,7 @@ function bindEditor() {
   $('#conjugate').onclick = () => { page().showConjugate = !page().showConjugate; updatePageLabel(); persist(); mark(); };
   $('#snap').onchange = (e) => { S.snap = e.target.checked; };
   $('#radians').onchange = (e) => { S.radians = e.target.checked; mark(); };
+  $('#polar').onchange = (e) => { S.polar = e.target.checked; mark(); };
 
   // branding overlay (remembers on/off across sessions)
   const brandOn = localStorage.getItem('mb-brand') !== 'off';

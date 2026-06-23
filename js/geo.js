@@ -85,7 +85,8 @@ function dumpGeoItems() {
   const items = [];
   const seen = new Set();
   for (const el of Object.values(board.objects)) {
-    if (!el || el.isDraggable === false && el.elementClass !== 1) continue;
+    if (!el || el.mbConstruct) continue;
+    if (el.isDraggable === false && el.elementClass !== 1) continue;
     const t = el.elType;
     if (t === 'point' && el.X && !seen.has(el.id)) {
       seen.add(el.id);
@@ -94,7 +95,7 @@ function dumpGeoItems() {
   }
   // lines, circles, etc. — store by parent point ids
   for (const el of Object.values(board.objects)) {
-    if (!el || !el.elType) continue;
+    if (!el || !el.elType || el.mbConstruct) continue;
     if (el.elType === 'segment' && el.point1 && el.point2) {
       items.push({ t: 'segment', p1: el.point1.id, p2: el.point2.id });
     } else if (el.elType === 'line' && el.point1 && el.point2) {
@@ -140,7 +141,29 @@ function rebuildGeo(pg) {
       if (line && pt) board.create('parallel', [line, pt], geoAttr);
     }
   }
+  for (const cst of pg.geoConstructs || []) {
+    if (cst.t === 'midpoint' && map[cst.p1] && map[cst.p2]) {
+      const m = board.create('midpoint', [map[cst.p1], map[cst.p2]], { ...ptAttr, name: cst.name || '' }); m.mbConstruct = true;
+    } else if (cst.t === 'perpbisect' && map[cst.p1] && map[cst.p2]) {
+      buildPerpBisect(map[cst.p1], map[cst.p2]);
+    } else if (cst.t === 'anglebisect' && map[cst.p1] && map[cst.p2] && map[cst.p3]) {
+      const bz = board.create('bisector', [map[cst.p1], map[cst.p2], map[cst.p3]], geoAttr); bz.mbConstruct = true;
+    }
+  }
   board.unsuspendUpdate();
+}
+
+function pushConstruct(rec) {
+  const pg = page();
+  if (!pg.geoConstructs) pg.geoConstructs = [];
+  pg.geoConstructs.push(rec);
+}
+
+function buildPerpBisect(a, b) {
+  const mid = board.create('midpoint', [a, b], { visible: false }); mid.mbConstruct = true;
+  const ln = board.create('line', [a, b], { visible: false }); ln.mbConstruct = true;
+  const pb = board.create('perpendicular', [ln, mid], geoAttr); pb.mbConstruct = true;
+  return pb;
 }
 
 export function loadGeoPage(pg) {
@@ -219,6 +242,30 @@ function handleGeoClick(e) {
     finishGeoEdit();
     return;
   }
+  if (t === 'midpoint') {
+    if (!pend.length) { pend.push(mkPoint(p.x, p.y)); return; }
+    const b = mkPoint(p.x, p.y);
+    const m = board.create('midpoint', [pend[0], b], { ...ptAttr, name: labelName() }); m.mbConstruct = true;
+    pushConstruct({ t: 'midpoint', p1: pend[0].id, p2: b.id, name: m.name });
+    pend = []; finishGeoEdit();
+    return;
+  }
+  if (t === 'perpbisect') {
+    if (!pend.length) { pend.push(mkPoint(p.x, p.y)); return; }
+    const b = mkPoint(p.x, p.y);
+    buildPerpBisect(pend[0], b);
+    pushConstruct({ t: 'perpbisect', p1: pend[0].id, p2: b.id });
+    pend = []; finishGeoEdit();
+    return;
+  }
+  if (t === 'anglebisect') {
+    if (pend.length < 2) { pend.push(mkPoint(p.x, p.y)); return; }
+    const c2 = mkPoint(p.x, p.y);
+    const bz = board.create('bisector', [pend[0], pend[1], c2], geoAttr); bz.mbConstruct = true;
+    pushConstruct({ t: 'anglebisect', p1: pend[0].id, p2: pend[1].id, p3: c2.id });
+    pend = []; finishGeoEdit();
+    return;
+  }
   if (t === 'perp' || t === 'parallel') {
     if (!pend.length) {
       pend.push(mkPoint(p.x, p.y));
@@ -243,6 +290,7 @@ export function clearGeoPage() {
   if (!pg) return;
   startGeoEdit();
   pg.geoItems = [];
+  pg.geoConstructs = [];
   pg.geoLabelN = 0;
   teardownGeo();
   loadGeoPage(pg);
