@@ -2761,7 +2761,7 @@ function setupGraph() {
 }
 
 // ---- statistics (simple-statistics + uPlot) ---------------------------------
-let statsMode = 'one', statsPlot = null;
+let statsMode = 'one', statsPlot = null, statChartType = 'hist', lastStatData = null;
 const statNums = (t) => t.split(/[\s,;]+/).map(Number).filter((n) => !isNaN(n));
 const statPairs = (t) => t.split(/\n+/).map((l) => l.split(/[\s,;]+/).map(Number).filter((n) => !isNaN(n))).filter((a) => a.length >= 2).map((a) => [a[0], a[1]]);
 function statClearChart() { if (statsPlot) { try { statsPlot.destroy(); } catch (e) {} statsPlot = null; } $('#stats-chart').innerHTML = ''; }
@@ -2782,7 +2782,8 @@ function statRun() {
       statCell('Q1', q1), statCell('Q3', q3), statCell('IQR', q3 - q1),
       statCell('Variance', (d.length > 1 ? ss.sampleVariance(d) : 0).toFixed(3)),
     ].join('');
-    statHistogram(d);
+    lastStatData = d;
+    statDrawChart(d);
   } else {
     const pairs = statPairs(txt);
     if (pairs.length < 2) { out.innerHTML = '<div class="stats-err">Enter x, y pairs — one per line.</div>'; return; }
@@ -2795,6 +2796,56 @@ function statRun() {
     ].join('') + `<div class="st" style="grid-column:span 2"><b>Least-squares line</b><span>y = ${reg.m.toFixed(3)}x ${reg.b >= 0 ? '+' : '−'} ${Math.abs(reg.b).toFixed(3)}</span></div>`;
     statScatter(xs, ys, reg);
   }
+}
+function statDrawChart(d) {
+  statClearChart();
+  if (statChartType === 'box') statBoxPlot(d);
+  else if (statChartType === 'normal') statNormalCurve(d);
+  else statHistogram(d);
+}
+function statBoxPlot(d) {
+  const sorted = d.slice().sort((a, b) => a - b);
+  const min = ss.min(sorted), max = ss.max(sorted);
+  const q1 = ss.quantile(sorted, 0.25), med = ss.median(sorted), q3 = ss.quantile(sorted, 0.75);
+  const iqr = q3 - q1, loF = q1 - 1.5 * iqr, hiF = q3 + 1.5 * iqr;
+  const whiskLo = Math.min(...sorted.filter((v) => v >= loF)), whiskHi = Math.max(...sorted.filter((v) => v <= hiF));
+  const cv = document.createElement('canvas'); cv.width = 316; cv.height = 150;
+  $('#stats-chart').appendChild(cv);
+  const c = cv.getContext('2d'), W = cv.width, H = cv.height, pad = 28, y = 56, bh = 40;
+  const lo = Math.min(min, whiskLo), hi = Math.max(max, whiskHi), span = (hi - lo) || 1;
+  const X = (v) => pad + (v - lo) / span * (W - pad * 2);
+  c.strokeStyle = '#9aa6b5'; c.fillStyle = 'rgba(37,102,200,0.25)'; c.lineWidth = 1.5;
+  c.beginPath(); c.moveTo(X(whiskLo), y + bh / 2); c.lineTo(X(q1), y + bh / 2); c.moveTo(X(q3), y + bh / 2); c.lineTo(X(whiskHi), y + bh / 2); c.stroke();
+  [whiskLo, whiskHi].forEach((v) => { c.beginPath(); c.moveTo(X(v), y + 8); c.lineTo(X(v), y + bh - 8); c.stroke(); });
+  c.fillRect(X(q1), y, X(q3) - X(q1), bh); c.strokeStyle = '#2566c8'; c.strokeRect(X(q1), y, X(q3) - X(q1), bh);
+  c.strokeStyle = '#d23b3b'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(X(med), y); c.lineTo(X(med), y + bh); c.stroke();
+  sorted.filter((v) => v < whiskLo || v > whiskHi).forEach((v) => { c.fillStyle = '#e0892a'; c.beginPath(); c.arc(X(v), y + bh / 2, 3.5, 0, Math.PI * 2); c.fill(); });
+  c.fillStyle = '#9aa6b5'; c.font = '10px sans-serif'; c.textAlign = 'center';
+  [['min', whiskLo], ['Q1', q1], ['med', med], ['Q3', q3], ['max', whiskHi]].forEach(([lab, v]) => {
+    c.fillText(typeof v === 'number' ? (+v.toFixed(2)) : v, X(v), y - 8); c.fillText(lab, X(v), y + bh + 16);
+  });
+}
+function statNormalCurve(d) {
+  const m = ss.mean(d), sd = d.length > 1 ? ss.sampleStandardDeviation(d) : 1;
+  const cv = document.createElement('canvas'); cv.width = 316; cv.height = 180;
+  $('#stats-chart').appendChild(cv);
+  const c = cv.getContext('2d'), W = cv.width, H = cv.height, pad = 26;
+  const lo = m - 4 * sd, hi = m + 4 * sd, span = (hi - lo) || 1;
+  const X = (v) => pad + (v - lo) / span * (W - pad * 2);
+  const pdf = (x) => Math.exp(-((x - m) ** 2) / (2 * sd * sd)) / (sd * Math.sqrt(2 * Math.PI));
+  const peak = pdf(m), Y = (p) => H - pad - (p / peak) * (H - pad * 2);
+  // shade within ±1 sd
+  c.fillStyle = 'rgba(37,102,200,0.22)'; c.beginPath(); c.moveTo(X(m - sd), H - pad);
+  for (let x = m - sd; x <= m + sd; x += span / 200) c.lineTo(X(x), Y(pdf(x)));
+  c.lineTo(X(m + sd), H - pad); c.closePath(); c.fill();
+  c.strokeStyle = '#2566c8'; c.lineWidth = 2.5; c.beginPath();
+  for (let i = 0; i <= 240; i++) { const x = lo + span * i / 240; const px = X(x), py = Y(pdf(x)); i ? c.lineTo(px, py) : c.moveTo(px, py); }
+  c.stroke();
+  c.strokeStyle = '#9aa6b5'; c.lineWidth = 1; c.beginPath(); c.moveTo(pad, H - pad); c.lineTo(W - pad, H - pad); c.stroke();
+  c.strokeStyle = '#d23b3b'; c.setLineDash([4, 4]); c.beginPath(); c.moveTo(X(m), Y(peak)); c.lineTo(X(m), H - pad); c.stroke(); c.setLineDash([]);
+  c.fillStyle = '#9aa6b5'; c.font = '10px sans-serif'; c.textAlign = 'center';
+  [['μ−σ', m - sd], ['μ', m], ['μ+σ', m + sd]].forEach(([lab, v]) => c.fillText(lab, X(v), H - pad + 14));
+  c.fillStyle = '#2566c8'; c.fillText('68% within ±1σ', W / 2, 16);
 }
 function statHistogram(d) {
   const min = ss.min(d), max = ss.max(d);
@@ -2837,7 +2888,13 @@ function setupStats() {
     document.querySelectorAll('.sm-btn').forEach((x) => x.classList.toggle('active', x === b));
     $('#stats-hint').textContent = statsMode === 'one' ? 'Enter numbers separated by commas or new lines' : 'Enter x, y pairs — one per line, e.g. 1, 2.3';
     $('#stats-data').placeholder = statsMode === 'one' ? '12, 15, 15, 18, 20, 21, 24' : '1, 2.1\n2, 3.9\n3, 6.2\n4, 7.8';
+    $('#stats-chart-types').style.display = statsMode === 'one' ? 'flex' : 'none';
     $('#stats-summary').innerHTML = ''; statClearChart();
+  });
+  document.querySelectorAll('.sc-btn').forEach((b) => b.onclick = () => {
+    statChartType = b.dataset.chart;
+    document.querySelectorAll('.sc-btn').forEach((x) => x.classList.toggle('active', x === b));
+    if (lastStatData && statsMode === 'one') statDrawChart(lastStatData);
   });
   makeDraggable($('#stats'), $('#stats-head'));
 }

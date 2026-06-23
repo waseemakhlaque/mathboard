@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=36" />
+<link rel="stylesheet" href="./css/app.css?v=37" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <script src="./vendor/jsxgraphcore.js" defer></script>
 <script src="./vendor/mathlive.min.js" defer></script>
@@ -255,6 +255,11 @@
       <label class="ct-lab" id="stats-hint">Enter numbers separated by commas or new lines</label>
       <textarea id="stats-data" class="stats-data" spellcheck="false" placeholder="12, 15, 15, 18, 20, 21, 24"></textarea>
       <button id="stats-run" class="ck-eq2">Analyse</button>
+      <div id="stats-chart-types" class="stats-chart-types">
+        <button type="button" class="sc-btn active" data-chart="hist">Histogram</button>
+        <button type="button" class="sc-btn" data-chart="box">Box plot</button>
+        <button type="button" class="sc-btn" data-chart="normal">Normal</button>
+      </div>
       <div id="stats-summary" class="stats-summary"></div>
       <div id="stats-chart" class="stats-chart"></div>
     </div>
@@ -711,5 +716,5 @@
   </div>
 </section>
 
-<script type="module" src="./js/app.js?v=36"></script>
+<script type="module" src="./js/app.js?v=37"></script>
 </html>

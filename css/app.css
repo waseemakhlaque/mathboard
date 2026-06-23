@@ -1687,6 +1687,9 @@ select:focus {
 .cmm-grid button:hover { background: #343b44; }
 
 .intg-modes { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.stats-chart-types { display: flex; gap: 6px; margin: 8px 0 4px; }
+.stats-chart-types .sc-btn { flex: 1; padding: 6px 4px; font-size: 12px; background: var(--surface-3); border: 1px solid var(--border); color: var(--text-3); border-radius: var(--radius-sm); }
+.stats-chart-types .sc-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .eqn-fields { display: grid; gap: 6px; margin: 8px 0; }
 .eqn-fields .eqn-row { display: flex; gap: 6px; }
 .eqn-fields .ct-in { margin-bottom: 0; text-align: center; }
