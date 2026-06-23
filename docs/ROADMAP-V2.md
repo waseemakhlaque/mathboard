@@ -43,7 +43,9 @@ land early, and the **portal** is built on a stable base.
 - **Done when:** the current app behaves identically but is modular, and large PDFs import without
   bloating IndexedDB/exports.
 
-### Phase 1 — Notebook polish (close GoodNotes/OneNote gaps)
+### Phase 1 — Notebook polish (close GoodNotes/OneNote gaps) 🟡 mostly done
+*Done: page duplicate/delete/reorder, section delete, dotted/ruled papers, clear-page (undoable),
+place-chart-on-page. Remaining: layers panel, large-media (blob) handling, search.*
 - **Layers** panel + object reordering; **page management** (reorder/duplicate/delete) UI.
 - Larger **paper library** (lined/dotted/music/cover) + per‑page grid on/off already exists.
 - **Large‑media** handling: lazy PDF page render, size budget, blob storage (from Phase 0).

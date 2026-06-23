@@ -254,7 +254,7 @@ media stack).
 
 | Area | Score | One‑line status |
 |---|---|---|
-| Notebook (pages/tabs/grid/pen/eraser) | ✅ 9/10 | Strong; needs layers, page mgmt UI, large‑media handling. |
+| Notebook (pages/tabs/grid/pen/eraser) | ✅ 9/10 | Strong; **page management (duplicate/delete/reorder), section delete, dotted/ruled papers, clear-page, place-chart** added. Remaining: layers, large‑media handling. |
 | PDF / image import | 🟡 7/10 | Works; large‑media performance + blob storage needed. |
 | OpenBoard instruments (ruler/protractor/compass) | 🟡 5/10 | Present as annotations; not draggable physical instruments. |
 | Geometry constructions | ✅ 8/10 | JSXGraph solid; add transformations + more constructions. |
