@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=35" />
+<link rel="stylesheet" href="./css/app.css?v=36" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <script src="./vendor/jsxgraphcore.js" defer></script>
 <script src="./vendor/mathlive.min.js" defer></script>
@@ -365,6 +365,8 @@
         <button type="button" data-cmode="table">4: TABLE</button>
         <button type="button" data-cmode="matrix">5: MATRIX</button>
         <button type="button" data-cmode="vector">6: VECTOR</button>
+        <button type="button" data-cmode="eqn">7: EQN</button>
+        <button type="button" data-cmode="base">8: BASE-N</button>
         <button type="button" data-cmode="deg">DEG</button>
         <button type="button" data-cmode="rad">RAD</button>
       </div>
@@ -389,6 +391,39 @@
         <button id="intg-go" class="ck ck-eq2">Compute</button>
       </div>
       <div id="intg-out" class="ct-out"></div>
+    </div>
+
+    <div id="calc-eqn" class="calc-sub hidden">
+      <div class="intg-modes eqn-modes">
+        <button type="button" data-eqn="lin2" class="mx-tab active">2 unk</button>
+        <button type="button" data-eqn="lin3" class="mx-tab">3 unk</button>
+        <button type="button" data-eqn="quad" class="mx-tab">ax²+bx+c</button>
+        <button type="button" data-eqn="cubic" class="mx-tab">cubic</button>
+      </div>
+      <div id="eqn-hint" class="ct-lab"></div>
+      <div id="eqn-fields" class="eqn-fields"></div>
+      <div class="ct-btns">
+        <button id="eqn-back" class="ck ck-fn">‹ Keys</button>
+        <button id="eqn-go" class="ck ck-eq2">Solve</button>
+      </div>
+      <div id="eqn-out" class="ct-out"></div>
+    </div>
+
+    <div id="calc-base" class="calc-sub hidden">
+      <label class="ct-lab">Value</label>
+      <input id="base-in" class="ct-in" type="text" value="42" autocomplete="off" spellcheck="false" />
+      <label class="ct-lab">Input base</label>
+      <select id="base-from" class="ct-in">
+        <option value="10">DEC (decimal)</option>
+        <option value="2">BIN (binary)</option>
+        <option value="8">OCT (octal)</option>
+        <option value="16">HEX (hexadecimal)</option>
+      </select>
+      <div class="ct-btns">
+        <button id="base-back" class="ck ck-fn">‹ Keys</button>
+        <button id="base-go" class="ck ck-eq2">Convert</button>
+      </div>
+      <div id="base-out" class="ct-out"></div>
     </div>
 
     <div id="calc-table" class="calc-sub hidden">
@@ -676,5 +711,5 @@
   </div>
 </section>
 
-<script type="module" src="./js/app.js?v=35"></script>
+<script type="module" src="./js/app.js?v=36"></script>
 </html>

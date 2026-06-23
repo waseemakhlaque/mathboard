@@ -2111,12 +2111,12 @@ let calcDeg = true, calcAns = 0, mathFrac = null, calcShift = false, calcAlpha =
 let calcLastExpr = null, calcResultValue = null, calcDisplayMode = 0; // 0=D 1=frac 2=surd
 let intgMode = 'integral';
 const calcVars = {};            // STO/RCL/ALPHA variables A–F, X, Y, M
-let stoPending = false, rclAlpha = false;
+let stoPending = false, rclAlpha = false, hypPending = false;
 const SHIFT_MAP = {
   'sin(': 'asin(', 'cos(': 'acos(', 'tan(': 'atan(', 'log(': 'e^(', 'log10(': '10^(',
   '^': 'nthRoot(', 'sqrt(': 'cbrt(', '^2': '^3', 'inv': '!', 'e10': 'pi', 'int': 'diff',
   'hyp': 'abs(', '*': 'permutations(', '/': 'combinations(', 'rcl': 'sto', 'mplus': 'mminus',
-  'ran': 'ranint', 'ac': 'off',
+  'ran': 'ranint', 'ac': 'off', 'pol': 'rec', 'sum': 'prod',
 };
 const CALC_FMT = ['D', 'F', '√'];
 
@@ -2127,12 +2127,15 @@ function showCalcView(view) {
   $('#calc-table').classList.toggle('hidden', view !== 'table');
   $('#calc-matrix').classList.toggle('hidden', view !== 'matrix');
   $('#calc-intg')?.classList.toggle('hidden', view !== 'intg');
+  $('#calc-eqn')?.classList.toggle('hidden', view !== 'eqn');
+  $('#calc-base')?.classList.toggle('hidden', view !== 'base');
   const mn = $('#calc-modename');
-  if (mn) mn.textContent = view === 'table' ? 'TABLE' : view === 'matrix' ? 'MATRIX' : view === 'intg' ? (intgMode === 'derivative' ? 'd/dx' : '∫dx') : 'COMP';
+  const names = { table: 'TABLE', matrix: 'MATRIX', eqn: 'EQN', base: 'BASE-N', intg: intgMode === 'derivative' ? 'd/dx' : '∫dx' };
+  if (mn) mn.textContent = names[view] || 'COMP';
 }
 function calcReset() {
   calcSetExpr(''); $('#calc-result').textContent = '0'; $('#calc-history').textContent = '';
-  calcResultValue = null; calcShift = false; calcAlpha = false; stoPending = false; rclAlpha = false;
+  calcResultValue = null; calcShift = false; calcAlpha = false; stoPending = false; rclAlpha = false; hypPending = false;
   $('#calc-shift-ind')?.classList.remove('on'); $('#calc-alpha-ind')?.classList.remove('on');
   $('#calc-mode-menu')?.classList.add('hidden');
   showCalcView('keys');
@@ -2147,6 +2150,8 @@ function setCalcMode(m) {
   else if (m === 'table') showCalcView('table');
   else if (m === 'matrix') { showCalcView('matrix'); $('#mx-tab-mat')?.click(); }
   else if (m === 'vector') { showCalcView('matrix'); $('#mx-tab-vec')?.click(); }
+  else if (m === 'eqn') openEqn();
+  else if (m === 'base') showCalcView('base');
   else if (m === 'deg') setCalcDeg(true);
   else if (m === 'rad') setCalcDeg(false);
 }
@@ -2203,12 +2208,105 @@ function calcComputeIntg() {
     }
   } catch (e) { out.innerHTML = '<div class="ct-err">Could not compute. Check inputs &amp; angle mode.</div>'; }
 }
+
+// ---- EQN mode: simultaneous (2/3), quadratic, cubic --------------------------
+let eqnType = 'lin2';
+const EQN_SPEC = {
+  lin2: { rows: 2, labels: ['a', 'b', 'c'], hint: 'a·x + b·y = c' },
+  lin3: { rows: 3, labels: ['a', 'b', 'c', 'd'], hint: 'a·x + b·y + c·z = d' },
+  quad: { rows: 1, labels: ['a', 'b', 'c'], hint: 'a·x² + b·x + c = 0' },
+  cubic: { rows: 1, labels: ['a', 'b', 'c', 'd'], hint: 'a·x³ + b·x² + c·x + d = 0' },
+};
+function openEqn() { showCalcView('eqn'); renderEqnFields(); }
+function renderEqnFields() {
+  const spec = EQN_SPEC[eqnType];
+  document.querySelectorAll('[data-eqn]').forEach((b) => b.classList.toggle('active', b.dataset.eqn === eqnType));
+  const hint = $('#eqn-hint'); if (hint) hint.textContent = spec.hint;
+  const wrap = $('#eqn-fields'); if (!wrap) return;
+  wrap.innerHTML = '';
+  for (let r = 0; r < spec.rows; r++) {
+    const row = document.createElement('div');
+    row.className = 'eqn-row';
+    spec.labels.forEach((lab, c) => {
+      const inp = document.createElement('input');
+      inp.className = 'ct-in';
+      inp.id = `eqn-${r}-${c}`;
+      inp.placeholder = lab;
+      inp.value = (spec.rows === 1) ? (c === 0 ? '1' : '0') : '';
+      row.appendChild(inp);
+    });
+    wrap.appendChild(row);
+  }
+}
+function eqnVal(r, c) { return Number(math.evaluate($(`#eqn-${r}-${c}`).value || '0')); }
+// Durand–Kerner: all roots (real + complex) of a polynomial given coeffs high→low
+function polyRoots(coeffs) {
+  let c = coeffs.slice();
+  while (c.length > 1 && Math.abs(c[0]) < 1e-12) c.shift();
+  const n = c.length - 1;
+  if (n < 1) return [];
+  const a = c.map((k) => math.complex(k / c[0], 0));
+  let roots = [];
+  for (let i = 0; i < n; i++) roots.push(math.pow(math.complex(0.4, 0.9), i));
+  const evalP = (x) => { let s = math.complex(0, 0); for (let i = 0; i <= n; i++) s = math.add(math.multiply(s, x), a[i]); return s; };
+  for (let iter = 0; iter < 100; iter++) {
+    let maxd = 0;
+    const next = roots.map((ri, i) => {
+      let denom = math.complex(1, 0);
+      for (let j = 0; j < n; j++) if (j !== i) denom = math.multiply(denom, math.subtract(ri, roots[j]));
+      const delta = math.divide(evalP(ri), denom);
+      maxd = Math.max(maxd, math.abs(delta));
+      return math.subtract(ri, delta);
+    });
+    roots = next;
+    if (maxd < 1e-12) break;
+  }
+  return roots;
+}
+function fmtComplexRoot(z) {
+  const re = z.re, im = z.im;
+  const r = Math.abs(re) < 1e-9 ? 0 : re, i = Math.abs(im) < 1e-9 ? 0 : im;
+  if (i === 0) return calcFormatPlain(r);
+  return `${calcFormatPlain(r)} ${i < 0 ? '−' : '+'} ${calcFormatPlain(Math.abs(i))}i`;
+}
+function solveEqn() {
+  const out = $('#eqn-out');
+  try {
+    if (eqnType === 'lin2' || eqnType === 'lin3') {
+      const n = eqnType === 'lin2' ? 2 : 3;
+      const A = [], b = [];
+      for (let r = 0; r < n; r++) { const row = []; for (let c = 0; c < n; c++) row.push(eqnVal(r, c)); A.push(row); b.push(eqnVal(r, n)); }
+      const x = math.lusolve(A, b).map((v) => v[0]);
+      const names = ['x', 'y', 'z'];
+      out.innerHTML = '<div class="ct-ok">' + x.map((v, i) => `${names[i]} = ${calcFormatPlain(v)}`).join('<br>') + '</div>';
+    } else {
+      const labels = EQN_SPEC[eqnType].labels;
+      const coeffs = labels.map((_, c) => eqnVal(0, c));
+      const roots = polyRoots(coeffs);
+      out.innerHTML = '<div class="ct-ok">' + roots.map((z, i) => `x<sub>${i + 1}</sub> = ${fmtComplexRoot(z)}`).join('<br>') + '</div>';
+    }
+  } catch (e) { out.innerHTML = '<div class="ct-err">No unique solution (check coefficients).</div>'; }
+}
+
+// ---- BASE-N mode -------------------------------------------------------------
+function baseConvert() {
+  const out = $('#base-out');
+  const raw = ($('#base-in').value || '').trim().replace(/^0[xbo]/i, '');
+  const from = Number($('#base-from').value || '10');
+  const n = parseInt(raw, from);
+  if (!Number.isFinite(n) || Number.isNaN(n)) { out.innerHTML = '<div class="ct-err">Invalid digits for that base.</div>'; return; }
+  out.innerHTML = '<div class="ct-ok">' +
+    `DEC = ${n}<br>BIN = ${(n >>> 0).toString(2)}<br>OCT = ${n.toString(8)}<br>HEX = ${n.toString(16).toUpperCase()}` +
+    '</div>';
+}
 function calcScope() {
   const toRad = (x) => calcDeg ? x * Math.PI / 180 : x;
   const fromRad = (x) => calcDeg ? x * 180 / Math.PI : x;
   return {
     sin: (x) => Math.sin(toRad(x)), cos: (x) => Math.cos(toRad(x)), tan: (x) => Math.tan(toRad(x)),
     asin: (x) => fromRad(Math.asin(x)), acos: (x) => fromRad(Math.acos(x)), atan: (x) => fromRad(Math.atan(x)),
+    Pol: (x, y) => math.matrix([[Math.hypot(x, y), fromRad(Math.atan2(y, x))]]),
+    Rec: (r, t) => { const a = toRad(t); return math.matrix([[r * Math.cos(a), r * Math.sin(a)]]); },
     Ans: calcAns, ...calcVars,
   };
 }
@@ -2427,6 +2525,13 @@ function calcKey(k, el) {
   }
   if (al && letter) { rclAlpha = false; $('#calc-alpha-ind')?.classList.remove('on'); calcInsert(letter); return; }
   rclAlpha = false; $('#calc-alpha-ind')?.classList.remove('on');
+  // hyp prefix: hyp then sin/cos/tan -> sinh/cosh/tanh (SHIFT for inverse)
+  if (hypPending && (k === 'sin(' || k === 'cos(' || k === 'tan(')) {
+    hypPending = false;
+    const base = k === 'sin(' ? 'sinh(' : k === 'cos(' ? 'cosh(' : 'tanh(';
+    calcInsert(sh ? 'a' + base : base);
+    return;
+  }
   if (k === 'matrix') { showCalcView('matrix'); return; }
   if (k === 'table') { showCalcView('table'); return; }
   if (k === 'calc') { if (sh) { alert('SOLVE: use the Graph or Calculus tools to solve / find roots.'); return; } calcRecall(); return; }
@@ -2449,8 +2554,11 @@ function calcKey(k, el) {
   if (token === 'ran') { calcInsert('random()'); return; }
   if (token === 'ranint') { calcInsert('randomInt('); return; }
   if (token === 'mminus') { const v = Number(calcResultValue) || 0; calcVars.M = (Number(calcVars.M) || 0) - v; $('#calc-history').textContent = `M = ${calcVars.M}`; return; }
-  // keys present on the faceplate but not wired to an engine action (visual fidelity)
-  if (['hyp', 'dms', 'eng', 'pol', 'rec', 'sum', 'prod', 'drg', 'off'].includes(token)) return;
+  if (token === 'hyp') { hypPending = true; $('#calc-history').textContent = 'hyp _ (sin/cos/tan)'; return; }
+  if (token === 'pol') { calcInsert('Pol('); return; }
+  if (token === 'rec') { calcInsert('Rec('); return; }
+  // keys present on the faceplate but not yet wired to an engine action (visual fidelity)
+  if (['dms', 'eng', 'sum', 'prod', 'drg', 'off'].includes(token)) return;
   calcInsert(token);
 }
 function calcGenTable() {
@@ -2538,6 +2646,11 @@ function setupCalculator() {
   $('#intg-go').onclick = calcComputeIntg;
   $('#intg-tab-int').onclick = () => openIntg('integral');
   $('#intg-tab-der').onclick = () => openIntg('derivative');
+  document.querySelectorAll('[data-eqn]').forEach((b) => b.onclick = () => { eqnType = b.dataset.eqn; renderEqnFields(); });
+  $('#eqn-back').onclick = () => showCalcView('keys');
+  $('#eqn-go').onclick = solveEqn;
+  $('#base-back').onclick = () => showCalcView('keys');
+  $('#base-go').onclick = baseConvert;
   $('#ct-back').onclick = () => showCalcView('keys');
   $('#cm-back').onclick = () => showCalcView('keys');
   $('#ct-gen').onclick = calcGenTable;

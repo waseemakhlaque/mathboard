@@ -1686,7 +1686,10 @@ select:focus {
 .cmm-grid button { background: #2a2f37; color: #e7eaef; border: 1px solid #3a414b; border-radius: 6px; padding: 8px; font-size: 12px; }
 .cmm-grid button:hover { background: #343b44; }
 
-.intg-modes { display: flex; gap: 6px; margin-bottom: 10px; }
+.intg-modes { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.eqn-fields { display: grid; gap: 6px; margin: 8px 0; }
+.eqn-fields .eqn-row { display: flex; gap: 6px; }
+.eqn-fields .ct-in { margin-bottom: 0; text-align: center; }
 
 /* hide MathLive's built-in menu / virtual-keyboard toggle inside the calc display */
 .calc-expr::part(menu-toggle),
