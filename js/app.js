@@ -37,6 +37,7 @@ const COLORS = ['#1b1b1b', '#2566c8', '#d23b3b', '#1f9d57', '#e0892a', '#8a4fd0'
 const PEN_WIDTHS = { fine: 4, marker: 10, calligraphy: 6 };
 const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
+const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -476,6 +477,45 @@ function drawTracer(c, o) {
   c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke();
   if (o.label) { c.fillStyle = col; c.font = '600 18px sans-serif'; c.fillText(o.label, px + 10, py - 8); }
 }
+// live force vector with auto-resolved horizontal/vertical components (Module 2).
+// liveAngle = base angleDeg (+ demoT sweep when o.anim) so it can be dragged AND animated.
+function forceLiveAngle(o) { return (o.angleDeg || 0) + (o.anim ? S.demoT * 360 : 0); }
+function compArrow(c, a, b, col) {
+  if (Math.hypot(b.x - a.x, b.y - a.y) < 2) return;
+  c.strokeStyle = col; c.fillStyle = col; c.lineWidth = 2; c.setLineDash([8, 6]);
+  c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke(); c.setLineDash([]);
+  const ang = Math.atan2(b.y - a.y, b.x - a.x), h = 12;
+  c.beginPath(); c.moveTo(b.x, b.y);
+  c.lineTo(b.x - h * Math.cos(ang - 0.4), b.y - h * Math.sin(ang - 0.4));
+  c.lineTo(b.x - h * Math.cos(ang + 0.4), b.y - h * Math.sin(ang + 0.4));
+  c.closePath(); c.fill();
+}
+function forceTip(o) {
+  const th = forceLiveAngle(o) * Math.PI / 180;
+  return { x: o.at.x + o.mag * Math.cos(th) * FORCE_SCALE, y: o.at.y - o.mag * Math.sin(th) * FORCE_SCALE };
+}
+function drawForceVec(c, o) {
+  const col = o.color || '#d23b3b';
+  const th = forceLiveAngle(o) * Math.PI / 180;
+  const Fx = o.mag * Math.cos(th), Fy = o.mag * Math.sin(th);
+  const tip = forceTip(o), corner = { x: tip.x, y: o.at.y };
+  compArrow(c, o.at, corner, '#1f9d57');         // horizontal component Fx
+  compArrow(c, corner, tip, '#2566c8');          // vertical component Fy
+  // right-angle marker at the corner
+  if (Math.abs(Fx) > 0.05 && Math.abs(Fy) > 0.05) {
+    const dx = Math.sign(o.at.x - corner.x) * 12, dy = Math.sign(tip.y - corner.y) * 12;
+    c.strokeStyle = '#88929c'; c.lineWidth = 1.5;
+    c.beginPath(); c.moveTo(corner.x + dx, corner.y); c.lineTo(corner.x + dx, corner.y + dy); c.lineTo(corner.x, corner.y + dy); c.stroke();
+  }
+  drawArrow(c, o.at, tip, col, false);            // the force itself
+  c.fillStyle = '#1b1b1b'; c.beginPath(); c.arc(o.at.x, o.at.y, 4, 0, Math.PI * 2); c.fill();
+  const degs = Math.round((forceLiveAngle(o) % 360 + 360) % 360);
+  c.font = '600 17px sans-serif'; c.fillStyle = col;
+  c.fillText(`F = ${fmt(o.mag)} N  @ ${degs}°`, tip.x + 10, tip.y - 6);
+  c.font = '14px sans-serif';
+  c.fillStyle = '#1f9d57'; c.fillText(`Fx = ${fmt(Fx)}`, (o.at.x + corner.x) / 2 - 24, o.at.y + (Fy >= 0 ? 20 : -8));
+  c.fillStyle = '#2566c8'; c.fillText(`Fy = ${fmt(Fy)}`, corner.x + 8, (corner.y + tip.y) / 2);
+}
 function drawCircle(c, o, col) {
   const r = Math.hypot(o.edge.x - o.center.x, o.edge.y - o.center.y);
   c.strokeStyle = col; c.lineWidth = 3; c.setLineDash([]);
@@ -597,6 +637,7 @@ function drawObject(c, o) {
   if (o.kind === 'complex') { drawComplex(c, o, col); return; }
   if (o.kind === 'circle') { drawCircle(c, o, col); return; }
   if (o.kind === 'tracer') { drawTracer(c, o); return; }
+  if (o.kind === 'forcevec') { drawForceVec(c, o); return; }
   if (o.kind === 'image') {
     const img = objImage(o);
     const x0 = Math.min(o.from.x, o.to.x), y0 = Math.min(o.from.y, o.to.y);
@@ -1084,7 +1125,7 @@ function objectInLasso(o, poly) {
 // body to move it, or drag a handle to reshape it. Geometry is stored in page
 // units, so moves/resizes are zoom-independent like everything else.
 function objPoints(o) {                 // the point refs that define an object's geometry
-  if (o.kind === 'text' || o.kind === 'equation' || o.kind === 'complex' || o.kind === 'graphpt' || o.kind === 'intersect') return [o.at];
+  if (o.kind === 'text' || o.kind === 'equation' || o.kind === 'complex' || o.kind === 'graphpt' || o.kind === 'intersect' || o.kind === 'forcevec') return [o.at];
   if (o.kind === 'circle' || o.kind === 'tracer') return [o.center, o.edge];
   return [o.from, o.to];               // vector / line / rect / ellipse
 }
@@ -1096,6 +1137,11 @@ function objBBox(o) {
   if (o.kind === 'text') { const b = textBox(o); return { x: o.at.x, y: o.at.y, w: b.w, h: b.h }; }
   if (o.kind === 'equation') { const b = equationBox(o); return { x: o.at.x, y: o.at.y, w: b.w, h: b.h }; }
   if (o.kind === 'complex') return { x: o.at.x - 10, y: o.at.y - 10, w: 20, h: 20 };
+  if (o.kind === 'forcevec') {
+    const tip = forceTip(o);
+    const x0 = Math.min(o.at.x, tip.x), y0 = Math.min(o.at.y, tip.y);
+    return { x: x0, y: y0, w: Math.abs(tip.x - o.at.x), h: Math.abs(tip.y - o.at.y) };
+  }
   if (o.kind === 'graphpt' || o.kind === 'intersect') return { x: o.at.x - 12, y: o.at.y - 12, w: 24, h: 24 };
   if (o.kind === 'tangent') return { x: Math.min(o.from.x, o.to.x), y: Math.min(o.from.y, o.to.y), w: Math.abs(o.to.x - o.from.x), h: Math.abs(o.to.y - o.from.y) };
   const x0 = Math.min(o.from.x, o.to.x), y0 = Math.min(o.from.y, o.to.y);
@@ -1108,6 +1154,10 @@ function objHandles(o) {                 // named drag handles, in page units
     return [{ name: 'center', x: o.center.x, y: o.center.y }, { name: 'edge', x: o.edge.x, y: o.edge.y }];
   if (o.kind === 'complex')
     return [{ name: 'at', x: o.at.x, y: o.at.y }];
+  if (o.kind === 'forcevec') {
+    const tip = forceTip(o);
+    return [{ name: 'at', x: o.at.x, y: o.at.y }, { name: 'tip', x: tip.x, y: tip.y }];
+  }
   if (o.kind === 'rect' || o.kind === 'ellipse' || o.kind === 'image') {
     const x0 = Math.min(o.from.x, o.to.x), y0 = Math.min(o.from.y, o.to.y),
           x1 = Math.max(o.from.x, o.to.x), y1 = Math.max(o.from.y, o.to.y);
@@ -1122,6 +1172,11 @@ function applyHandle(o, name, p) {        // drag a handle to point p (snapped o
   const sp = snapPt(p);
   if (name === 'from') o.from = sp;
   else if (name === 'to') o.to = sp;
+  else if (name === 'tip') {
+    const dx = p.x - o.at.x, dy = o.at.y - p.y;   // y up
+    o.mag = Math.max(0.1, Math.round(Math.hypot(dx, dy) / FORCE_SCALE * 10) / 10);
+    o.angleDeg = Math.atan2(dy, dx) * 180 / Math.PI - (o.anim ? S.demoT * 360 : 0);
+  }
   else if (name === 'at') o.at = sp;
   else if (name === 'edge') o.edge = sp;
   else if (name === 'center') { const dx = sp.x - o.center.x, dy = sp.y - o.center.y; o.center = sp; o.edge = { x: o.edge.x + dx, y: o.edge.y + dy }; }
@@ -1478,6 +1533,7 @@ function pointInText(o, p) {
 function objHit(o, p, r) {
   if (o.kind === 'graphpt' || o.kind === 'intersect') return Math.hypot(p.x - o.at.x, p.y - o.at.y) < r + 10;
   if (o.kind === 'tangent') return pointSegDist(p, o.from, o.to) < r + 4;
+  if (o.kind === 'forcevec') return pointSegDist(p, o.at, forceTip(o)) < r + 6 || Math.hypot(p.x - o.at.x, p.y - o.at.y) < r + 8;
   if (o.kind === 'text') return pointInText(o, p);
   if (o.kind === 'complex') return Math.hypot(p.x - o.at.x, p.y - o.at.y) < r + 8;
   if (o.kind === 'circle' || o.kind === 'tracer') {
@@ -3250,6 +3306,22 @@ function addTracer() {
   $('#demo-bar')?.classList.remove('hidden');
   mark();
 }
+function selectNewObject(o) {
+  thumbCache.delete(page().id);
+  S.selStrokes = []; S.selObj = o; S.tool = 'select';
+  if (cv) cv.classList.add('cur-select');
+  document.querySelectorAll('[data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === 'select'));
+  setTab('draw');
+  $('#demo-bar')?.classList.remove('hidden');
+  mark();
+}
+function addForceVec() {
+  beginAction();
+  const o = { id: uid(), kind: 'forcevec', at: { x: PAGE_W / 2, y: PAGE_H / 2 }, mag: 5, angleDeg: 30, anim: true, color: S.color || '#d23b3b' };
+  objs().push(o);
+  commitAction();
+  selectNewObject(o);
+}
 function setupDemo() {
   $('#demo-toggle')?.addEventListener('click', () => $('#demo-bar')?.classList.toggle('hidden'));
   $('#demo-close')?.addEventListener('click', () => { demoPlay(false); $('#demo-bar')?.classList.add('hidden'); });
@@ -3257,7 +3329,35 @@ function setupDemo() {
   $('#demo-reset')?.addEventListener('click', demoReset);
   $('#demo-slider')?.addEventListener('input', (e) => { if (S.playing) demoPlay(false); S.demoT = (+e.target.value || 0) / 1000; syncDemoUI(); mark(); });
   $('#demo-add')?.addEventListener('click', addTracer);
+  $('#demo-force')?.addEventListener('click', addForceVec);
   syncDemoUI();
+}
+
+// ---- collaboration gate (isolated; collab modules load only when ALL are true) ---------------
+// True only when: (a) not on localhost (mirrors the sw/devHost check), (b) browser is online,
+// and (c) a server URL is configured in config.js. When false, the Collaborate option is hidden
+// and js/collab/* is never imported, so the offline solo app stays byte-for-byte unchanged.
+function collabAvailable() {
+  const devHost = ['localhost', '127.0.0.1'].includes(location.hostname);
+  const url = ((window.MB_CONFIG && window.MB_CONFIG.collabServerUrl) || '').trim();
+  return !devHost && navigator.onLine && !!url;
+}
+function setupCollabGate() {
+  const cb = $('#collab-toggle');
+  if (!cb) return;
+  if (!collabAvailable()) { cb.classList.add('hidden'); return; }   // gate closed: never load collab
+  cb.classList.remove('hidden');
+  cb.onclick = async () => {
+    cb.disabled = true;
+    try {
+      const m = await import('./collab/collab.js');   // dynamic import: only fetched on click
+      m.startCollab({ notebook: () => S.notebook, page });
+    } catch (e) {
+      alert('Could not load collaboration: ' + e.message);
+    } finally {
+      cb.disabled = false;
+    }
+  };
 }
 
 // ---- boot --------------------------------------------------------------------
@@ -3297,6 +3397,7 @@ function init() {
   setupPanelMenu();
   setupRail();
   setupDemo();
+  setupCollabGate();
   setupSyncSettings();
   $('#new-nb').onclick = createNotebook;
   document.querySelectorAll('.lib-tab').forEach((b) => { b.onclick = () => setLibTab(b.dataset.lib); });

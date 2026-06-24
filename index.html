@@ -10,6 +10,7 @@
 <meta name="theme-color" content="#1f2733" />
 <title>MathBoard</title>
 <link rel="manifest" href="./manifest.json" />
+<script src="./config.js"></script>
 <link rel="icon" href="./assets/logo.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="./assets/logo.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -17,7 +18,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=44" />
+<link rel="stylesheet" href="./css/app.css?v=45" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <script src="./vendor/jsxgraphcore.js" defer></script>
 <script src="./vendor/mathlive.min.js" defer></script>
@@ -82,6 +83,7 @@
       <button id="fit" title="Fit page">Fit</button>
       <button id="present-toggle" title="Present mode (classroom / projector)">Present</button>
       <button id="demo-toggle" title="Live Demo animation bar">Demo</button>
+      <button id="collab-toggle" class="hidden present-hide" title="Live collaboration (available when hosted online)">Collaborate</button>
       <button id="brand-toggle" title="Show/hide branding overlay">Brand</button>
       <div class="panel-menu-wrap present-hide">
         <button type="button" id="panel-menu" title="Panels menu">Panels ▾</button>
@@ -256,6 +258,7 @@
     <button type="button" id="demo-reset" class="demo-btn">⟲ Reset</button>
     <label class="demo-slab">t<input id="demo-slider" type="range" min="0" max="1000" value="0" /><span id="demo-val">0.00</span></label>
     <button type="button" id="demo-add" class="demo-btn">+ Demo point</button>
+    <button type="button" id="demo-force" class="demo-btn">+ Force</button>
     <button type="button" id="demo-close" class="demo-btn demo-x" title="Close demo bar">×</button>
   </div>
 
@@ -746,5 +749,5 @@
   </div>
 </section>
 
-<script type="module" src="./js/app.js?v=44"></script>
+<script type="module" src="./js/app.js?v=45"></script>
 </html>
