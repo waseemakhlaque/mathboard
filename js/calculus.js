@@ -32,8 +32,14 @@ function fmt(n) {
   return Math.abs(n - Math.round(n)) < 1e-3 ? String(Math.round(n)) : n.toFixed(3);
 }
 
+const _calcCompileCache = new Map();
 function compile(expr) {
-  try { return window.math.compile(expr); } catch (_) { return null; }
+  if (_calcCompileCache.has(expr)) return _calcCompileCache.get(expr);
+  let node = null;
+  try { node = window.math.compile(expr); } catch (_) { node = null; }
+  if (_calcCompileCache.size > 200) _calcCompileCache.clear();
+  _calcCompileCache.set(expr, node);
+  return node;
 }
 function evalAt(node, x) {
   if (!node) return NaN;

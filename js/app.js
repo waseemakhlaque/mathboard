@@ -685,19 +685,31 @@ const gridCy = () => PAGE_H / 2;
 const mathToPage = (x, y) => ({ x: gridCx() + x * UNIT, y: gridCy() - y * UNIT });
 const pageToMath = (px, py) => ({ x: (px - gridCx()) / UNIT, y: (gridCy() - py) / UNIT });
 
+// Memoised mathjs compile — avoids recompiling expressions every frame (esp. during live demo
+// animation, which redraws at ~60 fps). Cleared if it grows large.
+const _compileCache = new Map();
+function compileExpr(expr) {
+  let node = _compileCache.get(expr);
+  if (!node) {
+    node = math.compile(expr);            // throws on invalid expr — callers wrap in try/catch
+    if (_compileCache.size > 300) _compileCache.clear();
+    _compileCache.set(expr, node);
+  }
+  return node;
+}
 function evalFnY(f, x) {
   const num = (v, dflt) => (v != null && v !== '' ? Number(math.evaluate(String(v), calcScope())) : dflt);
   let A = num(f.amp, 1); if (!isFinite(A)) A = 1;
   let k = num(f.period, 1); if (!isFinite(k)) k = 1;
   let c = num(f.phase, 0); if (!isFinite(c)) c = 0;
   let dsh = num(f.vshift, 0); if (!isFinite(dsh)) dsh = 0;
-  const y = math.compile(f.expr).evaluate({ x: k * x + c });
+  const y = compileExpr(f.expr).evaluate({ x: k * x + c });
   return A * y + dsh;
 }
 function applyGraphAmp(f) { /* amp/period applied in evalFnY */ }
 function evalParam(f, t) {
-  const nx = math.compile(f.exprX || 't');
-  const ny = math.compile(f.exprY || 't');
+  const nx = compileExpr(f.exprX || 't');
+  const ny = compileExpr(f.exprY || 't');
   return { x: nx.evaluate({ t }), y: ny.evaluate({ t }) };
 }
 function fnPointAt(f, param) {
@@ -872,7 +884,7 @@ function drawFunctions(c, pg) {
     }
     if (!f.expr || !f.expr.trim()) continue;
     let node;
-    try { node = math.compile(f.expr); } catch (_) { continue; }
+    try { node = compileExpr(f.expr); } catch (_) { continue; }
     // precompute transform parameters A·f(k·x + φ) + d once per curve
     const pnum = (v, dflt) => { if (v == null || v === '') return dflt; try { const n = Number(math.evaluate(String(v), calcScope())); return isFinite(n) ? n : dflt; } catch (_) { return dflt; } };
     const A = pnum(f.amp, 1), k = pnum(f.period, 1), ph = pnum(f.phase, 0), vs = pnum(f.vshift, 0);
@@ -891,7 +903,14 @@ function drawFunctions(c, pg) {
     }
     c.stroke();
     c.fillStyle = f.color; c.font = '600 22px sans-serif';
-    c.fillText('y = ' + f.expr, 16, labelY); labelY += 28;
+    let lbl = 'y = ' + f.expr;
+    const tp = [];
+    if (A !== 1) tp.push('A=' + fmt(A));
+    if (k !== 1) tp.push('k=' + fmt(k));
+    if (ph !== 0) tp.push('φ=' + fmt(ph));
+    if (vs !== 0) tp.push('d=' + fmt(vs));
+    if (tp.length) lbl += '  [' + tp.join(', ') + ']';
+    c.fillText(lbl, 16, labelY); labelY += 28;
   }
 }
 
