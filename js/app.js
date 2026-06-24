@@ -73,6 +73,11 @@ const S = {
   touch: new Map(),         // pointerId -> {x,y} css
   gref: null,
   dirty: true,
+  // live demo animation engine (Module 1)
+  playing: false,           // demo bar Play/Pause state
+  demoT: 0,                 // normalized parameter 0..1 that animated objects read
+  demoPeriod: 5,            // seconds for one full sweep when playing
+  demoLast: 0,              // last rAF timestamp (ms)
 };
 
 let cv, ctx, dpr = 1;
@@ -456,6 +461,21 @@ function drawComplex(c, o, col) {
   c.font = '18px sans-serif';
   c.fillText(`|z| = ${z.mod.toFixed(2)}   arg ${formatAngle(z.argRad)}`, lx, ly + (o.omega ? 70 : 24));
 }
+// animated tracer: a point sweeping a circular path, driven by S.demoT (Module 1 demo primitive)
+function drawTracer(c, o) {
+  const col = o.color || '#2566c8';
+  const r = Math.hypot(o.edge.x - o.center.x, o.edge.y - o.center.y);
+  c.strokeStyle = col; c.globalAlpha = 0.35; c.lineWidth = 1.5; c.setLineDash([6, 6]);
+  c.beginPath(); c.arc(o.center.x, o.center.y, r, 0, Math.PI * 2); c.stroke();
+  c.setLineDash([]); c.globalAlpha = 1;
+  const ang = S.demoT * Math.PI * 2;
+  const px = o.center.x + Math.cos(ang) * r, py = o.center.y - Math.sin(ang) * r;
+  c.strokeStyle = col; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(o.center.x, o.center.y); c.lineTo(px, py); c.stroke();
+  c.fillStyle = col; c.beginPath(); c.arc(px, py, 7, 0, Math.PI * 2); c.fill();
+  c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke();
+  if (o.label) { c.fillStyle = col; c.font = '600 18px sans-serif'; c.fillText(o.label, px + 10, py - 8); }
+}
 function drawCircle(c, o, col) {
   const r = Math.hypot(o.edge.x - o.center.x, o.edge.y - o.center.y);
   c.strokeStyle = col; c.lineWidth = 3; c.setLineDash([]);
@@ -576,6 +596,7 @@ function drawObject(c, o) {
   }
   if (o.kind === 'complex') { drawComplex(c, o, col); return; }
   if (o.kind === 'circle') { drawCircle(c, o, col); return; }
+  if (o.kind === 'tracer') { drawTracer(c, o); return; }
   if (o.kind === 'image') {
     const img = objImage(o);
     const x0 = Math.min(o.from.x, o.to.x), y0 = Math.min(o.from.y, o.to.y);
@@ -921,6 +942,15 @@ function drawPageContent(c, pg) {
 }
 
 function render() {
+  // live demo: advance the parameter while playing and force a redraw each frame
+  if (S.playing && S.notebook && !$('#editor').classList.contains('hidden')) {
+    const now = performance.now();
+    const dt = (now - S.demoLast) / 1000; S.demoLast = now;
+    S.demoT += dt / Math.max(0.5, S.demoPeriod);
+    if (S.demoT > 1) S.demoT -= 1;
+    syncDemoUI();
+    S.dirty = true;
+  }
   if (S.dirty && S.notebook && !$('#editor').classList.contains('hidden')) {
     const r = cv.getBoundingClientRect();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1036,11 +1066,11 @@ function objectInLasso(o, poly) {
 // units, so moves/resizes are zoom-independent like everything else.
 function objPoints(o) {                 // the point refs that define an object's geometry
   if (o.kind === 'text' || o.kind === 'equation' || o.kind === 'complex' || o.kind === 'graphpt' || o.kind === 'intersect') return [o.at];
-  if (o.kind === 'circle') return [o.center, o.edge];
+  if (o.kind === 'circle' || o.kind === 'tracer') return [o.center, o.edge];
   return [o.from, o.to];               // vector / line / rect / ellipse
 }
 function objBBox(o) {
-  if (o.kind === 'circle') {
+  if (o.kind === 'circle' || o.kind === 'tracer') {
     const r = Math.hypot(o.edge.x - o.center.x, o.edge.y - o.center.y);
     return { x: o.center.x - r, y: o.center.y - r, w: 2 * r, h: 2 * r };
   }
@@ -1055,7 +1085,7 @@ function objBBox(o) {
 function objHandles(o) {                 // named drag handles, in page units
   if (o.kind === 'vector' || o.kind === 'line')
     return [{ name: 'from', x: o.from.x, y: o.from.y }, { name: 'to', x: o.to.x, y: o.to.y }];
-  if (o.kind === 'circle')
+  if (o.kind === 'circle' || o.kind === 'tracer')
     return [{ name: 'center', x: o.center.x, y: o.center.y }, { name: 'edge', x: o.edge.x, y: o.edge.y }];
   if (o.kind === 'complex')
     return [{ name: 'at', x: o.at.x, y: o.at.y }];
@@ -1431,7 +1461,7 @@ function objHit(o, p, r) {
   if (o.kind === 'tangent') return pointSegDist(p, o.from, o.to) < r + 4;
   if (o.kind === 'text') return pointInText(o, p);
   if (o.kind === 'complex') return Math.hypot(p.x - o.at.x, p.y - o.at.y) < r + 8;
-  if (o.kind === 'circle') {
+  if (o.kind === 'circle' || o.kind === 'tracer') {
     const rad = Math.hypot(o.edge.x - o.center.x, o.edge.y - o.center.y);
     const d = Math.hypot(p.x - o.center.x, p.y - o.center.y);
     return Math.abs(d - rad) < r || d < r;
@@ -2218,7 +2248,7 @@ function bindEditor() {
   $('#geo-clear').onclick = () => {
     if (confirm('Clear all geometry on this page?')) clearGeoPage();
   };
-  $('#back').onclick = () => { setPresentMode(false); setGeoTool(null); setInstTool(null); teardownGeo(); show('library'); renderLibrary(); };
+  $('#back').onclick = () => { S.playing = false; setPresentMode(false); setGeoTool(null); setInstTool(null); teardownGeo(); show('library'); renderLibrary(); };
 
   $('#nb-name').onchange = (e) => { S.notebook.title = e.target.value.trim() || 'Untitled lesson'; persist(); };
 
@@ -3170,6 +3200,47 @@ function setupRail() {
   };
 }
 
+// ---- live demo animation bar (Module 1) --------------------------------------
+function syncDemoUI() {
+  const s = $('#demo-slider'); if (s) s.value = Math.round(S.demoT * 1000);
+  const v = $('#demo-val'); if (v) v.textContent = S.demoT.toFixed(2);
+}
+function demoPlay(on) {
+  S.playing = on;
+  S.demoLast = performance.now();
+  const b = $('#demo-play');
+  if (b) { b.textContent = on ? '❚❚ Pause' : '► Play'; b.classList.toggle('brand-toggle-active', on); }
+  mark();
+}
+function demoReset() { demoPlay(false); S.demoT = 0; syncDemoUI(); mark(); }
+function addTracer() {
+  beginAction();
+  const o = {
+    id: uid(), kind: 'tracer',
+    center: { x: PAGE_W / 2, y: PAGE_H / 2 },
+    edge: { x: PAGE_W / 2 + 3 * UNIT, y: PAGE_H / 2 },
+    color: S.color, label: 'P',
+  };
+  objs().push(o);
+  commitAction();
+  thumbCache.delete(page().id);
+  S.selStrokes = []; S.selObj = o; S.tool = 'select';
+  if (cv) cv.classList.add('cur-select');
+  document.querySelectorAll('[data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === 'select'));
+  setTab('draw');
+  $('#demo-bar')?.classList.remove('hidden');
+  mark();
+}
+function setupDemo() {
+  $('#demo-toggle')?.addEventListener('click', () => $('#demo-bar')?.classList.toggle('hidden'));
+  $('#demo-close')?.addEventListener('click', () => { demoPlay(false); $('#demo-bar')?.classList.add('hidden'); });
+  $('#demo-play')?.addEventListener('click', () => demoPlay(!S.playing));
+  $('#demo-reset')?.addEventListener('click', demoReset);
+  $('#demo-slider')?.addEventListener('input', (e) => { if (S.playing) demoPlay(false); S.demoT = (+e.target.value || 0) / 1000; syncDemoUI(); mark(); });
+  $('#demo-add')?.addEventListener('click', addTracer);
+  syncDemoUI();
+}
+
 // ---- boot --------------------------------------------------------------------
 function init() {
   cv = $('#board');
@@ -3206,6 +3277,7 @@ function init() {
   setupText();
   setupPanelMenu();
   setupRail();
+  setupDemo();
   setupSyncSettings();
   $('#new-nb').onclick = createNotebook;
   document.querySelectorAll('.lib-tab').forEach((b) => { b.onclick = () => setLibTab(b.dataset.lib); });

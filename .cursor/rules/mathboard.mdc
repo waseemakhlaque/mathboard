@@ -1,0 +1,27 @@
+---
+description: MathBoard hard rules (vanilla, offline, no build)
+globs:
+alwaysApply: true
+---
+
+# MathBoard — hard rules (do NOT break)
+
+- **Vanilla only.** Plain JavaScript (ES modules) + HTML5 Canvas 2D + CSS. **NO framework**
+  (React/Vue/Svelte), **NO TypeScript**, **NO build step**, no bundler, no npm runtime deps.
+  It must stay a static site servable with `python3 -m http.server`.
+- **No backend.** Persistence is IndexedDB only; the app must work fully offline.
+- **All third-party libs are vendored** in `vendor/` (jspdf, pdf.js + worker, mathjs,
+  simple-statistics, uPlot, mathlive, jsxgraph, KaTeX fonts). Never add a runtime CDN `<script>`.
+- **Match existing style:** small helper functions, terse "why" comments, `const`-first.
+- **Wrap every mutating gesture** in `beginAction()` / `commitAction()` so undo/redo works.
+- **After editing `css/app.css` or `js/app.js` you MUST bump the cache version:** increment `?v=N`
+  on BOTH the `<link ... app.css?v=N>` and `<script ... app.js?v=N>` in `index.html`, and bump
+  `CACHE = 'mathboard-vN'` in `sw.js`. Add any new JS/asset to the `sw.js` ASSETS list.
+- **Coordinates:** everything stored in page units (`PAGE_W=1000 × PAGE_H=1414`, `UNIT=50`).
+  Camera is `{scale, offsetX, offsetY}`. `toPage()` converts screen→page; `snapPt()` snaps on grids.
+- **Objects:** `page.objects[]`, dispatched by `o.kind` in `drawObject()`; selectable/movable via the
+  Select tool (`objPoints/objBBox/objHandles/applyHandle/objHit`). Add new visuals as object kinds.
+- **Render loop:** single `requestAnimationFrame(render)`; redraw gated by `S.dirty` (set via `mark()`).
+- **Test in a real visible browser**; service worker is disabled on localhost. Hard-refresh
+  (Cmd+Shift+R) after asset changes. IndexedDB writes are debounced ~400 ms.
+- **One solid, verified module per round.**

@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=42" />
+<link rel="stylesheet" href="./css/app.css?v=43" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <script src="./vendor/jsxgraphcore.js" defer></script>
 <script src="./vendor/mathlive.min.js" defer></script>
@@ -81,6 +81,7 @@
       <button id="redo" title="Redo (⇧⌘Z)">Redo</button>
       <button id="fit" title="Fit page">Fit</button>
       <button id="present-toggle" title="Present mode (classroom / projector)">Present</button>
+      <button id="demo-toggle" title="Live Demo animation bar">Demo</button>
       <button id="brand-toggle" title="Show/hide branding overlay">Brand</button>
       <div class="panel-menu-wrap present-hide">
         <button type="button" id="panel-menu" title="Panels menu">Panels ▾</button>
@@ -247,6 +248,15 @@
         <button type="button" id="strip-add" class="strip-add" title="Add page after current">+</button>
       </div>
     </div>
+  </div>
+
+  <div id="demo-bar" class="demo-bar hidden">
+    <span class="demo-title">Live Demo</span>
+    <button type="button" id="demo-play" class="demo-btn">► Play</button>
+    <button type="button" id="demo-reset" class="demo-btn">⟲ Reset</button>
+    <label class="demo-slab">t<input id="demo-slider" type="range" min="0" max="1000" value="0" /><span id="demo-val">0.00</span></label>
+    <button type="button" id="demo-add" class="demo-btn">+ Demo point</button>
+    <button type="button" id="demo-close" class="demo-btn demo-x" title="Close demo bar">×</button>
   </div>
 
   <div id="stats" class="stats-panel hidden">
@@ -736,5 +746,5 @@
   </div>
 </section>
 
-<script type="module" src="./js/app.js?v=42"></script>
+<script type="module" src="./js/app.js?v=43"></script>
 </html>
