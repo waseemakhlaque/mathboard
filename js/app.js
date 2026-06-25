@@ -516,6 +516,59 @@ function drawForceVec(c, o) {
   c.fillStyle = '#1f9d57'; c.fillText(`Fx = ${fmt(Fx)}`, (o.at.x + corner.x) / 2 - 24, o.at.y + (Fy >= 0 ? 20 : -8));
   c.fillStyle = '#2566c8'; c.fillText(`Fy = ${fmt(Fy)}`, corner.x + 8, (corner.y + tip.y) / 2);
 }
+// labelled arrow used by the live mechanics primitives
+function labeledArrow(c, a, b, col, dashed, lab) {
+  c.strokeStyle = col; c.fillStyle = col; c.lineWidth = dashed ? 2 : 3; c.setLineDash(dashed ? [8, 6] : []);
+  c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke(); c.setLineDash([]);
+  if (Math.hypot(b.x - a.x, b.y - a.y) > 4) {
+    const ang = Math.atan2(b.y - a.y, b.x - a.x), h = 13;
+    c.beginPath(); c.moveTo(b.x, b.y);
+    c.lineTo(b.x - h * Math.cos(ang - 0.4), b.y - h * Math.sin(ang - 0.4));
+    c.lineTo(b.x - h * Math.cos(ang + 0.4), b.y - h * Math.sin(ang + 0.4));
+    c.closePath(); c.fill();
+  }
+  if (lab) { c.font = '600 14px sans-serif'; c.fillStyle = col; c.fillText(lab, b.x + 5, b.y - 4); }
+}
+// inclined-plane block (Module 3): drag/animate the slope angle; weight, normal, friction +
+// along/perpendicular components all update live.
+function inclineLiveAngle(o) {
+  const base = o.anim ? (5 + S.demoT * 80) : (o.angleDeg || 30);
+  return Math.max(5, Math.min(85, base));
+}
+function inclineGeom(o) {
+  const a = o.at, B = o.base || 300, ang = inclineLiveAngle(o) * Math.PI / 180;
+  const h = B * Math.tan(ang);
+  return { a, B, ang, h, b: { x: a.x + B, y: a.y }, top: { x: a.x + B, y: a.y - h } };
+}
+function drawInclineObj(c, o) {
+  const { a, ang, b, top } = inclineGeom(o);
+  c.fillStyle = 'rgba(200,210,220,0.35)'; c.strokeStyle = '#5a6570'; c.lineWidth = 2.5; c.setLineDash([]);
+  c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.lineTo(top.x, top.y); c.closePath(); c.fill(); c.stroke();
+  c.strokeStyle = '#88929c'; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(a.x - 50, a.y); c.lineTo(b.x + 40, b.y); c.stroke();
+  // up-slope unit (a -> top) and outward normal (away from interior corner b)
+  const hx = top.x - a.x, hy = top.y - a.y, len = Math.hypot(hx, hy) || 1;
+  const ux = hx / len, uy = hy / len;
+  let outx = uy, outy = -ux;                       // a perpendicular
+  const mid = { x: a.x + hx * 0.5, y: a.y + hy * 0.5 };
+  if ((b.x - mid.x) * outx + (b.y - mid.y) * outy > 0) { outx = -outx; outy = -outy; }
+  // block on the slope
+  const bw = 46, bh = 30;
+  c.save(); c.translate(mid.x, mid.y); c.rotate(Math.atan2(uy, ux));
+  c.fillStyle = '#c8d4e0'; c.strokeStyle = '#4a5560'; c.lineWidth = 2;
+  c.fillRect(-bw / 2, -bh, bw, bh); c.strokeRect(-bw / 2, -bh, bw, bh);
+  c.restore();
+  const C = { x: mid.x + outx * (bh / 2 + 2), y: mid.y + outy * (bh / 2 + 2) };
+  const m = o.mass || 2, g = 9.8, mg = m * g, mu = o.mu || 0, FS = 4;
+  const N = mg * Math.cos(ang);
+  labeledArrow(c, C, { x: C.x, y: C.y + mg * FS }, '#1f9d57', false, 'mg');                                  // weight
+  labeledArrow(c, C, { x: C.x + outx * N * FS, y: C.y + outy * N * FS }, '#2566c8', false, 'N');             // normal
+  labeledArrow(c, C, { x: C.x - ux * mg * Math.sin(ang) * FS, y: C.y - uy * mg * Math.sin(ang) * FS }, '#e0892a', true, 'mg sinα'); // down-slope
+  labeledArrow(c, C, { x: C.x - outx * mg * Math.cos(ang) * FS, y: C.y - outy * mg * Math.cos(ang) * FS }, '#8a4fd0', true, 'mg cosα'); // into slope
+  if (mu > 0) { const f = mu * N; labeledArrow(c, C, { x: C.x + ux * f * FS, y: C.y + uy * f * FS }, '#d23b3b', false, 'f'); }
+  c.fillStyle = '#4a5560'; c.font = '600 16px sans-serif';
+  c.fillText(`α = ${Math.round(inclineLiveAngle(o))}°   m = ${fmt(m)} kg   μ = ${fmt(mu)}`, a.x + 6, a.y - 12);
+}
 function drawCircle(c, o, col) {
   const r = Math.hypot(o.edge.x - o.center.x, o.edge.y - o.center.y);
   c.strokeStyle = col; c.lineWidth = 3; c.setLineDash([]);
@@ -638,6 +691,7 @@ function drawObject(c, o) {
   if (o.kind === 'circle') { drawCircle(c, o, col); return; }
   if (o.kind === 'tracer') { drawTracer(c, o); return; }
   if (o.kind === 'forcevec') { drawForceVec(c, o); return; }
+  if (o.kind === 'incline') { drawInclineObj(c, o); return; }
   if (o.kind === 'image') {
     const img = objImage(o);
     const x0 = Math.min(o.from.x, o.to.x), y0 = Math.min(o.from.y, o.to.y);
@@ -1125,7 +1179,7 @@ function objectInLasso(o, poly) {
 // body to move it, or drag a handle to reshape it. Geometry is stored in page
 // units, so moves/resizes are zoom-independent like everything else.
 function objPoints(o) {                 // the point refs that define an object's geometry
-  if (o.kind === 'text' || o.kind === 'equation' || o.kind === 'complex' || o.kind === 'graphpt' || o.kind === 'intersect' || o.kind === 'forcevec') return [o.at];
+  if (o.kind === 'text' || o.kind === 'equation' || o.kind === 'complex' || o.kind === 'graphpt' || o.kind === 'intersect' || o.kind === 'forcevec' || o.kind === 'incline') return [o.at];
   if (o.kind === 'circle' || o.kind === 'tracer') return [o.center, o.edge];
   return [o.from, o.to];               // vector / line / rect / ellipse
 }
@@ -1142,6 +1196,10 @@ function objBBox(o) {
     const x0 = Math.min(o.at.x, tip.x), y0 = Math.min(o.at.y, tip.y);
     return { x: x0, y: y0, w: Math.abs(tip.x - o.at.x), h: Math.abs(tip.y - o.at.y) };
   }
+  if (o.kind === 'incline') {
+    const g = inclineGeom(o);
+    return { x: g.a.x - 50, y: g.top.y - 70, w: g.B + 110, h: (g.a.y - g.top.y) + 120 };
+  }
   if (o.kind === 'graphpt' || o.kind === 'intersect') return { x: o.at.x - 12, y: o.at.y - 12, w: 24, h: 24 };
   if (o.kind === 'tangent') return { x: Math.min(o.from.x, o.to.x), y: Math.min(o.from.y, o.to.y), w: Math.abs(o.to.x - o.from.x), h: Math.abs(o.to.y - o.from.y) };
   const x0 = Math.min(o.from.x, o.to.x), y0 = Math.min(o.from.y, o.to.y);
@@ -1157,6 +1215,10 @@ function objHandles(o) {                 // named drag handles, in page units
   if (o.kind === 'forcevec') {
     const tip = forceTip(o);
     return [{ name: 'at', x: o.at.x, y: o.at.y }, { name: 'tip', x: tip.x, y: tip.y }];
+  }
+  if (o.kind === 'incline') {
+    const g = inclineGeom(o);
+    return [{ name: 'at', x: o.at.x, y: o.at.y }, { name: 'apex', x: g.top.x, y: g.top.y }];
   }
   if (o.kind === 'rect' || o.kind === 'ellipse' || o.kind === 'image') {
     const x0 = Math.min(o.from.x, o.to.x), y0 = Math.min(o.from.y, o.to.y),
@@ -1176,6 +1238,11 @@ function applyHandle(o, name, p) {        // drag a handle to point p (snapped o
     const dx = p.x - o.at.x, dy = o.at.y - p.y;   // y up
     o.mag = Math.max(0.1, Math.round(Math.hypot(dx, dy) / FORCE_SCALE * 10) / 10);
     o.angleDeg = Math.atan2(dy, dx) * 180 / Math.PI - (o.anim ? S.demoT * 360 : 0);
+  }
+  else if (name === 'apex') {
+    o.anim = false;                                // grabbing the apex switches to manual angle
+    const h = Math.max(20, o.at.y - p.y);
+    o.angleDeg = Math.max(5, Math.min(85, Math.atan(h / (o.base || 300)) * 180 / Math.PI));
   }
   else if (name === 'at') o.at = sp;
   else if (name === 'edge') o.edge = sp;
@@ -1534,6 +1601,7 @@ function objHit(o, p, r) {
   if (o.kind === 'graphpt' || o.kind === 'intersect') return Math.hypot(p.x - o.at.x, p.y - o.at.y) < r + 10;
   if (o.kind === 'tangent') return pointSegDist(p, o.from, o.to) < r + 4;
   if (o.kind === 'forcevec') return pointSegDist(p, o.at, forceTip(o)) < r + 6 || Math.hypot(p.x - o.at.x, p.y - o.at.y) < r + 8;
+  if (o.kind === 'incline') { const bb = objBBox(o); return p.x >= bb.x - r && p.x <= bb.x + bb.w + r && p.y >= bb.y - r && p.y <= bb.y + bb.h + r; }
   if (o.kind === 'text') return pointInText(o, p);
   if (o.kind === 'complex') return Math.hypot(p.x - o.at.x, p.y - o.at.y) < r + 8;
   if (o.kind === 'circle' || o.kind === 'tracer') {
@@ -3322,6 +3390,13 @@ function addForceVec() {
   commitAction();
   selectNewObject(o);
 }
+function addIncline() {
+  beginAction();
+  const o = { id: uid(), kind: 'incline', at: { x: PAGE_W / 2 - 150, y: PAGE_H / 2 + 130 }, base: 300, angleDeg: 30, mass: 2, mu: 0.2, anim: true };
+  objs().push(o);
+  commitAction();
+  selectNewObject(o);
+}
 function setupDemo() {
   $('#demo-toggle')?.addEventListener('click', () => $('#demo-bar')?.classList.toggle('hidden'));
   $('#demo-close')?.addEventListener('click', () => { demoPlay(false); $('#demo-bar')?.classList.add('hidden'); });
@@ -3330,6 +3405,7 @@ function setupDemo() {
   $('#demo-slider')?.addEventListener('input', (e) => { if (S.playing) demoPlay(false); S.demoT = (+e.target.value || 0) / 1000; syncDemoUI(); mark(); });
   $('#demo-add')?.addEventListener('click', addTracer);
   $('#demo-force')?.addEventListener('click', addForceVec);
+  $('#demo-incline')?.addEventListener('click', addIncline);
   syncDemoUI();
 }
 
