@@ -26,14 +26,14 @@ Mac, Windows, iPad, or Android, installs to the home screen as an app, and works
 - **Offline PWA** — all libraries bundled locally; no internet needed after first load.
 
 ## Try it
-- **Live:** _enable GitHub Pages and put the URL here_ (e.g. `https://<username>.github.io/mathboard/`)
+- **Live:** [https://waseemakhlaque.github.io/mathboard/](https://waseemakhlaque.github.io/mathboard/)
 - **Locally:**
   ```bash
-  git clone https://github.com/<username>/mathboard.git
+  git clone https://github.com/waseemakhlaque/mathboard.git
   cd mathboard
-  python3 -m http.server 5173
+  python3 -m http.server 8080
   ```
-  Open <http://localhost:5173>.
+  Open <http://localhost:8080>.
 
 ## Use on an iPad (same Wi-Fi)
 1. Run the server on your computer (command above).
@@ -60,12 +60,19 @@ A full project assessment, a redesigned architecture, and the build + hosting pl
 
 Original phased plan (still valid for the notebook core): [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-## Deploy to the web (Vercel)
-MathBoard is a static site, so hosting is trivial and free:
-- **Vercel:** push this folder to a GitHub repo, then "Import Project" on vercel.com (no build step —
-  it's detected as static). Or run `npx vercel` from this folder. `vercel.json` is already included.
-- **GitHub Pages / Netlify / Cloudflare Pages:** also work with zero config.
-No backend, no n8n, no server code — it's just files.
+## Deploy to the web
+MathBoard is a static site with **no build step** — just serve the files.
+
+### GitHub Pages (recommended)
+1. Push to `main` — the included [`.github/workflows/pages.yml`](.github/workflows/pages.yml) deploys automatically.
+2. In the repo **Settings → Pages**, set **Source** to **GitHub Actions** (if not already).
+3. The app is live at **https://waseemakhlaque.github.io/mathboard/** after the first workflow run.
+
+### Vercel / Netlify / Cloudflare Pages
+- **Vercel:** import the GitHub repo on vercel.com (no build command; output directory = `.`). `vercel.json` is included.
+- **Netlify / Cloudflare Pages:** also work with zero config — publish the repo root as a static site.
+
+No backend, no server code — it's just files.
 
 ## License
 [MIT](LICENSE) © 2026 Waseem Akhlaque. Free to use, modify, and share — please keep the copyright

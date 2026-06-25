@@ -1,7 +1,7 @@
 // sw.js — offline support.
 // Same-origin app files: network-first (always get the latest, fall back to cache offline).
 // Cross-origin CDN (jsPDF): cache-first (immutable, fine to pin).
-const CACHE = 'mathboard-v46';
+const CACHE = 'mathboard-v47';
 // NOTE: js/collab/* is intentionally NOT precached — collaboration is loaded only via dynamic
 // import() when collabAvailable() is true, so the offline solo app never fetches it.
 const ASSETS = [
@@ -33,6 +33,26 @@ const ASSETS = [
   './vendor/simple-statistics.min.js',
   './vendor/uPlot.iife.min.js',
   './vendor/uPlot.min.css',
+  './vendor/fonts/KaTeX_AMS-Regular.woff2',
+  './vendor/fonts/KaTeX_Caligraphic-Bold.woff2',
+  './vendor/fonts/KaTeX_Caligraphic-Regular.woff2',
+  './vendor/fonts/KaTeX_Fraktur-Bold.woff2',
+  './vendor/fonts/KaTeX_Fraktur-Regular.woff2',
+  './vendor/fonts/KaTeX_Main-Bold.woff2',
+  './vendor/fonts/KaTeX_Main-BoldItalic.woff2',
+  './vendor/fonts/KaTeX_Main-Italic.woff2',
+  './vendor/fonts/KaTeX_Main-Regular.woff2',
+  './vendor/fonts/KaTeX_Math-BoldItalic.woff2',
+  './vendor/fonts/KaTeX_Math-Italic.woff2',
+  './vendor/fonts/KaTeX_SansSerif-Bold.woff2',
+  './vendor/fonts/KaTeX_SansSerif-Italic.woff2',
+  './vendor/fonts/KaTeX_SansSerif-Regular.woff2',
+  './vendor/fonts/KaTeX_Script-Regular.woff2',
+  './vendor/fonts/KaTeX_Size1-Regular.woff2',
+  './vendor/fonts/KaTeX_Size2-Regular.woff2',
+  './vendor/fonts/KaTeX_Size3-Regular.woff2',
+  './vendor/fonts/KaTeX_Size4-Regular.woff2',
+  './vendor/fonts/KaTeX_Typewriter-Regular.woff2',
 ];
 
 self.addEventListener('install', (e) => {
