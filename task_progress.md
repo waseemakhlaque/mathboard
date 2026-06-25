@@ -1,0 +1,3 @@
+- [x] Fix: Add drawInstruments to drawPageContent() for PNG/PDF export
+- [x] Add equation editor (KaTeX) — new object kind 'equation'
+- [x] Bump version to v31 in index.html, sw.js, app.js
