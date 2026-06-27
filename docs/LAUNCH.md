@@ -88,10 +88,11 @@ Push to `main`; **Settings → Pages → Deploy from branch → `main` / root**.
 Note: caching headers (`_headers`/`vercel.json`) are ignored by GitHub Pages — fine for personal use.
 
 ### After deploy
-- [ ] Custom domain + HTTPS (Cloudflare: Pages project → Custom domains)
+- [ ] Custom domain + HTTPS (Cloudflare: Pages/Workers project → Custom domains)
 - [ ] PWA installs on iPad from the deployed URL (Share → Add to Home Screen)
 - [ ] Service worker registers (it runs on the deployed host, not on localhost)
-- [ ] `config.js` on the host has **empty** secrets unless you intend cloud sync
+- [ ] `config.js` on the host has Supabase **anon** credentials for cloud sync (already set in repo)
+- [ ] GitHub Actions secrets `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` if using `.github/workflows/cloudflare-deploy.yml`
 - [ ] No `config.local.js` is published (it stays local / gitignored; a 404 is handled gracefully)
 
 ## 5. iPad (same Wi-Fi)

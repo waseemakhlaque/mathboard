@@ -1,9 +1,9 @@
 // MathBoard runtime config — plain script (NOT an ES module), loaded before app.js.
-// Empty by default so the solo / offline app never reaches out to any server.
-// On a deployed host, fill in Supabase values for cloud sync (see docs/SUPABASE-SETUP.md).
+// Supabase anon key is public (client-side). Do not put service-role secrets here.
+// Override locally via gitignored config.local.js (see config.example.js).
 window.MB_CONFIG = {
-  collabServerUrl: '',
-  supabaseUrl: '',
-  supabaseAnonKey: '',
+  supabaseUrl: 'https://mjiuhdcxdllurizffvik.supabase.co',
+  supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qaXVoZGN4ZGxsdXJpemZmdmlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0OTg0NDAsImV4cCI6MjA5ODA3NDQ0MH0.YFdbJRYeaEXf25GdMvzTzJHx_Vl8R9EERAmdIyG3whQ',
   syncApiUrl: '',  // optional; defaults to supabaseUrl + /functions/v1/mathboard
+  collabServerUrl: '',  // set wss:// URL when collab server is deployed (Phase 9)
 };
