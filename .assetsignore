@@ -1,0 +1,16 @@
+# Keep non-runtime files out of a `wrangler pages deploy .` upload.
+# Only the static app (index.html, js/, css/, vendor/, assets/, sw.js,
+# manifest.json, config.js, _headers) needs to ship to users.
+.git
+.github
+.claude
+.cursor
+node_modules
+collab-server
+supabase
+scripts
+docs
+*.md
+.DS_Store
+.env
+.env.example
