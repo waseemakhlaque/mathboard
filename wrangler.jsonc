@@ -11,8 +11,7 @@
     // (docs, supabase/, collab-server/, .git, node_modules) out of the upload,
     // and `_headers` applies the cache-control rules.
     "directory": ".",
-    "html_handling": "auto-trailing-slash",
-    "not_found_handling": "single-page-application"
+    "html_handling": "auto-trailing-slash"
   },
   "observability": {
     "enabled": true

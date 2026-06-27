@@ -58,7 +58,7 @@ wrangler login                        # opens browser, authorise once
 wrangler pages deploy . --project-name mathboard
 ```
 
-First run creates the project and prints a live URL like `https://mathboard.pages.dev`.
+First run creates the project and prints a live URL like `https://mathboard.waseemakhlaque85.workers.dev`.
 Re-run the last command any time to publish updates. `.git`, `node_modules`, and everything in
 `.assetsignore` are skipped automatically.
 

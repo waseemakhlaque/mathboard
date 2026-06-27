@@ -26,7 +26,7 @@ Mac, Windows, iPad, or Android, installs to the home screen as an app, and works
 - **Offline PWA** — all libraries bundled locally; no internet needed after first load.
 
 ## Try it
-- **Live:** [https://waseemakhlaque.github.io/mathboard/](https://waseemakhlaque.github.io/mathboard/)
+- **Live:** [https://mathboard.waseemakhlaque85.workers.dev/](https://mathboard.waseemakhlaque85.workers.dev/)
 - **Locally:**
   ```bash
   git clone https://github.com/waseemakhlaque/mathboard.git
