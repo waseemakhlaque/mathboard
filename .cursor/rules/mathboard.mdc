@@ -1,56 +1,27 @@
 ---
-description: MathBoard — vanilla, offline PWA whiteboard for A-level maths. Hard rules, architecture, and workflow for every code change.
+description: MathBoard hard rules (vanilla, offline, no build)
 globs:
 alwaysApply: true
 ---
 
-You are continuing MathBoard — a pencil-first, OFFLINE PWA whiteboard for teaching
-A-level Mathematics (Cambridge 9709) on iPad + Mac. Author: Waseem Akhlaque.
+# MathBoard — hard rules (do NOT break)
 
-HARD RULES (never break, no exceptions):
-- Vanilla only: plain JavaScript (ES modules) + HTML5 Canvas 2D + CSS. NO framework,
-  NO build step, NO TypeScript, NO bundler, NO npm runtime dependencies. It must stay a
-  static site runnable with `python3 -m http.server`.
-- No backend. Persistence is IndexedDB only (js/storage.js). Must work fully offline.
-- All third-party libraries are vendored locally in vendor/. NEVER add a CDN <script>.
-  To add a lib, download the file into vendor/ and reference the local path.
-- Match the existing code style in js/app.js: small helper functions, terse "why" comments,
-  const-first. Read the neighbouring code before adding to any section.
-- Wrap EVERY data mutation in beginAction()/commitAction() so undo/redo keeps working.
-- CACHE-BUMP RULE: after ANY edit to css/app.css or js/app.js you MUST increment ?v=N on
-  BOTH the app.css and app.js tags in index.html, AND bump CACHE='mathboard-vN' in sw.js.
-  Forgetting this serves stale code. Do it as the final step of every change.
-
-KEY FILES:
-- index.html — single page, both views (library + editor) + all floating panels. Bump ?v=N here.
-- css/app.css — all styles.
-- js/app.js (~1400 lines) — the whole app: state object S, render loop, tools, panels.
-- js/storage.js — IndexedDB wrapper (DB 'mathboard', store 'notebooks', keyPath 'id').
-- sw.js — service worker (offline). Bump CACHE on asset changes. Disabled on localhost.
-- vendor/ — offline libs (jspdf, pdf.js + worker, mathjs, simple-statistics, uPlot).
-
-ARCHITECTURE:
-- Data model: notebook {id,title,pages[]} -> page {id, paper, strokes[], objects[],
-  background?, functions?, showResultant, showConjugate}. Persisted debounced 400ms via persist().
-- Coordinates: everything stored in PAGE UNITS (PAGE_W=1000 x PAGE_H=1414, A4) so pan/zoom
-  never distorts saved work. Camera = {scale, offsetX, offsetY}. UNIT=50 page units = "1" on
-  the grid. toPage(cssX,cssY) converts screen->page. snapPt() snaps to integer grid on grid
-  papers (argand/vectorgrid/axes) only.
-- Strokes: {tool,color,width,points:[{x,y,p}]} with midpoint-quadratic smoothing.
-- Objects (page.objects[]), o.kind in vector|line|rect|ellipse|complex|circle|text.
-  drawObject() dispatches by kind; objHit() used by eraser + selection.
-- Tools (S.tool): pen, highlighter, eraser, lasso (moves STROKES), select (moves/resizes
-  OBJECTS via objHandles/applyHandle), line, rect, ellipse, vector, plotz, circle, text.
-- Undo: beginAction() snapshots the page; commitAction() pushes to S.undo if it changed.
-- Floating panels (draggable): #calc (mathjs), #stats (simple-statistics + uPlot), #graph
-  (function grapher). PDF import: PDF.js -> offscreen canvas FILLED WHITE FIRST -> JPEG dataURL.
-
-WORKFLOW (follow on every request):
-1. Read the relevant files first. Never edit blind.
-2. Give a SHORT plan before writing code.
-3. Do ONE solid, self-contained change per round — implement OR fix, then stop.
-4. Wrap mutations in beginAction/commitAction. Keep it vanilla and static.
-5. Bump ?v=N (index.html x2) and CACHE (sw.js) as the last step.
-6. End with: which files changed + what each change does, confirmation you bumped the version,
-   and a short step-by-step test checklist for http://localhost:8080 (remind me to hard-refresh
-   with Cmd+Shift+R). Verify the change yourself before claiming it works where possible.
+- **Vanilla only.** Plain JavaScript (ES modules) + HTML5 Canvas 2D + CSS. **NO framework**
+  (React/Vue/Svelte), **NO TypeScript**, **NO build step**, no bundler, no npm runtime deps.
+  It must stay a static site servable with `python3 -m http.server`.
+- **No backend.** Persistence is IndexedDB only; the app must work fully offline.
+- **All third-party libs are vendored** in `vendor/` (jspdf, pdf.js + worker, mathjs,
+  simple-statistics, uPlot, mathlive, jsxgraph, KaTeX fonts). Never add a runtime CDN `<script>`.
+- **Match existing style:** small helper functions, terse "why" comments, `const`-first.
+- **Wrap every mutating gesture** in `beginAction()` / `commitAction()` so undo/redo works.
+- **After editing `css/app.css` or `js/app.js` you MUST bump the cache version:** increment `?v=N`
+  on BOTH the `<link ... app.css?v=N>` and `<script ... app.js?v=N>` in `index.html`, and bump
+  `CACHE = 'mathboard-vN'` in `sw.js`. Add any new JS/asset to the `sw.js` ASSETS list.
+- **Coordinates:** everything stored in page units (`PAGE_W=1000 × PAGE_H=1414`, `UNIT=50`).
+  Camera is `{scale, offsetX, offsetY}`. `toPage()` converts screen→page; `snapPt()` snaps on grids.
+- **Objects:** `page.objects[]`, dispatched by `o.kind` in `drawObject()`; selectable/movable via the
+  Select tool (`objPoints/objBBox/objHandles/applyHandle/objHit`). Add new visuals as object kinds.
+- **Render loop:** single `requestAnimationFrame(render)`; redraw gated by `S.dirty` (set via `mark()`).
+- **Test in a real visible browser**; service worker is disabled on localhost. Hard-refresh
+  (Cmd+Shift+R) after asset changes. IndexedDB writes are debounced ~400 ms.
+- **One solid, verified module per round.**

@@ -1,0 +1,11 @@
+{
+  "name": "mathboard-collab-server",
+  "private": true,
+  "description": "Optional Yjs websocket server for MathBoard Phase 9 (not part of the static PWA)",
+  "scripts": {
+    "start": "HOST=0.0.0.0 PORT=1234 npx y-websocket"
+  },
+  "dependencies": {
+    "y-websocket": "^2.0.4"
+  }
+}

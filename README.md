@@ -26,19 +26,19 @@ Mac, Windows, iPad, or Android, installs to the home screen as an app, and works
 - **Offline PWA** — all libraries bundled locally; no internet needed after first load.
 
 ## Try it
-- **Live:** _enable GitHub Pages and put the URL here_ (e.g. `https://<username>.github.io/mathboard/`)
+- **Live:** [https://waseemakhlaque.github.io/mathboard/](https://waseemakhlaque.github.io/mathboard/)
 - **Locally:**
   ```bash
-  git clone https://github.com/<username>/mathboard.git
+  git clone https://github.com/waseemakhlaque/mathboard.git
   cd mathboard
-  python3 -m http.server 5173
+  python3 -m http.server 8080
   ```
-  Open <http://localhost:5173>.
+  Open <http://localhost:8080> (or any free port, e.g. `5173` if `8080` is taken).
 
 ## Use on an iPad (same Wi-Fi)
 1. Run the server on your computer (command above).
 2. Find your computer's LAN IP (e.g. `192.168.1.24`).
-3. On the iPad, open Safari → `http://192.168.1.24:5173`.
+3. On the iPad, open Safari → `http://192.168.1.24:8080` (same port as on the Mac).
 4. Share → **Add to Home Screen** to install it as a full-screen app, then draw with the Apple Pencil.
 
 ## Live class / YouTube
@@ -51,17 +51,40 @@ Vanilla JavaScript + HTML5 Canvas. [jsPDF](https://github.com/parallax/jsPDF) fo
 [Mozilla PDF.js](https://github.com/mozilla/pdf.js) for PDF import (both bundled in `vendor/`).
 No frameworks, no build tooling.
 
-## Roadmap
-Planned modules (each plugs onto the notebook core): Vectors → Complex/Argand → Geometry →
-Trigonometry → Statistics → Mechanics, plus a free fx-991-equivalent scientific calculator.
-See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+## Roadmap & project review
+A full project assessment, a redesigned architecture, and the build + hosting plan (local Mac/iPad
+→ online live teaching portal) are in `docs/`:
+- [`docs/ASSESSMENT.md`](docs/ASSESSMENT.md) — feature‑by‑feature gap analysis (what's done / partial / missing).
+- [`docs/ARCHITECTURE-V2.md`](docs/ARCHITECTURE-V2.md) — the redesigned architecture (core + plug‑ins, two shells, three runtimes).
+- [`docs/ROADMAP-V2.md`](docs/ROADMAP-V2.md) — phased roadmap + how to run locally and how to go live online.
 
-## Deploy to the web (Vercel)
-MathBoard is a static site, so hosting is trivial and free:
-- **Vercel:** push this folder to a GitHub repo, then "Import Project" on vercel.com (no build step —
-  it's detected as static). Or run `npx vercel` from this folder. `vercel.json` is already included.
-- **GitHub Pages / Netlify / Cloudflare Pages:** also work with zero config.
-No backend, no n8n, no server code — it's just files.
+Original phased plan (still valid for the notebook core): [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
+## Deploy to the web
+MathBoard is a static site with **no build step** — just serve the files.
+
+### GitHub Pages (recommended)
+1. Push to `main` — the included [`.github/workflows/pages.yml`](.github/workflows/pages.yml) deploys automatically.
+2. In the repo **Settings → Pages**, set **Source** to **GitHub Actions** (if not already).
+3. The app is live at **https://waseemakhlaque.github.io/mathboard/** after the first workflow run.
+
+### Vercel / Netlify / Cloudflare Pages
+- **Vercel:** import the GitHub repo on vercel.com (no build command; output directory = `.`). `vercel.json` is included.
+- **Netlify / Cloudflare Pages:** also work with zero config — publish the repo root as a static site.
+
+No backend, no server code — it's just files.
+
+## Documentation & setup guides
+
+For contributors, developers, and advanced configuration:
+- [`CLINE-TASK.md`](CLINE-TASK.md) — Development task list and debugging workflow
+- [`docs/LAUNCH.md`](docs/LAUNCH.md) — Pre-deployment checklist and smoke testing
+- [`docs/SUPABASE-SETUP.md`](docs/SUPABASE-SETUP.md) — Cloud sync setup (optional, free tier)
+- [`docs/ASSESSMENT.md`](docs/ASSESSMENT.md) — Feature-by-feature gap analysis
+- [`docs/ROADMAP-V2.md`](docs/ROADMAP-V2.md) — Development roadmap and architecture
+
+### Notes on offline capability
+All JavaScript libraries, math engines, and fonts (KaTeX) are bundled locally. The app loads the **Inter** font family from Google Fonts CDN for optimal typography on first visit; after that initial load, the app works fully offline. If offline on first visit, it falls back to system fonts.
 
 ## License
 [MIT](LICENSE) © 2026 Waseem Akhlaque. Free to use, modify, and share — please keep the copyright
