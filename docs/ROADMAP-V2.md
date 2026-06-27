@@ -28,9 +28,13 @@ land early, and the **portal** is built on a stable base.
 > - ✅ **Phase 4 (trig part)** — interactive unit circle + amplitude/period/phase/shift sliders.
 > - ✅ **Statistics** — box plot + shaded normal‑distribution curve added.
 > - ✅ **Font fix** — vendored KaTeX woff2 fonts so MathLive natural display renders correctly.
+> - ✅ **Phase 1 polish** — layers panel, large-media blob store, notebook search, page management.
+> - ✅ **Phase 4 graphing** — dedicated graph view + trig sliders + unit circle.
+> - ✅ **Phase 6** — draggable instruments, geometry transforms + intersection, editable mechanics
+>   (pulleys, moments).
+> - ✅ **Phase 6.5 — Live AR Studio** — webcam + Three.js + 2D ink (`js/studio/*`).
 >
-> Still to do below: notebook polish, GeoGebra‑grade graphing, instruments/stats/mechanics finish,
-> then the online phases (cloud sync → classroom backend → live multi‑user → live A/V).
+> Still to do below: **online portal** (cloud backend → realtime collab → live A/V).
 
 ### Phase 0 — Refactor to core + plug‑ins (foundation)
 *Enables everything else; no new features for the user.*
@@ -43,9 +47,9 @@ land early, and the **portal** is built on a stable base.
 - **Done when:** the current app behaves identically but is modular, and large PDFs import without
   bloating IndexedDB/exports.
 
-### Phase 1 — Notebook polish (close GoodNotes/OneNote gaps) 🟡 mostly done
+### Phase 1 — Notebook polish (close GoodNotes/OneNote gaps) ✅ done
 *Done: page duplicate/delete/reorder, section delete, dotted/ruled papers, clear-page (undoable),
-place-chart-on-page. Remaining: layers panel, large-media (blob) handling, search.*
+place-chart-on-page, layers panel, large-media blob store, search.*
 - **Layers** panel + object reordering; **page management** (reorder/duplicate/delete) UI.
 - Larger **paper library** (lined/dotted/music/cover) + per‑page grid on/off already exists.
 - **Large‑media** handling: lazy PDF page render, size budget, blob storage (from Phase 0).
@@ -67,7 +71,7 @@ place-chart-on-page. Remaining: layers panel, large-media (blob) handling, searc
 - Wire ∫ and d/dx as first‑class actions (and into the calculator in Phase 5).
 - **Done when:** you can teach differentiation + integration visually on a page, with area shading.
 
-### Phase 4 — **GeoGebra‑grade graphing** + trigonometry teaching 🟡 trig done (unit circle + sliders)
+### Phase 4 — **GeoGebra‑grade graphing** + trigonometry teaching ✅ done
 - A dedicated **graphing view** with auto axis scaling, gridlines/labels, pan/zoom.
 - **Sliders / parameters** (a, b, k…) that live‑update curves.
 - **Unit‑circle** widget (angle → sin/cos/tan), and **amplitude/period/phase** sliders for trig.
@@ -84,7 +88,7 @@ place-chart-on-page. Remaining: layers panel, large-media (blob) handling, searc
   constants/conversions; reuse existing MathLive display, S⇔D, table, matrix/vector.
 - **Done when:** it looks like the photos and behaves like the device for A‑level use.
 
-### Phase 6 — Instruments + geometry + stats/mechanics finish
+### Phase 6 — Instruments + geometry + stats/mechanics finish ✅ done
 - **Draggable physical instruments** (OpenBoard‑style ruler/protractor/compass you align and trace
   along, with snap‑to‑edge ink).
 - Geometry **transformations** (translate/rotate/reflect/enlarge) + midpoint/intersection/bisector.
@@ -93,7 +97,7 @@ place-chart-on-page. Remaining: layers panel, large-media (blob) handling, searc
 - Mechanics: make placed diagrams **editable**; add connected particles/pulleys & moments (stretch).
 - **Done when:** instruments feel physical and the remaining stats/mechanics items are covered.
 
-### Phase 6.5 — **Live AR Studio Layout** (before going online)
+### Phase 6.5 — **Live AR Studio Layout** ✅ done
 Build the webcam + 3D/AR + annotation compositing studio per **[`AR-STUDIO.md`](./AR-STUDIO.md)**:
 single full‑screen `<canvas>` (60 fps) blending getUserMedia video, optional MediaPipe Selfie
 Segmentation (chroma/transparent toggle), a vendored **Three.js** scene driven by a
@@ -102,12 +106,15 @@ annotations — in a distraction‑free Presentation Window Mode for clean Zoom/
 Implemented as vanilla ES modules (`js/studio/*`) to honour the no‑build rule. Requested explicitly
 to be delivered **after offline polish and before the online portal**.
 
-### Phase 7 — **Cloud sync** (single‑user, multi‑device)
+### Phase 7 — **Cloud sync** (single‑user, multi‑device) ✅ client done
 - Stand up the backend (Supabase recommended): Auth + Postgres + Storage + RLS.
 - Implement the **REST persistence adapter** (the stub in `share.js` already targets this shape):
   your notebooks sync across Mac/iPad; blobs go to object storage.
 - **Done when:** you log in on any device and see your boards; offline still works and merges on
   reconnect.
+- **Implemented:** hybrid local-first sync (`js/share.js` + `js/auth.js`), Edge Function +
+  migration SQL, Sync UI with sign-in / merge / background push. Deploy Supabase per
+  [`SUPABASE-SETUP.md`](./SUPABASE-SETUP.md).
 
 ### Phase 8 — **Classroom shell** (BrainCert‑style UI, single presenter) 🟡 front‑end done
 - Build `shells/classroom/`: left pinnable tool rail + "Close All", 16:9 board, bottom page tabs,

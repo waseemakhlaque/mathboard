@@ -12,6 +12,8 @@ let draft = {
   incline: { angleDeg: 30, mass: 2, mu: 0, showComponents: true },
   projectile: { u: 12, thetaDeg: 40, g: 9.8, showVel: true },
   motion: { graph: 'vt', u: 5, a: -2, tMax: 6 },
+  pulley: { m1: 2, m2: 1.5, g: 9.8 },
+  moment: { force: 10, dist: 1.2, angleDeg: 90 },
 };
 
 export function setupMech(h) { hooks = h; }
@@ -72,6 +74,12 @@ function buildItem(kind, at) {
   }
   if (kind === 'motion') {
     return { id, kind, at, ...draft.motion, w: 300, h: 180 };
+  }
+  if (kind === 'pulley') {
+    return { id, kind, at, ...draft.pulley };
+  }
+  if (kind === 'moment') {
+    return { id, kind, at, ...draft.moment, beamLen: 220 };
   }
   return { id, kind, at };
 }
@@ -204,6 +212,56 @@ function drawProjectile(c, item) {
   c.fillText(`R ≈ ${fmt(range)} m`, item.at.x + range * sc * 0.45, item.at.y + 48);
 }
 
+function drawPulley(c, item) {
+  const cx = item.at.x, top = item.at.y;
+  const r = 22, gap = 70;
+  c.strokeStyle = '#5a6570'; c.lineWidth = 2.5;
+  c.beginPath(); c.arc(cx, top + r, r, 0, Math.PI * 2); c.stroke();
+  c.beginPath();
+  c.moveTo(cx - gap, top + r * 2 + 80);
+  c.lineTo(cx - gap, top + r);
+  c.arc(cx, top + r, r, Math.PI, 0, false);
+  c.lineTo(cx + gap, top + r * 2 + 80);
+  c.stroke();
+  const m1 = item.m1 || 2, m2 = item.m2 || 1.5;
+  c.fillStyle = '#2566c8'; c.strokeStyle = '#1f2733'; c.lineWidth = 2;
+  c.fillRect(cx - gap - 28, top + r * 2 + 80, 56, 36); c.strokeRect(cx - gap - 28, top + r * 2 + 80, 56, 36);
+  c.fillRect(cx + gap - 28, top + r * 2 + 80, 56, 36); c.strokeRect(cx + gap - 28, top + r * 2 + 80, 56, 36);
+  c.fillStyle = '#1b1b1b'; c.font = '600 16px sans-serif';
+  c.fillText(`m₁=${m1} kg`, cx - gap - 30, top + r * 2 + 130);
+  c.fillText(`m₂=${m2} kg`, cx + gap - 30, top + r * 2 + 130);
+  const a = ((m1 - m2) * (item.g || 9.8)) / (m1 + m2);
+  c.fillStyle = '#4a5560'; c.font = '600 15px sans-serif';
+  c.fillText(`a ≈ ${fmt(a)} m/s²`, cx - 36, top - 8);
+}
+
+function drawMoment(c, item) {
+  const pivot = item.at;
+  const len = item.beamLen || 220;
+  const left = { x: pivot.x - len / 2, y: pivot.y };
+  const right = { x: pivot.x + len / 2, y: pivot.y };
+  c.strokeStyle = '#5a6570'; c.lineWidth = 4; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(left.x, left.y); c.lineTo(right.x, right.y); c.stroke();
+  c.fillStyle = '#2566c8'; c.beginPath();
+  c.moveTo(pivot.x, pivot.y - 10); c.lineTo(pivot.x + 14, pivot.y + 8); c.lineTo(pivot.x - 14, pivot.y + 8);
+  c.closePath(); c.fill();
+  const d = (item.dist || 1.2) * 50;
+  const fx = pivot.x + d;
+  const f = item.force || 10;
+  const ang = item.angleDeg ?? 90;
+  const to = forceEnd({ x: fx, y: pivot.y }, f, ang, MECH_SCALE * 0.1);
+  drawArrow(c, { x: fx, y: pivot.y }, to, '#d23b3b', false);
+  c.fillStyle = '#d23b3b'; c.font = '600 16px sans-serif';
+  c.fillText(`F=${f} N`, to.x + 6, to.y - 4);
+  c.strokeStyle = '#88929c'; c.lineWidth = 1.5; c.setLineDash([6, 4]);
+  c.beginPath(); c.moveTo(pivot.x, pivot.y); c.lineTo(fx, pivot.y); c.stroke();
+  c.setLineDash([]);
+  c.fillStyle = '#4a5560'; c.font = '600 15px sans-serif';
+  c.fillText(`d=${item.dist} m`, pivot.x + d / 2 - 16, pivot.y + 18);
+  const moment = f * (item.dist || 1.2) * Math.sin(rad(ang));
+  c.fillText(`M ≈ ${fmt(moment)} N·m`, pivot.x - 40, pivot.y - 24);
+}
+
 function drawMotionGraph(c, item) {
   const x0 = item.at.x, y0 = item.at.y, w = item.w || 300, h = item.h || 180;
   const u = +item.u || 0, a = +item.a || 0, tMax = Math.max(1, +item.tMax || 5);
@@ -241,12 +299,72 @@ function drawMotionGraph(c, item) {
   c.fillText(eq, ox + 8, oy - gh + 18);
 }
 
+let selMech = null;
+
+export function selectedMechItem() { return selMech; }
+export function setSelectedMech(item) { selMech = item || null; }
+
+export function mechBBox(item) {
+  if (item.kind === 'motion') {
+    const w = item.w || 300, h = item.h || 180;
+    return { x: item.at.x, y: item.at.y - h, w, h };
+  }
+  if (item.kind === 'projectile') {
+    const sc = item.scale || MECH_SCALE;
+    const u = item.u || 10, th = rad(item.thetaDeg || 40), g = item.g || 9.8;
+    const ux = u * Math.cos(th), uy = u * Math.sin(th);
+    const tFlight = 2 * uy / g;
+    const range = ux * tFlight;
+    return { x: item.at.x - 20, y: item.at.y - 40, w: range * sc + 60, h: 120 };
+  }
+  if (item.kind === 'incline') {
+    const base = item.len || 280, alpha = rad(item.angleDeg || 30);
+    const h = base * Math.tan(alpha);
+    return { x: item.at.x - 50, y: item.at.y - h - 70, w: base + 110, h: h + 120 };
+  }
+  if (item.kind === 'pulley') {
+    return { x: item.at.x - 60, y: item.at.y - 20, w: 120, h: 180 };
+  }
+  if (item.kind === 'moment') {
+    const len = item.beamLen || 220;
+    return { x: item.at.x - len / 2 - 40, y: item.at.y - 80, w: len + 80, h: 100 };
+  }
+  return { x: item.at.x - 80, y: item.at.y - 80, w: 160, h: 160 };
+}
+
+export function hitMechItem(p, item, tol = 14) {
+  const b = mechBBox(item);
+  return p.x >= b.x - tol && p.x <= b.x + b.w + tol && p.y >= b.y - tol && p.y <= b.y + b.h + tol;
+}
+
+export function hitMech(p, tol) {
+  const pg = hooks.page?.();
+  if (!pg?.mechItems?.length) return null;
+  for (let i = pg.mechItems.length - 1; i >= 0; i--) {
+    if (hitMechItem(p, pg.mechItems[i], tol)) return pg.mechItems[i];
+  }
+  return null;
+}
+
+export function moveMechItem(item, dx, dy) {
+  item.at.x += dx;
+  item.at.y += dy;
+}
+
 export function drawMechItems(c, pg) {
   for (const item of pg.mechItems || []) {
+    if (item === selMech) {
+      const b = mechBBox(item);
+      c.strokeStyle = '#2566c8'; c.lineWidth = 2; c.setLineDash([8, 6]);
+      c.strokeRect(b.x - 4, b.y - 4, b.w + 8, b.h + 8);
+      c.setLineDash([]);
+    }
     if (item.kind === 'forces') drawForceDiagram(c, item);
     else if (item.kind === 'incline') drawIncline(c, item);
     else if (item.kind === 'projectile') drawProjectile(c, item);
     else if (item.kind === 'motion') drawMotionGraph(c, item);
+    else if (item.kind === 'pulley') drawPulley(c, item);
+    else if (item.kind === 'moment') drawMoment(c, item);
   }
 }
 
@@ -294,6 +412,8 @@ function bindDraft() {
   const mpv = document.getElementById('mp-vel');
   if (mpv) mpv.onchange = () => { draft.projectile.showVel = mpv.checked; };
   bind3(['mm-u', 'mm-a', 'mm-t'], draft.motion, ['u', 'a', 'tMax']);
+  bind3(['mpul-m1', 'mpul-m2'], draft.pulley, ['m1', 'm2']);
+  bind3(['mmom-f', 'mmom-d', 'mmom-ang'], draft.moment, ['force', 'dist', 'angleDeg']);
   document.querySelectorAll('[data-mgraph]').forEach((b) => {
     b.onclick = () => {
       draft.motion.graph = b.dataset.mgraph;

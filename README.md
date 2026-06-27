@@ -33,12 +33,12 @@ Mac, Windows, iPad, or Android, installs to the home screen as an app, and works
   cd mathboard
   python3 -m http.server 8080
   ```
-  Open <http://localhost:8080>.
+  Open <http://localhost:8080> (or any free port, e.g. `5173` if `8080` is taken).
 
 ## Use on an iPad (same Wi-Fi)
 1. Run the server on your computer (command above).
 2. Find your computer's LAN IP (e.g. `192.168.1.24`).
-3. On the iPad, open Safari → `http://192.168.1.24:5173`.
+3. On the iPad, open Safari → `http://192.168.1.24:8080` (same port as on the Mac).
 4. Share → **Add to Home Screen** to install it as a full-screen app, then draw with the Apple Pencil.
 
 ## Live class / YouTube
@@ -73,6 +73,18 @@ MathBoard is a static site with **no build step** — just serve the files.
 - **Netlify / Cloudflare Pages:** also work with zero config — publish the repo root as a static site.
 
 No backend, no server code — it's just files.
+
+## Documentation & setup guides
+
+For contributors, developers, and advanced configuration:
+- [`CLINE-TASK.md`](CLINE-TASK.md) — Development task list and debugging workflow
+- [`docs/LAUNCH.md`](docs/LAUNCH.md) — Pre-deployment checklist and smoke testing
+- [`docs/SUPABASE-SETUP.md`](docs/SUPABASE-SETUP.md) — Cloud sync setup (optional, free tier)
+- [`docs/ASSESSMENT.md`](docs/ASSESSMENT.md) — Feature-by-feature gap analysis
+- [`docs/ROADMAP-V2.md`](docs/ROADMAP-V2.md) — Development roadmap and architecture
+
+### Notes on offline capability
+All JavaScript libraries, math engines, and fonts (KaTeX) are bundled locally. The app loads the **Inter** font family from Google Fonts CDN for optimal typography on first visit; after that initial load, the app works fully offline. If offline on first visit, it falls back to system fonts.
 
 ## License
 [MIT](LICENSE) © 2026 Waseem Akhlaque. Free to use, modify, and share — please keep the copyright

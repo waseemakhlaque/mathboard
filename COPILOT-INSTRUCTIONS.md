@@ -59,20 +59,19 @@ A Level Mathematics Teacher. MIT licensed © 2026 Waseem Akhlaque.
 
 ## Already BUILT & working
 Notebook library + sections + paginated A4 pages; paper templates; pen/highlighter/eraser/lasso;
-undo/redo; pinch-zoom/pan + palm rejection; PDF import + annotate; image insert; PNG + multi-page
-PDF export; Vectors; Complex/Argand + loci; JSXGraph geometry + instruments; Mechanics; Calculus;
-function grapher + unit circle + trig sliders; Statistics (histogram/box/normal/regression);
-fx-991ES PLUS calculator; Select tool; classroom shell; branding + logo; live demo animation bar;
-offline PWA; GitHub Pages + Vercel deploy.
+undo/redo; pinch-zoom/pan + palm rejection; PDF import + annotate (blob store); image insert;
+PNG + multi-page PDF export; Vectors; Complex/Argand + loci; JSXGraph geometry + transformations
+(translate/rotate/reflect/enlarge) + intersection; draggable instruments; Mechanics (editable diagrams,
+pulleys, moments); Calculus; function grapher + dedicated graph view + unit circle + trig sliders;
+Statistics; fx-991ES PLUS calculator; Select tool; Layers panel; notebook search; classroom shell;
+branding + logo; live demo animation bar; Live AR Studio (webcam + Three.js); offline PWA;
+GitHub Pages + Vercel deploy; cloud sync client (REST adapter — needs backend).
 
 ## Remaining tasks (priority order — do ONE solid, verified module per round)
-1. **Large-media handling** — move PDF/image blobs out of notebook JSON into IndexedDB blob store.
-2. **Draggable physical instruments** (OpenBoard-style ruler/protractor/compass you align and trace).
-3. **Geometry transformations** (translate/rotate/reflect/enlarge) + intersection tool.
-4. **GeoGebra-grade graphing view** — dedicated pannable/zoomable axes with general sliders.
-5. **Mechanics editability** — select/move placed diagrams; pulleys/moments (stretch).
-6. **Live AR Studio** — see `docs/AR-STUDIO.md` (webcam + Three.js + annotations).
-7. **Online portal** — cloud sync (Phase 7), realtime collab (Phase 9), live A/V (Phase 10).
+1. **Online portal backend** — Supabase (Auth + Postgres + Storage) + REST endpoints for `share.js`.
+2. **Live multi-user** — Yjs + websocket; awareness cursors; rooms/roles (`js/collab/collab.js` stub).
+3. **Live A/V classroom** — WebRTC SFU (LiveKit) + TURN; recording.
+4. **Stretch:** solids of revolution, slope fields, MediaPipe segmentation in AR Studio, infinite canvas.
 
 See [`docs/ROADMAP-V2.md`](docs/ROADMAP-V2.md) for the full phased plan and hosting guide.
 

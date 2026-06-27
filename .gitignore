@@ -2,3 +2,5 @@
 *.log
 Thumbs.db
 .claude/
+config.local.js
+collab-server/node_modules/

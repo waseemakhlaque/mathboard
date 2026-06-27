@@ -11,6 +11,7 @@ export function normalizePage(p) {
   if (!p || typeof p !== 'object') return { id: genId(), paper: 'graph', strokes: [], objects: [] };
   if (!p.id) p.id = genId();
   if (!p.paper) p.paper = 'graph';
+  if (p.format !== 'wide') p.format = 'a4';
   if (!Array.isArray(p.strokes)) p.strokes = [];
   if (!Array.isArray(p.objects)) p.objects = [];
   if (!Array.isArray(p.functions)) p.functions = [];
@@ -60,7 +61,8 @@ export function allPages(nb) {
 /** Infer lesson vs past-paper notebook kind. */
 export function notebookKind(nb) {
   if (nb.kind === 'paper' || nb.kind === 'lesson') return nb.kind;
-  return allPages(nb).some((p) => p.background?.type === 'image') ? 'paper' : 'lesson';
+  return allPages(nb).some((p) => p.background?.type === 'image' || p.background?.type === 'pdf-page' || p.background?.blobId)
+    ? 'paper' : 'lesson';
 }
 
 /** Normalize full notebook for storage, export, or sync. */

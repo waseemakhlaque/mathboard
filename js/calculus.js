@@ -1,13 +1,14 @@
 // calculus.js — A-level calculus visual tools, drawn on the page grid (origin = page centre).
-// Kinds: deriv (f′ curve + stationary points), integral (∫ area under a curve),
-// between (area between two curves), riemann (rectangle/trapezium sums), tangent (+ normal).
+// Kinds: deriv, integral, between, riemann, tangent, slopefield (dy/dx = f(x,y) arrows).
 // Self-contained: evaluates expressions with window.math; maps to page units via hooks.
+
+import { mathjsDerivative } from './algebra.js';
 
 let hooks = {};
 
 const COL = {
   deriv: '#e0892a', integral: '#2566c8', between: '#1f9d57',
-  riemann: '#8a4fd0', tangent: '#d23b3b', stationary: '#d23b3b',
+  riemann: '#8a4fd0', tangent: '#d23b3b', stationary: '#d23b3b', slopefield: '#5a6570',
 };
 
 const draft = {
@@ -16,6 +17,7 @@ const draft = {
   between: { expr1: 'x + 2', expr2: 'x^2', a: -1, b: 2 },
   riemann: { expr: 'x^2', a: 0, b: 2, n: 8, rule: 'mid' },
   tangent: { expr: 'x^3 - 3*x', x0: 1, normal: false },
+  slopefield: { expr: 'x - y', step: 1, len: 0.35 },
 };
 
 export function setupCalculus(h) { hooks = h; }
@@ -23,10 +25,11 @@ export function setupCalculus(h) { hooks = h; }
 function page() { return hooks.page?.(); }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function unit() { return hooks.unit || 50; }
-function W() { return hooks.pageW || 1000; }
-function H() { return hooks.pageH || 1414; }
-function mathToPage(x, y) { return { x: W() / 2 + x * unit(), y: H() / 2 - y * unit() }; }
+function W() { return typeof hooks.pageW === 'function' ? hooks.pageW() : (hooks.pageW || 1000); }
+function H() { return typeof hooks.pageH === 'function' ? hooks.pageH() : (hooks.pageH || 1414); }
 function xMinMax() { const r = (W() / 2) / unit(); return [-r, r]; }
+function yMinMax() { const r = (H() / 2) / unit(); return [-r, r]; }
+function mathToPage(x, y) { return { x: W() / 2 + x * unit(), y: H() / 2 - y * unit() }; }
 function fmt(n) {
   if (!isFinite(n)) return '—';
   return Math.abs(n - Math.round(n)) < 1e-3 ? String(Math.round(n)) : n.toFixed(3);
@@ -44,6 +47,10 @@ function compile(expr) {
 function evalAt(node, x) {
   if (!node) return NaN;
   try { const y = node.evaluate({ x }); return typeof y === 'number' ? y : NaN; } catch (_) { return NaN; }
+}
+function evalAtXY(node, x, y) {
+  if (!node) return NaN;
+  try { const v = node.evaluate({ x, y }); return typeof v === 'number' ? v : NaN; } catch (_) { return NaN; }
 }
 function deriv1(node, x, h = 1e-4) { return (evalAt(node, x + h) - evalAt(node, x - h)) / (2 * h); }
 function deriv2(node, x, h = 1e-3) { return (evalAt(node, x + h) - 2 * evalAt(node, x) + evalAt(node, x - h)) / (h * h); }
@@ -89,6 +96,7 @@ export function drawCalcItems(c, pg) {
     else if (item.kind === 'between') drawBetween(c, item);
     else if (item.kind === 'riemann') drawRiemann(c, item);
     else if (item.kind === 'tangent') drawTangent(c, item);
+    else if (item.kind === 'slopefield') drawSlopeField(c, item);
   }
 }
 
@@ -125,10 +133,10 @@ function drawDeriv(c, item) {
   // f'(x) sampled numerically, drawn dashed
   const dnode = { evaluate: ({ x }) => deriv1(f, x) };
   drawCurvePath(c, dnode, item.color, [12, 8]);
-  const [xmin, xmax] = xMinMax();
-  const mid = mathToPage(xmin + (xmax - xmin) * 0.18, deriv1(f, xmin + (xmax - xmin) * 0.18));
-  label(c, `y = ${item.expr}′`, 16, 30, item.color);
+  const dSym = mathjsDerivative(item.expr);
+  label(c, dSym ? `f′(x) = ${dSym}` : `f′(x) (${item.expr})`, 16, 30, item.color);
   if (item.showStationary !== false) {
+    const [xmin, xmax] = xMinMax();
     let prev = null;
     for (let x = xmin; x <= xmax; x += 0.02) {
       const d = deriv1(f, x);
@@ -279,6 +287,36 @@ function drawTangent(c, item) {
   label(c, `tangent at x=${fmt(x0)}: m = ${fmt(m)}`, p.x + 10, p.y - 10, item.color);
 }
 
+function drawSlopeField(c, item) {
+  const f = compile(item.expr);
+  if (!f) return;
+  const step = Math.max(0.25, +item.step || 1);
+  const half = Math.max(0.08, Math.min(1.2, +item.len || 0.35));
+  const [xmin, xmax] = xMinMax();
+  const [ymin, ymax] = yMinMax();
+  c.strokeStyle = item.color;
+  c.lineWidth = 1.6;
+  c.lineCap = 'round';
+  for (let x = Math.ceil(xmin / step) * step; x <= xmax; x += step) {
+    for (let y = Math.ceil(ymin / step) * step; y <= ymax; y += step) {
+      const m = evalAtXY(f, x, y);
+      if (!isFinite(m)) continue;
+      let dx = 1, dy = m;
+      const len = Math.hypot(dx, dy);
+      if (len < 1e-9) continue;
+      dx = (dx / len) * half;
+      dy = (dy / len) * half;
+      const p1 = mathToPage(x - dx, y - dy);
+      const p2 = mathToPage(x + dx, y + dy);
+      c.beginPath();
+      c.moveTo(p1.x, p1.y);
+      c.lineTo(p2.x, p2.y);
+      c.stroke();
+    }
+  }
+  label(c, `dy/dx = ${item.expr}`, 16, 28, item.color);
+}
+
 // ---- panel -------------------------------------------------------------------
 function showPane(name) {
   document.querySelectorAll('.cal-pane').forEach((p) => p.classList.toggle('hidden', p.id !== 'cal-' + name));
@@ -316,6 +354,9 @@ export function setupCalculusPanel() {
   bindField('cal-t-expr', draft.tangent, 'expr');
   bindField('cal-t-x0', draft.tangent, 'x0', true);
   bindField('cal-t-normal', draft.tangent, 'normal');
+  bindField('cal-s-expr', draft.slopefield, 'expr');
+  bindField('cal-s-step', draft.slopefield, 'step', true);
+  bindField('cal-s-len', draft.slopefield, 'len', true);
   const rr = document.getElementById('cal-r-rule');
   if (rr) { rr.value = draft.riemann.rule; rr.onchange = () => { draft.riemann.rule = rr.value; }; }
 
