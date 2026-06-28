@@ -63,14 +63,17 @@ export async function initStudio(container) {
   const out = container.querySelector('#studio-output-canvas');
   if (!out) throw new Error('Studio canvas missing.');
 
+  // Camera is OPTIONAL. iOS Home-Screen PWAs block getUserMedia and many
+  // classrooms have no camera, so a failure must not kill the studio — we
+  // fall back to a clean 3D-only viewer (still fully usable for 3D maths).
+  let cameraOn = false;
   try {
     stream = await getCameraStream();
     video.srcObject = stream;
     await video.play();
+    cameraOn = true;
   } catch (e) {
-    showErr(cameraErrMsg(e));
-    teardownStudio();
-    throw e;
+    showErr(cameraErrMsg(e) + ' Showing 3D only.');
   }
 
   renderer = new THREE.WebGLRenderer({ canvas: out, alpha: true, antialias: true });
@@ -85,13 +88,18 @@ export async function initStudio(container) {
   scene.add(light);
   scene.add(new THREE.AmbientLight(0x666666));
 
-  bgTex = new THREE.VideoTexture(video);
-  bgTex.minFilter = THREE.LinearFilter;
-  const bgGeo = new THREE.PlaneGeometry(16, 9);
-  const bgMat = new THREE.MeshBasicMaterial({ map: bgTex, side: THREE.DoubleSide });
-  bgMesh = new THREE.Mesh(bgGeo, bgMat);
-  bgMesh.position.z = -4;
-  scene.add(bgMesh);
+  if (cameraOn) {
+    bgTex = new THREE.VideoTexture(video);
+    bgTex.minFilter = THREE.LinearFilter;
+    const bgGeo = new THREE.PlaneGeometry(16, 9);
+    const bgMat = new THREE.MeshBasicMaterial({ map: bgTex, side: THREE.DoubleSide });
+    bgMesh = new THREE.Mesh(bgGeo, bgMat);
+    bgMesh.position.z = -4;
+    scene.add(bgMesh);
+  } else {
+    // No camera → solid dark backdrop so the 3D scene reads clearly.
+    scene.background = new THREE.Color(0x0b1020);
+  }
 
   addObject('grid');
   if (annotCv) bindAnnot(annotCv);
