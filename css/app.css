@@ -1229,6 +1229,31 @@ math-field.calc-expr:focus-within { outline: none; }
 .sync-auth-btns { margin-top: 8px; margin-bottom: 4px; }
 .sync-user { margin: 0 0 8px; font-size: 13px; }
 
+/* in-app dialogs (replace native alert/confirm/prompt — broken in iOS PWAs) */
+.mb-modal { z-index: 300; }
+.mb-modal-msg { margin: 0 0 2px; font-size: 14px; line-height: 1.5; color: var(--text); }
+.mb-modal-input { width: 100%; margin-top: 12px; box-sizing: border-box; }
+.mb-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%) translateY(16px);
+  background: rgba(15, 23, 42, 0.94);
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  max-width: min(440px, 90vw);
+  text-align: center;
+  box-shadow: var(--shadow-xl);
+  z-index: 400;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s var(--ease), transform 0.2s var(--ease);
+}
+.mb-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
 /* ---------- Responsive ---------- */
 @media (max-width: 900px) {
   .tbar-top .panel-btns { display: none; }

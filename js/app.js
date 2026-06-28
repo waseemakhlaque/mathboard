@@ -2228,6 +2228,65 @@ function busy(on, msg) {
   el.querySelector('.busy-msg').textContent = msg || 'Working…';
   el.classList.toggle('hidden', !on);
 }
+
+// ---- in-app dialogs ---------------------------------------------------------
+// iOS Home-Screen PWAs suppress native alert()/confirm()/prompt(), so on iPad
+// those calls silently no-op — which is why Delete/Rename appeared "disabled".
+// These touch-friendly modals replace them and work everywhere.
+function mbModal({ title, message, fields = [], okText = 'OK', cancelText = 'Cancel', danger = false }) {
+  return new Promise((resolve) => {
+    const back = document.createElement('div');
+    back.className = 'sync-dialog mb-modal';
+    const inputs = fields.map((f, i) =>
+      `<input class="ct-in mb-modal-input" data-i="${i}" type="text" value="${escapeHtml(f.value || '')}" placeholder="${escapeHtml(f.placeholder || '')}" />`
+    ).join('');
+    back.innerHTML = `<div class="sync-box" role="dialog" aria-modal="true">
+      ${title ? `<h3>${escapeHtml(title)}</h3>` : ''}
+      ${message ? `<p class="mb-modal-msg">${escapeHtml(message)}</p>` : ''}
+      ${inputs}
+      <div class="sync-btns">
+        <button type="button" class="${danger ? 'danger' : 'primary'} mb-ok">${escapeHtml(okText)}</button>
+        ${cancelText ? `<button type="button" class="ghost mb-cancel">${escapeHtml(cancelText)}</button>` : ''}
+      </div>
+    </div>`;
+    document.body.appendChild(back);
+    const close = (val) => { back.remove(); resolve(val); };
+    const inEls = [...back.querySelectorAll('.mb-modal-input')];
+    back.querySelector('.mb-ok').onclick = () =>
+      close(fields.length ? inEls.map((el) => el.value) : true);
+    back.querySelector('.mb-cancel')?.addEventListener('click', () => close(fields.length ? null : false));
+    back.addEventListener('click', (e) => { if (e.target === back) close(fields.length ? null : false); });
+    back.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (fields.length <= 1)) back.querySelector('.mb-ok').click();
+      if (e.key === 'Escape') back.querySelector('.mb-cancel')?.click();
+    });
+    (inEls[0] || back.querySelector('.mb-ok')).focus();
+    inEls[0]?.select?.();
+  });
+}
+async function mbConfirm(message, { okText = 'OK', danger = false, title = '' } = {}) {
+  return mbModal({ title, message, okText, danger });
+}
+async function mbPrompt(message, value = '', { okText = 'Save', title = '' } = {}) {
+  const r = await mbModal({ title, message, fields: [{ value }], okText });
+  return r ? r[0].trim() : null;
+}
+let toastTimer = null;
+function mbToast(message) {
+  let el = $('#mb-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'mb-toast';
+    el.className = 'mb-toast';
+    document.body.appendChild(el);
+  }
+  el.textContent = String(message);
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3600);
+}
+// Route native alert() through the toast so error feedback is visible on iPad.
+window.alert = (m) => mbToast(m);
 function withTimeout(promise, ms, label) {
   let t;
   const timer = new Promise((_, rej) => { t = setTimeout(() => rej(new Error(label + ' timed out')), ms); });
@@ -2268,7 +2327,7 @@ async function renderPdfToPages(arrayBuffer) {
   const n = pdf.numPages;
   if (pdfImportNeedsConfirm(arrayBuffer.byteLength, n)) {
     const mb = (arrayBuffer.byteLength / 1e6).toFixed(1);
-    if (!confirm(`This PDF is ${mb} MB with ${n} pages. Pages render as you view them (notebook stays small). Continue?`)) {
+    if (!await mbConfirm(`This PDF is ${mb} MB with ${n} pages. Pages render as you view them (notebook stays small). Continue?`, { okText: 'Continue', title: 'Import PDF' })) {
       throw new Error('Import cancelled.');
     }
   }
@@ -2378,13 +2437,19 @@ async function renderLibrary() {
         </div>
       </div>`;
     card.querySelector('.open').onclick = () => openNotebook(nb.id);
+    // Tapping the cover/title opens the lesson too (GoodNotes-style) — on iPad
+    // users tap the notebook, not the small button.
+    card.querySelector('.nb-thumb')?.addEventListener('click', () => openNotebook(nb.id));
+    card.querySelector('.nb-title')?.addEventListener('click', () => openNotebook(nb.id));
     card.querySelector('.exp').onclick = () => exportNotebookJSON(nb).catch((e) => alert(e.message));
     card.querySelector('.ren').onclick = async () => {
-      const t = prompt('Rename', nb.title);
-      if (t) { nb.title = t.trim(); nb.updated = Date.now(); await sync.push(nb); renderLibrary(); }
+      const t = await mbPrompt('Rename lesson', nb.title, { title: 'Rename' });
+      if (t) { nb.title = t; nb.updated = Date.now(); await sync.push(nb); renderLibrary(); }
     };
     card.querySelector('.del').onclick = async () => {
-      if (confirm(`Delete "${nb.title}"? This cannot be undone.`)) { await sync.remove(nb.id); renderLibrary(); }
+      if (await mbConfirm(`Delete "${nb.title}"? This cannot be undone.`, { okText: 'Delete', danger: true, title: 'Delete lesson' })) {
+        await sync.remove(nb.id); renderLibrary();
+      }
     };
     list.appendChild(card);
   }
@@ -2487,8 +2552,8 @@ async function createNotebook() {
   }
 }
 
-function clearPage() {
-  if (!confirm('Clear everything on this page? You can undo with ⌘Z.')) return;
+async function clearPage() {
+  if (!await mbConfirm('Clear everything on this page? You can undo with ⌘Z.', { okText: 'Clear', danger: true, title: 'Clear page' })) return;
   const pg = page();
   beginAction();
   pg.strokes = []; pg.objects = []; pg.functions = [];
@@ -2541,9 +2606,9 @@ function duplicatePage(i) {
   clearSelection(); teardownGeo(); loadGeoPage(page());
   updatePageLabel(); persist(); mark();
 }
-function deletePage(i) {
+async function deletePage(i) {
   if (pages().length <= 1) { alert('A notebook needs at least one page.'); return; }
-  if (!confirm(`Delete page ${i + 1}? This cannot be undone.`)) return;
+  if (!await mbConfirm(`Delete page ${i + 1}? This cannot be undone.`, { okText: 'Delete', danger: true, title: 'Delete page' })) return;
   flushGeo();
   thumbCache.delete(pages()[i].id);
   pages().splice(i, 1);
@@ -2561,10 +2626,10 @@ function movePage(i, dir) {
   else if (S.pageIndex === j) S.pageIndex = i;
   updatePageLabel(); persist(); mark();
 }
-function deleteSection(i) {
+async function deleteSection(i) {
   if (sections().length <= 1) { alert('A notebook needs at least one section.'); return; }
   const sec = sections()[i];
-  if (!confirm(`Delete section "${sec.title}" and its ${sec.pages.length} page(s)?`)) return;
+  if (!await mbConfirm(`Delete section "${sec.title}" and its ${sec.pages.length} page(s)?`, { okText: 'Delete', danger: true, title: 'Delete section' })) return;
   flushGeo();
   sections().splice(i, 1);
   if (S.sectionIndex > i) S.sectionIndex--;
@@ -2589,11 +2654,11 @@ function goToSection(i) {
   mark();
 }
 
-function addSection() {
-  const t = prompt('Section name', `Section ${sections().length + 1}`);
+async function addSection() {
+  const t = await mbPrompt('Section name', `Section ${sections().length + 1}`, { okText: 'Add', title: 'New section' });
   if (t === null) return;
   beginAction();
-  sections().push({ id: uid(), title: t.trim() || `Section ${sections().length + 1}`, pages: [newPage(page().paper)] });
+  sections().push({ id: uid(), title: t || `Section ${sections().length + 1}`, pages: [newPage(page().paper)] });
   S.sectionIndex = sections().length - 1;
   S.pageIndex = 0;
   commitAction();
@@ -2614,10 +2679,10 @@ function renderSectionStrip() {
     btn.textContent = sec.title;
     btn.title = sec.title;
     btn.onclick = () => goToSection(i);
-    btn.oncontextmenu = (e) => {
+    btn.oncontextmenu = async (e) => {
       e.preventDefault();
-      const t = prompt('Rename section', sec.title);
-      if (t && t.trim()) { sec.title = t.trim(); renderSectionStrip(); persist(); }
+      const t = await mbPrompt('Rename section', sec.title, { title: 'Rename section' });
+      if (t) { sec.title = t; renderSectionStrip(); persist(); }
     };
     if (i === S.sectionIndex && sections().length > 1) {
       const x = document.createElement('span');
@@ -2900,8 +2965,8 @@ function bindEditor() {
   document.querySelectorAll('[data-inst]').forEach((b) => {
     b.onclick = () => { setGeoTool(null); setInstTool(b.dataset.inst); setTab('maths'); };
   });
-  $('#geo-clear').onclick = () => {
-    if (confirm('Clear all geometry on this page?')) clearGeoPage();
+  $('#geo-clear').onclick = async () => {
+    if (await mbConfirm('Clear all geometry on this page?', { okText: 'Clear', danger: true, title: 'Clear geometry' })) clearGeoPage();
   };
   $('#back').onclick = () => { S.playing = false; setPresentMode(false); setGeoTool(null); setInstTool(null); teardownGeo(); show('library'); renderLibrary(); };
 
