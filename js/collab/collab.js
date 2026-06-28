@@ -151,8 +151,7 @@ export function startCollab(c) {
   ydoc = new Y.Doc();
   pagesMap = ydoc.getMap('pages');
 
-  const wsUrl = `${wsBase(raw)}/${encodeURIComponent(room)}`;
-  provider = new WebsocketProvider(wsUrl, room, ydoc, { connect: true });
+  provider = new WebsocketProvider(wsBase(raw), room, ydoc, { connect: true });
 
   document.getElementById('collab-bar')?.classList.remove('hidden');
   setCollabStatus('○ Connecting…', 'connecting');

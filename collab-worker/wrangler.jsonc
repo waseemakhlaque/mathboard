@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mathboard-collab",
+  "main": "src/index.js",
+  "compatibility_date": "2026-06-27",
+  "durable_objects": {
+    "bindings": [{ "name": "YJS_ROOM", "class_name": "YjsRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_classes": ["YjsRoom"] }],
+  "observability": { "enabled": true }
+}

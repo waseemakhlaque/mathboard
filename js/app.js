@@ -1012,7 +1012,8 @@ function drawObjects(c, pg) {
   }
 }
 function snapPt(p) {
-  if (!S.snap || !GRID_PAPERS.includes(page().paper)) return p;
+  const pg = page();
+  if (!S.snap || !pg || !GRID_PAPERS.includes(pg.paper)) return p;
   const g = UNIT, cx = gridCx(), cy = gridCy();
   return { x: cx + Math.round((p.x - cx) / g) * g, y: cy + Math.round((p.y - cy) / g) * g };
 }
@@ -2766,12 +2767,17 @@ function setPresentMode(on) {
 
 // ---- editor controls ---------------------------------------------------------
 function updatePageLabel() {
+  const pg = page();
+  if (!S.notebook || !pg) {
+    $('#page-label').textContent = '';
+    return;
+  }
   $('#page-label').textContent = `${S.pageIndex + 1} / ${pages().length}`;
-  const sel = $('#paper'); if (sel) sel.value = page().paper;
-  const fmt = $('#page-format'); if (fmt) fmt.value = page().format === 'wide' ? 'wide' : 'a4';
-  const rb = $('#resultant'); if (rb) rb.classList.toggle('brand-toggle-active', !!page().showResultant);
-  const pb = $('#parallelogram'); if (pb) pb.classList.toggle('brand-toggle-active', !!page().showParallelogram);
-  const cb = $('#conjugate'); if (cb) cb.classList.toggle('brand-toggle-active', !!page().showConjugate);
+  const sel = $('#paper'); if (sel) sel.value = pg.paper;
+  const fmt = $('#page-format'); if (fmt) fmt.value = pg.format === 'wide' ? 'wide' : 'a4';
+  const rb = $('#resultant'); if (rb) rb.classList.toggle('brand-toggle-active', !!pg.showResultant);
+  const pb = $('#parallelogram'); if (pb) pb.classList.toggle('brand-toggle-active', !!pg.showParallelogram);
+  const cb = $('#conjugate'); if (cb) cb.classList.toggle('brand-toggle-active', !!pg.showConjugate);
   renderPageStrip();
   renderSectionStrip();
   if (!$('#layers')?.classList.contains('hidden')) renderLayersPanel();
@@ -3642,6 +3648,14 @@ function addFunction(expr, param) {
   }
   renderGraphList(); persist(); mark();
 }
+function ensureAxesPaper() {
+  const pg = page();
+  if (!pg || GRID_PAPERS.includes(pg.paper)) return;
+  pg.paper = 'axes';
+  updatePageLabel();
+  persist();
+  mark();
+}
 function openGraph() {
   const pg = page();
   if (!pg) return;
@@ -3671,7 +3685,9 @@ function setupGraph() {
   makeDraggable($('#graph'), $('#gp-head'));
 }
 function trigReadout() {
-  const u = page().unitCircle || {};
+  const pg = page();
+  if (!pg) return;
+  const u = pg.unitCircle || {};
   const th = (u.angleDeg || 0) * Math.PI / 180;
   const tn = Math.tan(th);
   const r = $('#gp-unit-read');
@@ -4185,7 +4201,7 @@ function init() {
   setupStats();
   setupCalculus({
     page, beginAction, commitAction, persist, mark, unit: UNIT, pageW: () => pageW(page()), pageH: () => pageH(page()),
-    ensureAxes: () => { if (!GRID_PAPERS.includes(page().paper)) { page().paper = 'axes'; updatePageLabel(); persist(); mark(); } },
+    ensureAxes: ensureAxesPaper,
   });
   setupCalculusPanel();
   makeDraggable($('#calculus'), $('#calculus-head'));
@@ -4244,7 +4260,7 @@ function init() {
   setupGraphView({
     page, unit: () => UNIT, calcScope,
     trigDegAxis: () => !!page()?.trigDegAxis,
-    ensureAxes: () => { if (!GRID_PAPERS.includes(page().paper)) { page().paper = 'axes'; updatePageLabel(); persist(); mark(); } },
+    ensureAxes: ensureAxesPaper,
   });
   setupGraphViewPanel();
   setupStudioUI();

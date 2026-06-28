@@ -1,0 +1,14 @@
+{
+  "name": "mathboard-collab-worker",
+  "private": true,
+  "description": "Cloudflare Worker + Durable Object — Yjs websocket rooms for MathBoard Phase 9",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "dependencies": {
+    "lib0": "^0.2.94",
+    "y-protocols": "^1.0.6",
+    "yjs": "^13.6.18"
+  }
+}
