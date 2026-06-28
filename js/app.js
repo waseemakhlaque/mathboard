@@ -517,6 +517,24 @@ function drawStroke(c, s) {
   c.globalAlpha = 1;
 }
 
+// Lightweight live ink while the Pencil is down — avoids perfect-freehand every frame.
+function drawStrokePreview(c, s) {
+  const pts = s?.points;
+  if (!pts || pts.length < 2) return;
+  const w = s.width || 4;
+  c.save();
+  c.strokeStyle = s.color;
+  c.lineWidth = s.tool === 'highlighter' ? w * 2.2 : w * 1.6;
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  c.globalAlpha = s.tool === 'highlighter' ? 0.3 : 1;
+  c.beginPath();
+  c.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) c.lineTo(pts[i].x, pts[i].y);
+  c.stroke();
+  c.restore();
+}
+
 // ---- math objects: vectors & lines ------------------------------------------
 const fmt = (n) => Math.abs(n - Math.round(n)) < 0.05 ? String(Math.round(n)) : n.toFixed(1);
 const formatAngle = (rad) => S.radians ? `${rad.toFixed(2)} rad` : `${Math.round(rad * 180 / Math.PI)}°`;
@@ -1350,7 +1368,7 @@ function render() {
     drawInstruments(ctx, page());
     if (S.creating) drawObject(ctx, S.creating);
     for (const s of visibleStrokes(page())) drawStroke(ctx, s);
-    if (S.drawing) drawStroke(ctx, S.drawing);
+    if (S.drawing && !S.drawing.eraser) drawStrokePreview(ctx, S.drawing);
     // selection highlight
     if (S.selection) {
       ctx.globalAlpha = 0.18; ctx.fillStyle = '#2566c8';
@@ -1378,8 +1396,11 @@ function render() {
       ctx.setLineDash([]);
     }
     ctx.restore();
-    syncGeoLayer(S.offsetX, S.offsetY, S.scale);
-    refreshGraphView();
+    if (!S.drawing) {
+      syncGeoLayer(S.offsetX, S.offsetY, S.scale);
+      refreshGraphView();
+    }
+    updateDeleteSelBtn();
     S.dirty = false;
   }
   requestAnimationFrame(render);
@@ -1558,7 +1579,35 @@ function hitStroke(p) {                    // topmost ink stroke under p (or nul
   }
   return null;
 }
+function hasDeletableSelection() {
+  return !!(S.selObj || S.selStrokes.length || S.selection?.strokes?.length || S.selection?.objects?.length);
+}
+
+function updateDeleteSelBtn() {
+  const btn = $('#delete-selection');
+  if (!btn) return;
+  btn.classList.toggle('hidden', !hasDeletableSelection());
+}
+
 function deleteSelection() {
+  if (S.selection?.strokes?.length || S.selection?.objects?.length) {
+    beginAction();
+    const strokeSet = new Set(S.selection.strokes || []);
+    page().strokes = page().strokes.filter((s) => !strokeSet.has(s));
+    for (const o of S.selection.objects || []) {
+      const i = objs().indexOf(o);
+      if (i >= 0) objs().splice(i, 1);
+      if (o.kind === 'image') purgeObjImage(o.id);
+      if (o.kind === 'graphpt') {
+        const pid = o.id;
+        page().objects = objs().filter((x) => !(x.kind === 'tangent' && x.ptId === pid));
+      }
+    }
+    clearSelection();
+    commitAction();
+    mark();
+    return;
+  }
   if (!S.selObj && !S.selStrokes.length) return;
   beginAction();
   if (S.selObj) {
@@ -1594,6 +1643,19 @@ function finishLasso() {
 function pressureOf(e) {
   if (e.pointerType === 'pen' && e.pressure > 0) return e.pressure;
   return 0.5;
+}
+
+function coalescedPagePoints(e) {
+  const evs = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e];
+  return evs.map((ev) => ({ p: toPage(...cssArr(ev)), pr: pressureOf(ev) }));
+}
+
+function appendInkPoints(stroke, points) {
+  for (const { p, pr } of points) {
+    let pt = p;
+    if (['pen', 'highlighter'].includes(stroke.tool)) pt = snapToRuler(pt);
+    stroke.points.push({ x: pt.x, y: pt.y, p: pr });
+  }
 }
 function isDrawPointer(e) {
   if (geoToolActive() || instToolActive()) return false;
@@ -1798,11 +1860,12 @@ function onMove(e) {
     else S.creating.to = sp;
     mark(); return;
   }
-  if (S.drawing && S.drawing.eraser) { eraseAt(toPage(...cssArr(e))); return; }
+  if (S.drawing && S.drawing.eraser) {
+    for (const { p } of coalescedPagePoints(e)) eraseAt(p);
+    return;
+  }
   if (S.drawing) {
-    let p = toPage(...cssArr(e));
-    if (['pen', 'highlighter'].includes(S.drawing.tool)) p = snapToRuler(p);
-    S.drawing.points.push({ x: p.x, y: p.y, p: pressureOf(e) });
+    appendInkPoints(S.drawing, coalescedPagePoints(e));
     mark();
   }
 }
@@ -2962,6 +3025,7 @@ function bindEditor() {
   $('#insert-pdf').onclick = () => $('#pdf-file').click();
   $('#insert-img').onclick = () => $('#img-file').click();
   $('#clear-page').onclick = clearPage;
+  $('#delete-selection')?.addEventListener('click', () => deleteSelection());
   $('#pdf-file').onchange = (e) => { const f = e.target.files[0]; if (f) insertPdfIntoNotebook(f); e.target.value = ''; };
   $('#img-file').onchange = (e) => { const f = e.target.files[0]; if (f) insertImageFile(f); e.target.value = ''; };
   document.querySelectorAll('[data-geo]').forEach((b) => {
@@ -2995,7 +3059,7 @@ function bindEditor() {
     else if (e.key === 'q') setTool('equation');
     else if (e.key === 'Escape' && geoToolActive()) { cancelGeoDraft(); mark(); }
     else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setPresentMode(!$('#editor').classList.contains('present-mode')); }
-    else if ((e.key === 'Delete' || e.key === 'Backspace') && (S.selObj || S.selStrokes.length)) { e.preventDefault(); deleteSelection(); }
+    else if ((e.key === 'Delete' || e.key === 'Backspace') && hasDeletableSelection()) { e.preventDefault(); deleteSelection(); }
   });
 }
 
@@ -4175,7 +4239,7 @@ function init() {
   bindLibrary();
   try {
   cv = $('#board');
-  ctx = cv.getContext('2d');
+  ctx = cv.getContext('2d', { alpha: false, desynchronized: true });
   setupGeo({ page, snapPt, beginAction, commitAction, persist, mark, cancelAction: () => { S.actionBefore = null; }, setInstTool: () => setInstTool(null), unit: UNIT, pageW: () => pageW(page()), pageH: () => pageH(page()) });
   setupMech({ page, snapPt, beginAction, commitAction, persist, mark, setGeoTool: () => setGeoTool(null), setCplxPlacing: () => setCplxPlacing(null) });
   setupMechPanel();

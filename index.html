@@ -32,7 +32,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=78" />
+<link rel="stylesheet" href="./css/app.css?v=79" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -81,7 +81,7 @@
     <span id="sync-status" class="sync-status" title="Offline · saved on this device">● Local</span>
     · <button type="button" id="sync-settings-foot" class="sync-foot-link">Cloud sync</button>
     · Paginated notebook whiteboard · works offline · add to Home Screen on iPad
-    · <span id="mb-version" class="mb-version">v78</span>
+    · <span id="mb-version" class="mb-version">v79</span>
   </p>
 </section>
 
@@ -256,6 +256,7 @@
         <button id="insert-pdf">Insert PDF</button>
         <button id="insert-img">Insert image</button>
         <button id="export-png">PNG</button>
+        <button id="delete-selection" class="geo-warn hidden" title="Delete selected ink or objects">Delete selection</button>
         <button id="clear-page" class="geo-warn" title="Clear everything on this page (undoable)">Clear page</button>
       </div>
     </aside>
@@ -988,5 +989,5 @@
 </div>
 
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=78"></script>
+<script type="module" src="./js/app.js?v=79"></script>
 </html>
