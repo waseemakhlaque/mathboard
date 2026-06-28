@@ -21,7 +21,8 @@ import {
 } from './geo.js';
 import {
   setupMech, setupMechPanel, drawMechItems, handleMechClick, setMechPlacing,
-  hitMech, moveMechItem, setSelectedMech, selectedMechItem,
+  hitMech, moveMechItem, setSelectedMech, selectedMechItem, mechBBox, mechHandles,
+  mechHandleAt, applyMechHandle, syncPanelFromItem, deleteMechItem, openMechPanel,
 } from './mech.js';
 import {
   setupCplx, setupCplxPanel, drawCplxLoci, handleCplxClick, setCplxPlacing,
@@ -98,6 +99,7 @@ const S = {
   objMove: null,            // { lastX, lastY } — dragging selection body
   objResize: null,          // handle name — dragging a selected object's handle
   mechMove: null,           // dragging a placed mechanics diagram
+  mechResize: null,         // resizing a mech item handle
   instDrag: null,           // dragging a physical instrument
   // multi-touch gesture
   touch: new Map(),         // pointerId -> {x,y} css
@@ -683,10 +685,12 @@ function drawInclineObj(c, o) {
   const C = { x: mid.x + outx * (bh / 2 + 2), y: mid.y + outy * (bh / 2 + 2) };
   const m = o.mass || 2, g = 9.8, mg = m * g, mu = o.mu || 0, FS = 4;
   const N = mg * Math.cos(ang);
-  labeledArrow(c, C, { x: C.x, y: C.y + mg * FS }, '#1f9d57', false, 'mg');                                  // weight
-  labeledArrow(c, C, { x: C.x + outx * N * FS, y: C.y + outy * N * FS }, '#2566c8', false, 'N');             // normal
-  labeledArrow(c, C, { x: C.x - ux * mg * Math.sin(ang) * FS, y: C.y - uy * mg * Math.sin(ang) * FS }, '#e0892a', true, 'mg sinα'); // down-slope
-  labeledArrow(c, C, { x: C.x - outx * mg * Math.cos(ang) * FS, y: C.y - outy * mg * Math.cos(ang) * FS }, '#8a4fd0', true, 'mg cosα'); // into slope
+  labeledArrow(c, C, { x: C.x, y: C.y + mg * FS }, '#1f9d57', false, 'mg');
+  labeledArrow(c, C, { x: C.x + outx * N * FS, y: C.y + outy * N * FS }, '#2566c8', false, 'N');
+  if (o.showComponents !== false) {
+    labeledArrow(c, C, { x: C.x - ux * mg * Math.sin(ang) * FS, y: C.y - uy * mg * Math.sin(ang) * FS }, '#e0892a', true, 'mg sinα');
+    labeledArrow(c, C, { x: C.x - outx * mg * Math.cos(ang) * FS, y: C.y - outy * mg * Math.cos(ang) * FS }, '#8a4fd0', true, 'mg cosα');
+  }
   if (mu > 0) { const f = mu * N; labeledArrow(c, C, { x: C.x + ux * f * FS, y: C.y + uy * f * FS }, '#d23b3b', false, 'f'); }
   c.fillStyle = '#4a5560'; c.font = '600 16px sans-serif';
   c.fillText(`α = ${Math.round(inclineLiveAngle(o))}°   m = ${fmt(m)} kg   μ = ${fmt(mu)}`, a.x + 6, a.y - 12);
@@ -1384,6 +1388,10 @@ function render() {
     }
     // selected object or ink: dashed bbox + square drag handles
     if (S.selObj && objs().includes(S.selObj)) drawSelBox(ctx, objBBox(S.selObj), objHandles(S.selObj));
+    else if (selectedMechItem()) {
+      const m = selectedMechItem();
+      drawSelBox(ctx, mechBBox(m), mechHandles(m));
+    }
     else if (S.selStrokes.length && S.selStrokes.every((s) => page().strokes.includes(s))) {
       drawSelBox(ctx, strokeBBox(S.selStrokes), []);
     }
@@ -1403,6 +1411,10 @@ function render() {
       refreshGraphView();
     }
     updateDeleteSelBtn();
+    if (S.selObj?.kind === 'incline' && S.selObj.anim) {
+      const el = $('#mi-angle');
+      if (el && document.activeElement !== el) el.value = Math.round(inclineLiveAngle(S.selObj));
+    }
     S.dirty = false;
   }
   requestAnimationFrame(render);
@@ -1498,7 +1510,11 @@ function objHandles(o) {                 // named drag handles, in page units
   }
   if (o.kind === 'incline') {
     const g = inclineGeom(o);
-    return [{ name: 'at', x: o.at.x, y: o.at.y }, { name: 'apex', x: g.top.x, y: g.top.y }];
+    return [
+      { name: 'at', x: g.a.x, y: g.a.y },
+      { name: 'apex', x: g.top.x, y: g.top.y },
+      { name: 'base', x: g.b.x, y: g.b.y },
+    ];
   }
   if (o.kind === 'rect' || o.kind === 'ellipse' || o.kind === 'image') {
     const x0 = Math.min(o.from.x, o.to.x), y0 = Math.min(o.from.y, o.to.y),
@@ -1520,9 +1536,13 @@ function applyHandle(o, name, p) {        // drag a handle to point p (snapped o
     o.angleDeg = Math.atan2(dy, dx) * 180 / Math.PI - (o.anim ? S.demoT * 360 : 0);
   }
   else if (name === 'apex') {
-    o.anim = false;                                // grabbing the apex switches to manual angle
+    o.anim = false;
     const h = Math.max(20, o.at.y - p.y);
     o.angleDeg = Math.max(5, Math.min(85, Math.atan(h / (o.base || 300)) * 180 / Math.PI));
+  }
+  else if (name === 'base') {
+    o.anim = false;
+    o.base = Math.max(120, Math.min(520, p.x - o.at.x));
   }
   else if (name === 'at') o.at = sp;
   else if (name === 'edge') o.edge = sp;
@@ -1582,7 +1602,7 @@ function hitStroke(p) {                    // topmost ink stroke under p (or nul
   return null;
 }
 function hasDeletableSelection() {
-  return !!(S.selObj || S.selStrokes.length || S.selection?.strokes?.length || S.selection?.objects?.length);
+  return !!(S.selObj || S.selStrokes.length || selectedMechItem() || S.selection?.strokes?.length || S.selection?.objects?.length);
 }
 
 function updateDeleteSelBtn() {
@@ -1610,8 +1630,15 @@ function deleteSelection() {
     mark();
     return;
   }
-  if (!S.selObj && !S.selStrokes.length) return;
+  if (!S.selObj && !S.selStrokes.length && !selectedMechItem()) return;
   beginAction();
+  const mech = selectedMechItem();
+  if (mech) {
+    deleteMechItem(mech);
+    setSelectedMech(null);
+    commitAction(); mark();
+    return;
+  }
   if (S.selObj) {
     const i = objs().indexOf(S.selObj);
     if (i >= 0) objs().splice(i, 1);
@@ -1679,7 +1706,7 @@ function abortGesture() {
   }
   S.creating = null; S.drawing = null; S.lassoPath = null;
   S.moving = null; S.objMove = null; S.objResize = null;
-  S.mechMove = null; S.instDrag = null;
+  S.mechMove = null; S.mechResize = null; S.instDrag = null;
   S.actionBefore = null;
   mark();
 }
@@ -1714,6 +1741,9 @@ function onDown(e) {
     if (mech) {
       S.selObj = null; S.selStrokes = [];
       setSelectedMech(mech);
+      syncPanelFromItem(mech);
+      const mh = mechHandleAt(mech, p, tol);
+      if (mh) { beginAction(); S.mechResize = mh; mark(); return; }
       beginAction();
       S.mechMove = { lastX: p.x, lastY: p.y };
       mark();
@@ -1732,7 +1762,9 @@ function onDown(e) {
     const hit = hitObject(p);
     if (hit) {
       S.selStrokes = [];
+      setSelectedMech(null);
       S.selObj = hit; beginAction();
+      if (hit.kind === 'incline') syncInclineObjectPanel(hit);
       S.objMove = { lastX: p.x, lastY: p.y };
     } else {
       const ink = hitStroke(p);
@@ -1823,6 +1855,10 @@ function onMove(e) {
     if (!S.fingerDraw && !touchToolCanInteract()) return;
   }
   if (S.objResize) { applyHandle(S.selObj, S.objResize, toPage(...cssArr(e))); mark(); return; }
+  if (S.mechResize && selectedMechItem()) {
+    applyMechHandle(selectedMechItem(), S.mechResize, p);
+    mark(); return;
+  }
   if (S.mechMove && selectedMechItem()) {
     const p = toPage(...cssArr(e));
     moveMechItem(selectedMechItem(), p.x - S.mechMove.lastX, p.y - S.mechMove.lastY);
@@ -1877,7 +1913,12 @@ function onUp(e) {
     S.touch.delete(e.pointerId);
     setGestureRef();
   }
-  if (S.objResize) { S.objResize = null; commitAction(); mark(); return; }
+  if (S.objResize) {
+    S.objResize = null;
+    if (S.selObj?.kind === 'incline') syncInclineObjectPanel(S.selObj);
+    commitAction(); mark(); return;
+  }
+  if (S.mechResize) { S.mechResize = null; commitAction(); mark(); return; }
   if (S.mechMove) { S.mechMove = null; commitAction(); mark(); return; }
   if (S.instDrag) { endInstMove(); S.instDrag = null; mark(); return; }
   if (S.objMove) { S.objMove = null; commitAction(); mark(); return; }
@@ -4166,12 +4207,62 @@ function addForceVec() {
   commitAction();
   selectNewObject(o);
 }
+function syncInclineObjectPanel(o) {
+  if (!o || o.kind !== 'incline') return;
+  openMechPanel('incline');
+  $('#mech')?.classList.remove('hidden');
+  $('#mi-angle').value = Math.round(o.anim ? inclineLiveAngle(o) : (o.angleDeg ?? 30));
+  $('#mi-mass').value = o.mass ?? 2;
+  $('#mi-mu').value = o.mu ?? 0;
+  $('#mi-base').value = o.base ?? 300;
+  $('#mi-comp').checked = o.showComponents !== false;
+  $('#mi-anim').checked = !!o.anim;
+  if (o.anim) $('#demo-bar')?.classList.remove('hidden');
+}
+
+function applyInclinePanel(o) {
+  if (!o || o.kind !== 'incline') return;
+  const anim = !!$('#mi-anim')?.checked;
+  o.anim = anim;
+  if (!anim) o.angleDeg = Math.max(5, Math.min(85, +$('#mi-angle')?.value || 30));
+  o.mass = +$('#mi-mass')?.value || 2;
+  o.mu = +$('#mi-mu')?.value || 0;
+  o.base = Math.max(120, +$('#mi-base')?.value || 300);
+  o.showComponents = !!$('#mi-comp')?.checked;
+  if (anim) $('#demo-bar')?.classList.remove('hidden');
+  persist();
+}
+
+function placeInclineObject(at, props) {
+  beginAction();
+  const o = {
+    id: uid(), kind: 'incline', at,
+    base: Math.max(120, props.base ?? props.len ?? 280),
+    angleDeg: props.angleDeg ?? 30,
+    mass: props.mass ?? 2,
+    mu: props.mu ?? 0,
+    showComponents: props.showComponents !== false,
+    anim: false,
+  };
+  objs().push(o);
+  commitAction();
+  setSelectedMech(null);
+  selectNewObject(o);
+  syncInclineObjectPanel(o);
+}
+
 function addIncline() {
   beginAction();
-  const o = { id: uid(), kind: 'incline', at: { x: gridCx() - 150, y: gridCy() + 130 }, base: 300, angleDeg: 30, mass: 2, mu: 0.2, anim: true };
+  const o = {
+    id: uid(), kind: 'incline',
+    at: { x: gridCx() - 150, y: gridCy() + 130 },
+    base: 300, angleDeg: 30, mass: 2, mu: 0.2,
+    showComponents: true, anim: true,
+  };
   objs().push(o);
   commitAction();
   selectNewObject(o);
+  syncInclineObjectPanel(o);
 }
 function setupDemo() {
   $('#demo-toggle')?.addEventListener('click', () => $('#demo-bar')?.classList.toggle('hidden'));
@@ -4282,7 +4373,12 @@ function init() {
   cv = $('#board');
   ctx = cv.getContext('2d', { alpha: false, desynchronized: true });
   setupGeo({ page, snapPt, beginAction, commitAction, persist, mark, cancelAction: () => { S.actionBefore = null; }, setInstTool: () => setInstTool(null), unit: UNIT, pageW: () => pageW(page()), pageH: () => pageH(page()) });
-  setupMech({ page, snapPt, beginAction, commitAction, persist, mark, setGeoTool: () => setGeoTool(null), setCplxPlacing: () => setCplxPlacing(null) });
+  setupMech({
+    page, snapPt, beginAction, commitAction, persist, mark,
+    setGeoTool: () => setGeoTool(null), setCplxPlacing: () => setCplxPlacing(null),
+    placeInclineObject, getSelectedIncline: () => (S.selObj?.kind === 'incline' ? S.selObj : null),
+    applyInclinePanel,
+  });
   setupMechPanel();
   makeDraggable($('#mech'), $('#mech-head'));
   setupCplx({

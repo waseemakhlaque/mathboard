@@ -32,7 +32,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=80" />
+<link rel="stylesheet" href="./css/app.css?v=81" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -81,7 +81,7 @@
     <span id="sync-status" class="sync-status" title="Offline · saved on this device">● Local</span>
     · <button type="button" id="sync-settings-foot" class="sync-foot-link">Cloud sync</button>
     · Paginated notebook whiteboard · works offline · add to Home Screen on iPad
-    · <span id="mb-version" class="mb-version">v80</span>
+    · <span id="mb-version" class="mb-version">v81</span>
   </p>
 </section>
 
@@ -641,6 +641,10 @@
       <label class="ct-lab">Friction μ (0 = none)</label>
       <input id="mi-mu" class="mech-in full" type="text" value="0" />
       <label class="mech-chk"><input type="checkbox" id="mi-comp" checked /> Show mg sinα / mg cosα</label>
+      <label class="ct-lab">Slope length</label>
+      <input id="mi-base" class="mech-in full" type="text" value="280" />
+      <label class="mech-chk"><input type="checkbox" id="mi-anim" /> Animate angle (Live Demo bar)</label>
+      <p class="mech-hint">Select tool: drag blue handles on corners · edit values live when selected</p>
       <button type="button" data-mplace="incline" class="ck ck-eq2 mech-place">Tap page to place</button>
     </div>
     <div id="mech-projectile" class="mech-pane hidden">
@@ -1000,5 +1004,5 @@
 </div>
 
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=80"></script>
+<script type="module" src="./js/app.js?v=81"></script>
 </html>

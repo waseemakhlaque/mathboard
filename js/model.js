@@ -22,6 +22,24 @@ export function normalizePage(p) {
   if (!Array.isArray(p.calcItems)) p.calcItems = [];
   if (!Array.isArray(p.instruments)) p.instruments = [];
   if (typeof p.geoLabelN !== 'number') p.geoLabelN = 0;
+  // Legacy incline diagrams lived in mechItems — promote to selectable page objects.
+  if (Array.isArray(p.mechItems)) {
+    for (const m of p.mechItems) {
+      if (m.kind !== 'incline') continue;
+      p.objects.push({
+        id: m.id || genId(),
+        kind: 'incline',
+        at: m.at || { x: 200, y: 400 },
+        base: m.len || m.base || 280,
+        angleDeg: m.angleDeg ?? 30,
+        mass: m.mass ?? 2,
+        mu: m.mu ?? 0,
+        showComponents: m.showComponents !== false,
+        anim: false,
+      });
+    }
+    p.mechItems = p.mechItems.filter((m) => m.kind !== 'incline');
+  }
   return p;
 }
 

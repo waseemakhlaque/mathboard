@@ -9,7 +9,7 @@ let placeKind = null;
 let draft = {
   forces: [{ label: 'F', mag: 5, angleDeg: 30 }, { label: 'mg', mag: 9.8, angleDeg: -90 }],
   showResultant: true,
-  incline: { angleDeg: 30, mass: 2, mu: 0, showComponents: true },
+  incline: { angleDeg: 30, mass: 2, mu: 0, base: 280, showComponents: true },
   projectile: { u: 12, thetaDeg: 40, g: 9.8, showVel: true },
   motion: { graph: 'vt', u: 5, a: -2, tMax: 6 },
   pulley: { m1: 2, m2: 1.5, g: 9.8 },
@@ -17,6 +17,16 @@ let draft = {
 };
 
 export function setupMech(h) { hooks = h; }
+
+export function showMechPane(name) {
+  document.querySelectorAll('.mech-pane').forEach((p) => p.classList.toggle('hidden', p.id !== 'mech-' + name));
+  document.querySelectorAll('[data-mtab]').forEach((b) => b.classList.toggle('active', b.dataset.mtab === name));
+}
+
+export function openMechPanel(tab) {
+  document.getElementById('mech')?.classList.remove('hidden');
+  if (tab) showMechPane(tab);
+}
 
 export function mechPlacing() { return placeKind; }
 
@@ -35,9 +45,16 @@ export function handleMechClick(p) {
   if (!placeKind) return false;
   const pg = hooks.page?.();
   if (!pg) return false;
+  const at = hooks.snapPt ? hooks.snapPt(p) : p;
+  if (placeKind === 'incline') {
+    hooks.placeInclineObject?.(at, { ...draft.incline });
+    setMechPlacing(null);
+    hooks.mark?.();
+    return true;
+  }
   if (!pg.mechItems) pg.mechItems = [];
   hooks.beginAction?.();
-  pg.mechItems.push(buildItem(placeKind, hooks.snapPt ? hooks.snapPt(p) : p));
+  pg.mechItems.push(buildItem(placeKind, at));
   hooks.commitAction?.();
   setMechPlacing(null);
   hooks.mark?.();
@@ -346,9 +363,150 @@ export function hitMech(p, tol) {
   return null;
 }
 
-export function moveMechItem(item, dx, dy) {
-  item.at.x += dx;
-  item.at.y += dy;
+export function mechHandles(item) {
+  if (item.kind === 'motion') {
+    const w = item.w || 300, h = item.h || 180;
+    return [{ name: 'size', x: item.at.x + w, y: item.at.y }];
+  }
+  if (item.kind === 'projectile') {
+    const sc = item.scale || MECH_SCALE;
+    const u = item.u || 10, th = rad(item.thetaDeg || 40), g = item.g || 9.8;
+    const ux = u * Math.cos(th), uy = u * Math.sin(th);
+    const tFlight = 2 * uy / g;
+    const range = ux * tFlight;
+    return [{ name: 'at', x: item.at.x, y: item.at.y }, { name: 'range', x: item.at.x + range * sc, y: item.at.y }];
+  }
+  if (item.kind === 'moment') {
+    const d = (item.dist || 1.2) * 50;
+    return [{ name: 'at', x: item.at.x, y: item.at.y }, { name: 'force', x: item.at.x + d, y: item.at.y }];
+  }
+  return [{ name: 'at', x: item.at.x, y: item.at.y }];
+}
+
+export function mechHandleAt(item, p, tol = 14) {
+  for (const h of mechHandles(item)) {
+    if (Math.abs(p.x - h.x) < tol && Math.abs(p.y - h.y) < tol) return h.name;
+  }
+  return null;
+}
+
+export function applyMechHandle(item, name, p) {
+  if (name === 'at') { item.at = { x: p.x, y: p.y }; return; }
+  if (item.kind === 'motion' && name === 'size') {
+    item.w = Math.max(160, p.x - item.at.x);
+    item.h = Math.max(100, item.at.y - p.y);
+    return;
+  }
+  if (item.kind === 'projectile' && name === 'range') {
+    const sc = item.scale || MECH_SCALE;
+    const dx = Math.max(40, p.x - item.at.x);
+    const th = rad(item.thetaDeg || 40);
+    const g = item.g || 9.8;
+    const tFlight = 2 * (item.u || 10) * Math.sin(th) / g;
+    if (tFlight > 0.01 && sc > 0) item.u = Math.max(1, dx / (sc * tFlight * Math.cos(th)));
+    return;
+  }
+  if (item.kind === 'moment' && name === 'force') {
+    item.dist = Math.max(0.2, Math.min(3, (p.x - item.at.x) / 50));
+  }
+}
+
+export function syncPanelFromItem(item) {
+  if (!item) return;
+  openMechPanel(item.kind === 'forces' ? 'forces' : item.kind);
+  if (item.kind === 'forces') {
+    draft.forces = (item.forces || []).map((f) => ({ ...f }));
+    draft.showResultant = !!item.showResultant;
+    renderForceDraft();
+    const rr = document.getElementById('mf-resultant');
+    if (rr) rr.checked = draft.showResultant;
+    return;
+  }
+  if (item.kind === 'incline') {
+    setVal('mi-angle', item.angleDeg ?? 30);
+    setVal('mi-mass', item.mass ?? 2);
+    setVal('mi-mu', item.mu ?? 0);
+    setVal('mi-base', item.len ?? 280);
+    setChk('mi-comp', item.showComponents !== false);
+    return;
+  }
+  if (item.kind === 'projectile') {
+    setVal('mp-u', item.u ?? 12);
+    setVal('mp-theta', item.thetaDeg ?? 40);
+    setVal('mp-g', item.g ?? 9.8);
+    setChk('mp-vel', item.showVel !== false);
+    return;
+  }
+  if (item.kind === 'motion') {
+    document.querySelectorAll('[data-mgraph]').forEach((b) => b.classList.toggle('active', b.dataset.mgraph === (item.graph || 'vt')));
+    setVal('mm-u', item.u ?? 5);
+    setVal('mm-a', item.a ?? -2);
+    setVal('mm-t', item.tMax ?? 6);
+    return;
+  }
+  if (item.kind === 'pulley') {
+    setVal('mpul-m1', item.m1 ?? 2);
+    setVal('mpul-m2', item.m2 ?? 1.5);
+    return;
+  }
+  if (item.kind === 'moment') {
+    setVal('mmom-f', item.force ?? 10);
+    setVal('mmom-d', item.dist ?? 1.2);
+    setVal('mmom-ang', item.angleDeg ?? 90);
+  }
+}
+
+function setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v; }
+function setChk(id, v) { const el = document.getElementById(id); if (el) el.checked = v; }
+
+export function applyPanelToSelectedItem(item) {
+  if (!item) return false;
+  if (item.kind === 'forces') {
+    item.forces = draft.forces.map((f, i) => ({ ...f, color: f.color || FORCE_COLORS[i % FORCE_COLORS.length] }));
+    item.showResultant = !!document.getElementById('mf-resultant')?.checked;
+    return true;
+  }
+  if (item.kind === 'incline') {
+    item.angleDeg = +document.getElementById('mi-angle')?.value || 30;
+    item.mass = +document.getElementById('mi-mass')?.value || 2;
+    item.mu = +document.getElementById('mi-mu')?.value || 0;
+    item.len = Math.max(120, +document.getElementById('mi-base')?.value || 280);
+    item.showComponents = !!document.getElementById('mi-comp')?.checked;
+    return true;
+  }
+  if (item.kind === 'projectile') {
+    item.u = +document.getElementById('mp-u')?.value || 12;
+    item.thetaDeg = +document.getElementById('mp-theta')?.value || 40;
+    item.g = +document.getElementById('mp-g')?.value || 9.8;
+    item.showVel = !!document.getElementById('mp-vel')?.checked;
+    return true;
+  }
+  if (item.kind === 'motion') {
+    item.u = +document.getElementById('mm-u')?.value || 0;
+    item.a = +document.getElementById('mm-a')?.value || 0;
+    item.tMax = Math.max(1, +document.getElementById('mm-t')?.value || 5);
+    return true;
+  }
+  if (item.kind === 'pulley') {
+    item.m1 = +document.getElementById('mpul-m1')?.value || 2;
+    item.m2 = +document.getElementById('mpul-m2')?.value || 1.5;
+    return true;
+  }
+  if (item.kind === 'moment') {
+    item.force = +document.getElementById('mmom-f')?.value || 10;
+    item.dist = +document.getElementById('mmom-d')?.value || 1.2;
+    item.angleDeg = +document.getElementById('mmom-ang')?.value || 90;
+    return true;
+  }
+  return false;
+}
+
+export function deleteMechItem(item) {
+  const pg = hooks.page?.();
+  if (!pg?.mechItems || !item) return;
+  const i = pg.mechItems.indexOf(item);
+  if (i >= 0) pg.mechItems.splice(i, 1);
+  if (selMech === item) selMech = null;
 }
 
 export function drawMechItems(c, pg) {
@@ -390,27 +548,64 @@ function renderForceDraft() {
   });
 }
 
+export function moveMechItem(item, dx, dy) {
+  item.at.x += dx;
+  item.at.y += dy;
+}
+
 function bindDraft() {
+  const touchSelected = () => {
+    const incline = hooks.getSelectedIncline?.();
+    if (incline) {
+      hooks.beginAction?.();
+      hooks.applyInclinePanel?.(incline);
+      hooks.commitAction?.();
+      hooks.mark?.();
+      return;
+    }
+    if (!selMech) return;
+    hooks.beginAction?.();
+    applyPanelToSelectedItem(selMech);
+    hooks.commitAction?.();
+    hooks.mark?.();
+  };
   const rr = document.getElementById('mf-resultant');
-  if (rr) rr.onchange = () => { draft.showResultant = rr.checked; };
+  if (rr) {
+    rr.onchange = () => {
+      draft.showResultant = rr.checked;
+      touchSelected();
+    };
+  }
   document.getElementById('mf-add')?.addEventListener('click', () => {
     draft.forces.push({ label: 'F', mag: 3, angleDeg: 0 });
     renderForceDraft();
+    touchSelected();
   });
   const bind3 = (ids, obj, keys) => {
     ids.forEach((id, i) => {
       const el = document.getElementById(id);
       if (!el) return;
-      el.oninput = () => { obj[keys[i]] = keys[i] === 'showComponents' || keys[i] === 'showVel' ? el.checked : +el.value || 0; };
-      if (el.type === 'checkbox') el.onchange = el.oninput;
+      const apply = () => {
+        const k = keys[i];
+        obj[k] = k === 'showComponents' || k === 'showVel' ? el.checked : +el.value || 0;
+        touchSelected();
+      };
+      el.oninput = apply;
+      if (el.type === 'checkbox') el.onchange = apply;
     });
   };
-  bind3(['mi-angle', 'mi-mass', 'mi-mu'], draft.incline, ['angleDeg', 'mass', 'mu']);
+  bind3(['mi-angle', 'mi-mass', 'mi-mu', 'mi-base'], draft.incline, ['angleDeg', 'mass', 'mu', 'base']);
+  document.getElementById('mi-angle')?.addEventListener('input', () => {
+    const a = document.getElementById('mi-anim');
+    if (a?.checked) a.checked = false;
+  });
   const mic = document.getElementById('mi-comp');
-  if (mic) mic.onchange = () => { draft.incline.showComponents = mic.checked; };
+  if (mic) mic.onchange = () => { draft.incline.showComponents = mic.checked; touchSelected(); };
+  const mia = document.getElementById('mi-anim');
+  if (mia) mia.onchange = () => { touchSelected(); };
   bind3(['mp-u', 'mp-theta', 'mp-g'], draft.projectile, ['u', 'thetaDeg', 'g']);
   const mpv = document.getElementById('mp-vel');
-  if (mpv) mpv.onchange = () => { draft.projectile.showVel = mpv.checked; };
+  if (mpv) mpv.onchange = () => { draft.projectile.showVel = mpv.checked; touchSelected(); };
   bind3(['mm-u', 'mm-a', 'mm-t'], draft.motion, ['u', 'a', 'tMax']);
   bind3(['mpul-m1', 'mpul-m2'], draft.pulley, ['m1', 'm2']);
   bind3(['mmom-f', 'mmom-d', 'mmom-ang'], draft.moment, ['force', 'dist', 'angleDeg']);
@@ -418,13 +613,12 @@ function bindDraft() {
     b.onclick = () => {
       draft.motion.graph = b.dataset.mgraph;
       document.querySelectorAll('[data-mgraph]').forEach((x) => x.classList.toggle('active', x === b));
+      if (selMech?.kind === 'motion') {
+        selMech.graph = draft.motion.graph;
+        hooks.mark?.();
+      }
     };
   });
-}
-
-function showMechPane(name) {
-  document.querySelectorAll('.mech-pane').forEach((p) => p.classList.toggle('hidden', p.id !== 'mech-' + name));
-  document.querySelectorAll('[data-mtab]').forEach((b) => b.classList.toggle('active', b.dataset.mtab === name));
 }
 
 export function setupMechPanel() {
