@@ -284,11 +284,12 @@ function resizeCanvas() {
 function fitPage() {
   const r = cv.getBoundingClientRect();
   const present = $('#editor')?.classList.contains('present-mode');
-  const m = present ? 10 : 24;
+  const m = present ? 20 : 24;
+  const bottom = present ? 72 : 0;
   const pw = pgW(), ph = pgH();
-  S.scale = Math.min((r.width - m) / pw, (r.height - m) / ph);
+  S.scale = Math.min((r.width - m * 2) / pw, (r.height - m - bottom) / ph);
   S.offsetX = (r.width - pw * S.scale) / 2;
-  S.offsetY = (r.height - ph * S.scale) / 2;
+  S.offsetY = (r.height - bottom - ph * S.scale) / 2;
   mark();
 }
 
@@ -1340,16 +1341,17 @@ function render() {
     const r = cv.getBoundingClientRect();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, cv.width, cv.height);
-    // app background
-    ctx.fillStyle = '#eef1f6';
+    const present = $('#editor')?.classList.contains('present-mode');
+    // app background — cinematic dark letterbox in Present mode
+    ctx.fillStyle = present ? '#0b1120' : '#eef1f6';
     ctx.fillRect(0, 0, cv.width, cv.height);
     // camera transform (page units -> device px)
     ctx.setTransform(dpr * S.scale, 0, 0, dpr * S.scale, dpr * S.offsetX, dpr * S.offsetY);
     // page shadow + sheet
     ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.18)';
-    ctx.shadowBlur = 14 / S.scale;
-    ctx.shadowOffsetY = 6 / S.scale;
+    ctx.shadowColor = present ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.18)';
+    ctx.shadowBlur = (present ? 28 : 14) / S.scale;
+    ctx.shadowOffsetY = (present ? 10 : 6) / S.scale;
     const pw = pgW(), ph = pgH();
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, pw, ph);
@@ -2813,18 +2815,45 @@ function updatePresentTitle() {
   if (el && S.notebook) el.textContent = S.notebook.title;
 }
 
+function updatePresentHud() {
+  const pgEl = $('#present-page-label');
+  const secEl = $('#present-section-label');
+  const hud = $('#present-hud');
+  if (!pgEl || !S.notebook) return;
+  pgEl.textContent = `${S.pageIndex + 1} / ${pages().length}`;
+  const sec = sections()[S.sectionIndex];
+  if (secEl) {
+    secEl.textContent = sections().length > 1 ? (sec?.title || '') : '';
+  }
+  if (hud) hud.setAttribute('aria-hidden', $('#editor')?.classList.contains('present-mode') ? 'false' : 'true');
+}
+
 function setPresentMode(on) {
-  $('#editor').classList.toggle('present-mode', on);
+  const ed = $('#editor');
+  const rail = $('#tool-rail');
+  ed.classList.toggle('present-mode', on);
   const btn = $('#present-toggle');
   btn.classList.toggle('brand-toggle-active', on);
   btn.textContent = on ? 'Exit' : 'Present';
-  btn.title = on ? 'Exit present mode' : 'Present mode (classroom / projector)';
+  btn.title = on ? 'Exit present mode (F)' : 'Present mode — clean layout for screen share (F)';
   if (on) {
+    S._railWasOpen = !rail?.classList.contains('collapsed');
+    rail?.classList.add('collapsed');
+    ed.classList.remove('present-rail-open');
     if (TOOL_TAB[S.tool] === 'maths') setTool('pen');
     else setTab('draw');
+    if ($('#brand')?.classList.contains('hidden')) {
+      $('#brand').classList.remove('hidden');
+      $('#brand-toggle')?.classList.add('brand-toggle-active');
+    }
+    fitPage();
+  } else {
+    if (S._railWasOpen) rail?.classList.remove('collapsed');
+    ed.classList.remove('present-rail-open');
     fitPage();
   }
   updatePresentTitle();
+  updatePresentHud();
   requestAnimationFrame(resizeCanvas);
 }
 
@@ -2836,6 +2865,7 @@ function updatePageLabel() {
     return;
   }
   $('#page-label').textContent = `${S.pageIndex + 1} / ${pages().length}`;
+  updatePresentHud();
   const sel = $('#paper'); if (sel) sel.value = pg.paper;
   const fmt = $('#page-format'); if (fmt) fmt.value = pg.format === 'wide' ? 'wide' : 'a4';
   const rb = $('#resultant'); if (rb) rb.classList.toggle('brand-toggle-active', !!pg.showResultant);
@@ -2980,6 +3010,15 @@ function bindEditor() {
   $('#redo').onclick = doRedo;
   $('#fit').onclick = fitPage;
   $('#present-toggle').onclick = () => setPresentMode(!$('#editor').classList.contains('present-mode'));
+  $('#present-prev')?.addEventListener('click', () => $('#prev')?.click());
+  $('#present-next')?.addEventListener('click', () => $('#next')?.click());
+  $('#present-rail-toggle')?.addEventListener('click', () => {
+    const rail = $('#tool-rail');
+    if (!rail) return;
+    const opening = rail.classList.contains('collapsed');
+    rail.classList.toggle('collapsed', !opening);
+    $('#editor')?.classList.toggle('present-rail-open', opening);
+  });
   $('#finger').onchange = (e) => { S.fingerDraw = e.target.checked; };
 
   $('#prev').onclick = () => goToPage(S.pageIndex - 1);
@@ -3059,6 +3098,8 @@ function bindEditor() {
     else if (e.key === 'q') setTool('equation');
     else if (e.key === 'Escape' && geoToolActive()) { cancelGeoDraft(); mark(); }
     else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setPresentMode(!$('#editor').classList.contains('present-mode')); }
+    else if ($('#editor')?.classList.contains('present-mode') && e.key === 'ArrowLeft') { e.preventDefault(); $('#prev')?.click(); }
+    else if ($('#editor')?.classList.contains('present-mode') && e.key === 'ArrowRight') { e.preventDefault(); $('#next')?.click(); }
     else if ((e.key === 'Delete' || e.key === 'Backspace') && hasDeletableSelection()) { e.preventDefault(); deleteSelection(); }
   });
 }

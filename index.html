@@ -32,7 +32,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=79" />
+<link rel="stylesheet" href="./css/app.css?v=80" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -81,7 +81,7 @@
     <span id="sync-status" class="sync-status" title="Offline · saved on this device">● Local</span>
     · <button type="button" id="sync-settings-foot" class="sync-foot-link">Cloud sync</button>
     · Paginated notebook whiteboard · works offline · add to Home Screen on iPad
-    · <span id="mb-version" class="mb-version">v79</span>
+    · <span id="mb-version" class="mb-version">v80</span>
   </p>
 </section>
 
@@ -90,8 +90,8 @@
   <!-- Top app bar -->
   <div class="toolbar">
     <div class="tbar-row tbar-top">
-      <img class="appbar-logo" src="./assets/logo.svg" alt="MathBoard" />
-      <button id="back" class="ghost" title="Back to lessons">‹ Lessons</button>
+      <img class="appbar-logo present-hide" src="./assets/logo.svg" alt="MathBoard" />
+      <button id="back" class="ghost present-hide" title="Back to lessons">‹ Lessons</button>
       <input id="nb-name" class="nb-name present-hide" type="text" />
       <span id="nb-title-present" class="nb-title-present"></span>
       <span class="spacer"></span>
@@ -99,7 +99,7 @@
       <button id="redo" title="Redo (⇧⌘Z)">Redo</button>
       <button id="fit" title="Fit page">Fit</button>
       <button id="present-toggle" title="Present mode (classroom / projector)">Present</button>
-      <button id="demo-toggle" title="Live Demo animation bar">Demo</button>
+      <button id="demo-toggle" class="present-hide" title="Live Demo animation bar">Demo</button>
       <button id="collab-toggle" class="hidden present-hide" title="Live collaboration (available when hosted online)">Collaborate</button>
       <button id="brand-toggle" title="Show/hide branding overlay">Brand</button>
       <div class="panel-menu-wrap present-hide">
@@ -280,6 +280,17 @@
             <div class="brand-phone">03212890512</div>
           </div>
         </div>
+        <div id="present-hud" class="present-hud" aria-hidden="true">
+          <div class="present-hud-inner">
+            <button type="button" id="present-prev" class="present-hud-btn" title="Previous page (←)">‹</button>
+            <div class="present-hud-meta">
+              <span id="present-section-label" class="present-section-label"></span>
+              <span id="present-page-label" class="present-page-label">1 / 1</span>
+            </div>
+            <button type="button" id="present-next" class="present-hud-btn" title="Next page (→)">›</button>
+          </div>
+        </div>
+        <button type="button" id="present-rail-toggle" class="present-rail-toggle" title="Show drawing tools">✎</button>
         <div id="busy" class="busy hidden"><div class="busy-box"><div class="spinner"></div><div class="busy-msg">Working…</div></div></div>
         <textarea id="text-editor" class="text-editor hidden" autocomplete="off" autocapitalize="off" spellcheck="false" rows="1"></textarea>
       </div>
@@ -989,5 +1000,5 @@
 </div>
 
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=79"></script>
+<script type="module" src="./js/app.js?v=80"></script>
 </html>
