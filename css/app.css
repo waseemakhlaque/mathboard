@@ -1647,6 +1647,134 @@ select:focus {
 .eq-snippet:hover { background: #e8eef6; border-color: #2566c8; }
 .eq-snippets.hidden { display: none; }
 
+/* ---------- Equation editor dock ---------- */
+.eq-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 500;
+  background: rgba(255, 255, 255, 0.98);
+  border-top: 2px solid var(--accent);
+  padding: 10px max(env(safe-area-inset-right), 12px) max(env(safe-area-inset-bottom), 10px) max(env(safe-area-inset-left), 12px);
+  box-shadow: 0 -10px 40px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.eq-dock.hidden { display: none !important; }
+
+.eq-dock-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.eq-dock-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+  flex: 1;
+}
+
+.eq-dock-btn {
+  font: 600 13px sans-serif;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.eq-dock-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.eq-dock-btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  font-size: 18px;
+  padding: 4px 10px;
+}
+
+.eq-editor-field {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  font-size: 22px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #fff;
+}
+
+.eq-editor-field:focus-within {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.eq-dock-hint {
+  margin: 6px 0 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.eq-symbols {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(32vh, 220px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.eq-sym-group { display: flex; flex-direction: column; gap: 4px; }
+
+.eq-sym-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.eq-sym-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.eq-snippet {
+  font: 600 13px sans-serif;
+  padding: 6px 10px;
+  min-width: 36px;
+  border: 1px solid #d0d8e0;
+  border-radius: 6px;
+  background: #f4f7fa;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.eq-snippet:hover, .eq-snippet:active {
+  background: #e8eef6;
+  border-color: var(--accent);
+}
+
+/* MathLive virtual keyboard above equation dock */
+.ML__keyboard, .MLK__backdrop {
+  z-index: 10050 !important;
+}
+
+math-field.eq-editor-field::part(virtual-keyboard-toggle) {
+  display: inline-flex !important;
+}
+
 .sketch-lab { font-size: 12px; white-space: nowrap; margin-left: 4px; }
 .pcr-app { z-index: 3000; }
 #color-more.pcr-button,

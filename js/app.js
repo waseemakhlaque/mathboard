@@ -1712,6 +1712,7 @@ function abortGesture() {
 }
 
 function onDown(e) {
+  if (eqDockOpen()) return;
   try { cv.setPointerCapture(e.pointerId); } catch (_) { /* non-fatal */ }
   if (e.pointerType === 'touch') {
     S.touch.set(e.pointerId, cssPt(e));
@@ -2056,24 +2057,126 @@ function setupText() {
 
 // ---- equation editor (LaTeX via MathLive <math-field>) -----------------------
 let eqTarget = null;
-let eqField = null; // the <math-field> overlay
-let eqSnippets = null;
+let eqField = null;
+let eqSymbolsBuilt = false;
 
-const EQ_SNIPPETS = [
-  ['\\frac{#@}{#0}', 'Frac'], ['\\sqrt{#0}', '√'], ['\\int', '∫'], ['#@^{#?}', 'Sup'],
-  ['#@_{#?}', 'Sub'], ['\\pi', 'π'], ['\\theta', 'θ'], ['\\left(#0\\right)', '( )'],
+const EQ_SYMBOL_GROUPS = [
+  { label: 'Basic', items: [
+    ['\\frac{#@}{#0}', 'a/b'], ['\\sqrt{#0}', '√'], ['#@^{#?}', 'xⁿ'], ['#@_{#?}', 'xₙ'],
+    ['\\left(#0\\right)', '( )'], ['\\left|#0\\right|', '|x|'], ['\\pm', '±'], ['\\cdot', '·'],
+    ['\\times', '×'], ['\\div', '÷'], ['=', '='],
+  ]},
+  { label: 'Calculus', items: [
+    ['\\int', '∫'], ['\\int_{#?}^{#?}', '∫ₐᵇ'], ['\\frac{d}{dx}', 'd/dx'],
+    ['\\frac{\\partial}{\\partial x}', '∂/∂x'], ['\\lim_{#?}', 'lim'], ['\\sum_{#?}^{#?}', 'Σ'],
+    ['\\infty', '∞'], ['\\Delta', 'Δ'], ['\\delta', 'δ'],
+  ]},
+  { label: 'Trig', items: [
+    ['\\sin', 'sin'], ['\\cos', 'cos'], ['\\tan', 'tan'], ['\\cot', 'cot'],
+    ['\\sec', 'sec'], ['\\csc', 'csc'], ['\\sin^{-1}', 'sin⁻¹'], ['\\cos^{-1}', 'cos⁻¹'],
+    ['\\tan^{-1}', 'tan⁻¹'], ['\\theta', 'θ'], ['\\pi', 'π'],
+  ]},
+  { label: 'Relations', items: [
+    ['\\leq', '≤'], ['\\geq', '≥'], ['\\neq', '≠'], ['\\approx', '≈'],
+    ['\\equiv', '≡'], ['\\Rightarrow', '⇒'], ['\\Leftrightarrow', '⇔'], ['\\therefore', '∴'],
+  ]},
+  { label: 'Sets & logic', items: [
+    ['\\in', '∈'], ['\\notin', '∉'], ['\\subset', '⊂'], ['\\subseteq', '⊆'],
+    ['\\cup', '∪'], ['\\cap', '∩'], ['\\emptyset', '∅'], ['\\forall', '∀'], ['\\exists', '∃'],
+    ['\\mathbb{R}', 'ℝ'], ['\\mathbb{N}', 'ℕ'], ['\\mathbb{Z}', 'ℤ'], ['\\mathbb{Q}', 'ℚ'],
+  ]},
+  { label: 'Greek', items: [
+    ['\\alpha', 'α'], ['\\beta', 'β'], ['\\gamma', 'γ'], ['\\lambda', 'λ'], ['\\mu', 'μ'],
+    ['\\sigma', 'σ'], ['\\phi', 'φ'], ['\\omega', 'ω'], ['\\epsilon', 'ε'], ['\\rho', 'ρ'],
+  ]},
+  { label: 'Structures', items: [
+    ['\\begin{pmatrix}#0 & #1 \\\\ #2 & #3\\end{pmatrix}', '2×2'],
+    ['\\begin{cases}#0 \\\\ #1\\end{cases}', 'cases'],
+    ['\\vec{#0}', 'vector'], ['\\overline{#0}', 'x̄'], ['\\hat{#0}', 'x̂'],
+    ['\\log', 'log'], ['\\ln', 'ln'], ['e^{#0}', 'eˣ'],
+  ]},
 ];
 
-function positionEqEditor() {
-  if (!eqField || !eqTarget) return;
-  const x = eqTarget.at.x * S.scale + S.offsetX;
-  const y = eqTarget.at.y * S.scale + S.offsetY;
-  eqField.style.left = x + 'px';
-  eqField.style.top = y + 'px';
-  if (eqSnippets) {
-    eqSnippets.style.left = x + 'px';
-    eqSnippets.style.top = (y + eqField.offsetHeight + 4) + 'px';
+function eqDockOpen() { return !$('#eq-dock')?.classList.contains('hidden'); }
+
+function mathVirtualKeyboard() { return window.mathVirtualKeyboard; }
+
+function showMathKeyboard() {
+  const vk = mathVirtualKeyboard();
+  if (!vk) return;
+  try {
+    vk.layouts = ['numeric', 'symbols', 'alphabetic', 'greek'];
+    vk.show({ animate: true });
+  } catch (_) {
+    try { eqField?.executeCommand?.('showVirtualKeyboard'); } catch (e2) { /* non-fatal */ }
   }
+}
+
+function hideMathKeyboard() {
+  try { mathVirtualKeyboard()?.hide?.({ animate: true }); } catch (_) {}
+}
+
+function configureMathLive() {
+  const MF = window.MathfieldElement;
+  if (!MF) return;
+  try { MF.fontsDirectory = './vendor/fonts/'; } catch (_) {}
+}
+
+function buildEqSymbols() {
+  if (eqSymbolsBuilt) return;
+  const wrap = $('#eq-symbols');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  for (const grp of EQ_SYMBOL_GROUPS) {
+    const g = document.createElement('div');
+    g.className = 'eq-sym-group';
+    const lab = document.createElement('div');
+    lab.className = 'eq-sym-label';
+    lab.textContent = grp.label;
+    g.appendChild(lab);
+    const row = document.createElement('div');
+    row.className = 'eq-sym-row';
+    for (const [latex, label] of grp.items) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'eq-snippet';
+      b.textContent = label;
+      b.title = latex;
+      b.onmousedown = (e) => e.preventDefault();
+      b.onclick = () => insertEqSnippet(latex);
+      row.appendChild(b);
+    }
+    g.appendChild(row);
+    wrap.appendChild(g);
+  }
+  eqSymbolsBuilt = true;
+}
+
+function setupEqEditor() {
+  configureMathLive();
+  buildEqSymbols();
+  eqField = $('#eq-editor-field');
+  if (!eqField) return;
+  try {
+    eqField.smartMode = false;
+    eqField.smartFence = true;
+    eqField.mathVirtualKeyboardPolicy = 'manual';
+  } catch (_) {}
+  eqField.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEquationEditor(); }
+    if (e.key === 'Escape') { e.preventDefault(); cancelEquationEditor(); }
+    e.stopPropagation();
+  });
+  // Do not commit on blur — iPad taps the virtual keyboard and would close the editor.
+  eqField.addEventListener('focusin', () => showMathKeyboard());
+  $('#eq-done')?.addEventListener('click', commitEquationEditor);
+  $('#eq-cancel')?.addEventListener('click', cancelEquationEditor);
+  $('#eq-kbd-toggle')?.addEventListener('click', () => {
+    eqField?.focus();
+    const vk = mathVirtualKeyboard();
+    if (vk?.visible) vk.hide({ animate: true });
+    else showMathKeyboard();
+  });
 }
 
 function insertEqSnippet(latex) {
@@ -2083,77 +2186,51 @@ function insertEqSnippet(latex) {
     else eqField.value = (eqField.value || '') + latex;
   } catch (_) { eqField.value = (eqField.value || '') + latex; }
   eqField.focus();
+  showMathKeyboard();
 }
 
 function openEquationEditor(o) {
-  eqTarget = o; S.editingId = o.id;
-  if (!eqField) {
-    eqField = document.createElement('math-field');
-    eqField.id = 'eq-editor';
-    eqField.style.position = 'absolute';
-    eqField.style.zIndex = '100';
-    eqField.style.background = '#fff';
-    eqField.style.border = '2px solid #2566c8';
-    eqField.style.borderRadius = '6px';
-    eqField.style.padding = '4px 8px';
-    eqField.style.fontSize = '20px';
-    eqField.style.minWidth = '120px';
-    eqField.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
-    eqField.setAttribute('virtual-keyboard-mode', 'onfocus');
-    document.body.appendChild(eqField);
-    eqField.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEquationEditor(); }
-      if (e.key === 'Escape') { e.preventDefault(); cancelEquationEditor(); }
-      e.stopPropagation();
-    });
-    eqField.addEventListener('blur', commitEquationEditor);
-    eqSnippets = document.createElement('div');
-    eqSnippets.id = 'eq-snippets';
-    eqSnippets.className = 'eq-snippets';
-    EQ_SNIPPETS.forEach(([latex, label]) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'eq-snippet';
-      b.textContent = label;
-      b.title = latex;
-      b.onmousedown = (e) => e.preventDefault(); // keep math-field focused
-      b.onclick = () => insertEqSnippet(latex);
-      eqSnippets.appendChild(b);
-    });
-    document.body.appendChild(eqSnippets);
-    eqSnippets.classList.add('hidden');
-  }
-  positionEqEditor();
+  if (!eqField) setupEqEditor();
+  eqTarget = o;
+  S.editingId = o.id;
+  $('#eq-dock')?.classList.remove('hidden');
   eqField.value = o.latex || '';
-  eqField.classList.remove('hidden');
-  eqSnippets.classList.remove('hidden');
   mark();
-  setTimeout(() => { eqField.focus(); eqField.setValue?.(o.latex || ''); positionEqEditor(); }, 0);
+  requestAnimationFrame(() => {
+    eqField?.setValue?.(o.latex || '');
+    eqField?.focus();
+    showMathKeyboard();
+  });
 }
+
 function commitEquationEditor() {
   if (!eqTarget || !eqField) return;
+  hideMathKeyboard();
   const latex = eqField.value || '';
   eqTarget.latex = latex;
   if (!latex.trim()) {
     const i = objs().indexOf(eqTarget);
     if (i >= 0) objs().splice(i, 1);
   }
-  S.editingId = null; eqTarget = null;
-  eqField.classList.add('hidden');
-  eqSnippets?.classList.add('hidden');
-  eqRenderCache = new Map(); // invalidate cache since latex changed
-  commitAction(); persist(); mark();
+  S.editingId = null;
+  eqTarget = null;
+  $('#eq-dock')?.classList.add('hidden');
+  eqRenderCache = new Map();
+  commitAction();
+  persist();
+  mark();
 }
+
 function cancelEquationEditor() {
   if (!eqTarget) return;
-  // remove the object if it was just created and has no content
+  hideMathKeyboard();
   if (!eqTarget.latex || !eqTarget.latex.trim()) {
     const i = objs().indexOf(eqTarget);
     if (i >= 0) objs().splice(i, 1);
   }
-  S.editingId = null; eqTarget = null;
-  eqField.classList.add('hidden');
-  eqSnippets?.classList.add('hidden');
+  S.editingId = null;
+  eqTarget = null;
+  $('#eq-dock')?.classList.add('hidden');
   mark();
 }
 
@@ -3030,6 +3107,7 @@ function setPenType(t) {
 }
 
 function bindEditor() {
+  setupEqEditor();
   document.querySelectorAll('[data-tool]').forEach((b) => b.onclick = () => setTool(b.dataset.tool));
   document.querySelectorAll('.tab-btn').forEach((b) => b.onclick = () => setTab(b.dataset.tab));
   setTab('draw');
@@ -3125,6 +3203,7 @@ function bindEditor() {
   // keyboard shortcuts (desktop)
   window.addEventListener('keydown', (e) => {
     if ($('#editor').classList.contains('hidden')) return;
+    if (eqDockOpen()) return;
     if (/^(INPUT|TEXTAREA|SELECT|MATH-FIELD)$/.test(e.target.tagName)) return;
     if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); doUndo(); }
     else if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); doRedo(); }
@@ -3687,12 +3766,20 @@ function setupCalculator() {
   if (!window.math) { $('#calc-toggle').style.display = 'none'; return; }
   mathFrac = math.create(math.all); mathFrac.config({ number: 'Fraction' });
   document.querySelectorAll('#calc [data-k]').forEach((b) => b.onclick = () => calcKey(b.dataset.k, b));
-  $('#calc-toggle').onclick = () => { $('#calc').classList.toggle('hidden'); calcExprEl()?.focus(); };
+  $('#calc-toggle').onclick = () => {
+    const open = $('#calc').classList.toggle('hidden') === false;
+    if (open) {
+      const mf = calcExprEl();
+      mf?.focus();
+      setTimeout(() => showMathKeyboard(), 80);
+    } else hideMathKeyboard();
+  };
   $('#calc-close').onclick = () => $('#calc').classList.add('hidden');
   $('#calc-mode').onclick = () => setCalcDeg(!calcDeg);
   const mf = calcExprEl();
   if (mf) {
     try { mf.smartMode = false; mf.smartFence = false; mf.mathVirtualKeyboardPolicy = 'manual'; } catch (_) {}
+    mf.addEventListener('focusin', () => showMathKeyboard());
   }
   mf?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); calcEvaluate(); } });
   document.querySelectorAll('[data-cmode]').forEach((b) => b.onclick = () => setCalcMode(b.dataset.cmode));

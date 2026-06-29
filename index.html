@@ -32,7 +32,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=81" />
+<link rel="stylesheet" href="./css/app.css?v=82" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -81,7 +81,7 @@
     <span id="sync-status" class="sync-status" title="Offline · saved on this device">● Local</span>
     · <button type="button" id="sync-settings-foot" class="sync-foot-link">Cloud sync</button>
     · Paginated notebook whiteboard · works offline · add to Home Screen on iPad
-    · <span id="mb-version" class="mb-version">v81</span>
+    · <span id="mb-version" class="mb-version">v82</span>
   </p>
 </section>
 
@@ -315,6 +315,19 @@
     <button type="button" id="demo-force" class="demo-btn">+ Force</button>
     <button type="button" id="demo-incline" class="demo-btn">+ Incline</button>
     <button type="button" id="demo-close" class="demo-btn demo-x" title="Close demo bar">×</button>
+  </div>
+
+  <!-- Equation editor dock (MathLive + symbol palette + virtual keyboard) -->
+  <div id="eq-dock" class="eq-dock hidden" aria-label="Equation editor">
+    <div class="eq-dock-head">
+      <span class="eq-dock-title">Equation</span>
+      <button type="button" id="eq-kbd-toggle" class="eq-dock-btn">⌨ Math keyboard</button>
+      <button type="button" id="eq-done" class="eq-dock-btn primary">Done</button>
+      <button type="button" id="eq-cancel" class="eq-dock-btn ghost" title="Cancel">✕</button>
+    </div>
+    <math-field id="eq-editor-field" class="eq-editor-field" virtual-keyboard-mode="manual"></math-field>
+    <p class="eq-dock-hint">Tap a symbol below, or open the math keyboard · Done or Enter to place on page</p>
+    <div id="eq-symbols" class="eq-symbols"></div>
   </div>
 
   <div id="stats" class="stats-panel hidden">
@@ -1004,5 +1017,5 @@
 </div>
 
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=81"></script>
+<script type="module" src="./js/app.js?v=82"></script>
 </html>
