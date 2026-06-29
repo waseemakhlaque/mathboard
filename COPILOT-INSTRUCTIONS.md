@@ -2,7 +2,7 @@
 
 You are continuing **MathBoard**, a pencil-first, offline PWA whiteboard for teaching
 A-level Mathematics (Cambridge 9709) on iPad + Mac. Author/owner: **Waseem Akhlaque**,
-A Level Mathematics Teacher. MIT licensed © 2026 Waseem Akhlaque.
+A Level Mathematics Teacher. Proprietary — © 2026 Waseem Akhlaque, all rights reserved.
 
 ## Golden rules (do NOT break these)
 - **Vanilla only.** Plain JavaScript (ES modules) + HTML5 Canvas 2D + CSS. **NO build step,

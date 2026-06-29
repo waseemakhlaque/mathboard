@@ -3,11 +3,12 @@
 **A free, pencil-first notebook whiteboard for teaching A-level mathematics** — built for
 vectors, complex numbers, and live class / YouTube demonstrations.
 
-![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
+![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)
 ![PWA](https://img.shields.io/badge/PWA-installable-success)
 ![No build step](https://img.shields.io/badge/build-none-lightgrey)
 
-> Created by **Waseem Akhlaque**, A-Level Mathematics Teacher — © 2026. Free for everyone under the MIT License.
+> Created by **Waseem Akhlaque**, A-Level Mathematics Teacher — © 2026. All rights reserved.
+> Free to download, install, and use; modification and redistribution are not permitted.
 
 MathBoard is a single static web app (HTML/CSS/JS, no build step). It runs in any modern browser on
 Mac, Windows, iPad, or Android, installs to the home screen as an app, and works fully offline.
@@ -87,8 +88,10 @@ For contributors, developers, and advanced configuration:
 All JavaScript libraries, math engines, and fonts (KaTeX) are bundled locally. The app loads the **Inter** font family from Google Fonts CDN for optimal typography on first visit; after that initial load, the app works fully offline. If offline on first visit, it falls back to system fonts.
 
 ## License
-[MIT](LICENSE) © 2026 Waseem Akhlaque. Free to use, modify, and share — please keep the copyright
-notice. Bundled libraries keep their own licenses — see [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).
+**Proprietary — [© 2026 Waseem Akhlaque, all rights reserved](LICENSE).** You may download, install,
+and use MathBoard freely for personal and classroom use. You may **not** modify, redistribute, rehost,
+or create derivative works without written permission from the author. Bundled libraries keep their own
+licenses — see [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).
 
 ## Author
 **Waseem Akhlaque** — A-Level Mathematics Teacher (Cambridge 9709).

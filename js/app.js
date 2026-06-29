@@ -1,5 +1,5 @@
 // MathBoard — a pencil-first notebook whiteboard for A-level maths.
-// Copyright © 2026 Waseem Akhlaque. MIT License (see LICENSE).
+// Copyright © 2026 Waseem Akhlaque. All rights reserved. Proprietary License (see LICENSE).
 //
 // app.js — paginated notebook whiteboard.
 // Vanilla JS, Canvas 2D. Strokes are stored in page units (PAGE_W x PAGE_H) so
@@ -48,6 +48,11 @@ import { setupSymbolic, setupSymbolicPanel, nerdamerDiff } from './symbolic.js';
 import { setupAlgebra, setupAlgebraPanel, mathjsDerivative } from './algebra.js';
 import { setupRationals, setupRationalsPanel } from './rationals.js';
 import { filterNotebooksBySearch } from './librarySearch.js';
+import {
+  setupScene, tick as sceneTick, sceneTime, sceneNormalized, onPageChange as scenePageChange,
+  objAlpha, objPopScale, objDrawProgress, strokeReveal, hasTargetTracks,
+  recordStroke, recordObject, ensureScene, reset as sceneReset,
+} from './scene.js';
 import { pageW, pageH, thumbDims, A4_W, A4_H } from './pageLayout.js';
 import { getAllNotebooks, getNotebook, storageReady } from './storage.js';
 import getStroke from '../vendor/perfect-freehand.mjs';
@@ -191,6 +196,7 @@ function snapshotPage() {
     cplxLoci: clone(p.cplxLoci || []),
     calcItems: clone(p.calcItems || []),
     instruments: clone(p.instruments || []),
+    scene: p.scene ? clone(p.scene) : null,
   };
 }
 function restorePage(s) {
@@ -217,6 +223,9 @@ function restorePage(s) {
   p.cplxLoci = clone(s.cplxLoci || []);
   p.calcItems = clone(s.calcItems || []);
   p.instruments = clone(s.instruments || []);
+  if (s.scene) p.scene = clone(s.scene);
+  else delete p.scene;
+  scenePageChange();
   restoreGeoItems(p.geoItems);
   if (fmtChanged) { teardownGeo(); loadGeoPage(p); fitPage(); }
   updatePageLabel();
@@ -502,11 +511,40 @@ function strokeOpts(s) {
   return { size: w * 1.85, thinning: 0.58, smoothing: 0.55, streamline: 0.5, simulatePressure: true };
 }
 
-function drawStroke(c, s) {
+function sliceStrokePoints(pts, progress) {
+  if (progress >= 1 || !pts?.length) return pts;
+  if (progress <= 0) return [pts[0]];
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) {
+    total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  }
+  if (total < 0.5) return pts.slice(0, 1);
+  const target = total * progress;
+  let acc = 0;
+  const out = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const seg = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    if (acc + seg >= target) {
+      const f = seg > 0 ? (target - acc) / seg : 0;
+      out.push({
+        x: pts[i - 1].x + (pts[i].x - pts[i - 1].x) * f,
+        y: pts[i - 1].y + (pts[i].y - pts[i - 1].y) * f,
+        p: pts[i].p ?? pts[i - 1].p ?? 0.5,
+      });
+      break;
+    }
+    acc += seg;
+    out.push(pts[i]);
+  }
+  return out.length >= 2 ? out : [pts[0], pts[Math.min(1, pts.length - 1)]];
+}
+
+function drawStroke(c, s, progress = 1) {
   // Defensive: a malformed/partial stroke (no points array) must never crash the
   // render loop — it would throw every frame and flood the global error banner.
-  const pts = s?.points;
-  if (!pts || !pts.length) return;
+  const ptsRaw = s?.points;
+  if (!ptsRaw || !ptsRaw.length) return;
+  const pts = progress < 1 ? sliceStrokePoints(ptsRaw, progress) : ptsRaw;
   const hl = s.tool === 'highlighter';
   const input = pts.map((pt) => [pt.x, pt.y, pt.p ?? 0.5]);
   const outline = getStroke(input, { ...strokeOpts(s), last: true });
@@ -557,16 +595,19 @@ function complexInfo(o) {                          // a + bi from page point, or
   const a = (o.at.x - gridCx()) / UNIT, b = (gridCy() - o.at.y) / UNIT;
   return { a, b, mod: Math.hypot(a, b), argRad: Math.atan2(b, a) };
 }
-function drawArrow(c, a, b, col, dashed) {
+function drawArrow(c, a, b, col, dashed, progress = 1) {
+  const tx = a.x + (b.x - a.x) * progress;
+  const ty = a.y + (b.y - a.y) * progress;
   c.strokeStyle = col; c.fillStyle = col; c.lineWidth = 3.5; c.lineCap = 'round'; c.lineJoin = 'round';
   if (dashed) c.setLineDash([14, 10]);
-  c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke();
+  c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(tx, ty); c.stroke();
   c.setLineDash([]);
-  const ang = Math.atan2(b.y - a.y, b.x - a.x), h = 22;
-  if (Math.hypot(b.x - a.x, b.y - a.y) < 4) return;
-  c.beginPath(); c.moveTo(b.x, b.y);
-  c.lineTo(b.x - h * Math.cos(ang - 0.4), b.y - h * Math.sin(ang - 0.4));
-  c.lineTo(b.x - h * Math.cos(ang + 0.4), b.y - h * Math.sin(ang + 0.4));
+  const ang = Math.atan2(ty - a.y, tx - a.x), h = 22;
+  if (Math.hypot(tx - a.x, ty - a.y) < 4) return;
+  if (progress < 1) return;
+  c.beginPath(); c.moveTo(tx, ty);
+  c.lineTo(tx - h * Math.cos(ang - 0.4), ty - h * Math.sin(ang - 0.4));
+  c.lineTo(tx - h * Math.cos(ang + 0.4), ty - h * Math.sin(ang + 0.4));
   c.closePath(); c.fill();
 }
 function drawComplex(c, o, col) {
@@ -601,7 +642,7 @@ function drawTracer(c, o) {
   c.strokeStyle = col; c.globalAlpha = 0.35; c.lineWidth = 1.5; c.setLineDash([6, 6]);
   c.beginPath(); c.arc(o.center.x, o.center.y, r, 0, Math.PI * 2); c.stroke();
   c.setLineDash([]); c.globalAlpha = 1;
-  const ang = S.demoT * Math.PI * 2;
+  const ang = (o.anim && !hasTargetTracks(page(), o.id) ? S.demoT : 0) * Math.PI * 2;
   const px = o.center.x + Math.cos(ang) * r, py = o.center.y - Math.sin(ang) * r;
   c.strokeStyle = col; c.lineWidth = 2;
   c.beginPath(); c.moveTo(o.center.x, o.center.y); c.lineTo(px, py); c.stroke();
@@ -611,7 +652,7 @@ function drawTracer(c, o) {
 }
 // live force vector with auto-resolved horizontal/vertical components (Module 2).
 // liveAngle = base angleDeg (+ demoT sweep when o.anim) so it can be dragged AND animated.
-function forceLiveAngle(o) { return (o.angleDeg || 0) + (o.anim ? S.demoT * 360 : 0); }
+function forceLiveAngle(o) { return (o.angleDeg || 0) + (o.anim && !hasTargetTracks(page(), o.id) ? S.demoT * 360 : 0); }
 function compArrow(c, a, b, col) {
   if (Math.hypot(b.x - a.x, b.y - a.y) < 2) return;
   c.strokeStyle = col; c.fillStyle = col; c.lineWidth = 2; c.setLineDash([8, 6]);
@@ -626,20 +667,22 @@ function forceTip(o) {
   const th = forceLiveAngle(o) * Math.PI / 180;
   return { x: o.at.x + o.mag * Math.cos(th) * FORCE_SCALE, y: o.at.y - o.mag * Math.sin(th) * FORCE_SCALE };
 }
-function drawForceVec(c, o) {
+function drawForceVec(c, o, drawProgress = 1) {
   const col = o.color || '#d23b3b';
   const th = forceLiveAngle(o) * Math.PI / 180;
   const Fx = o.mag * Math.cos(th), Fy = o.mag * Math.sin(th);
   const tip = forceTip(o), corner = { x: tip.x, y: o.at.y };
-  compArrow(c, o.at, corner, '#1f9d57');         // horizontal component Fx
-  compArrow(c, corner, tip, '#2566c8');          // vertical component Fy
-  // right-angle marker at the corner
-  if (Math.abs(Fx) > 0.05 && Math.abs(Fy) > 0.05) {
-    const dx = Math.sign(o.at.x - corner.x) * 12, dy = Math.sign(tip.y - corner.y) * 12;
-    c.strokeStyle = '#88929c'; c.lineWidth = 1.5;
-    c.beginPath(); c.moveTo(corner.x + dx, corner.y); c.lineTo(corner.x + dx, corner.y + dy); c.lineTo(corner.x, corner.y + dy); c.stroke();
+  if (drawProgress >= 1) {
+    compArrow(c, o.at, corner, '#1f9d57');         // horizontal component Fx
+    compArrow(c, corner, tip, '#2566c8');          // vertical component Fy
+    // right-angle marker at the corner
+    if (Math.abs(Fx) > 0.05 && Math.abs(Fy) > 0.05) {
+      const dx = Math.sign(o.at.x - corner.x) * 12, dy = Math.sign(tip.y - corner.y) * 12;
+      c.strokeStyle = '#88929c'; c.lineWidth = 1.5;
+      c.beginPath(); c.moveTo(corner.x + dx, corner.y); c.lineTo(corner.x + dx, corner.y + dy); c.lineTo(corner.x, corner.y + dy); c.stroke();
+    }
   }
-  drawArrow(c, o.at, tip, col, false);            // the force itself
+  drawArrow(c, o.at, tip, col, false, drawProgress);            // the force itself
   c.fillStyle = '#1b1b1b'; c.beginPath(); c.arc(o.at.x, o.at.y, 4, 0, Math.PI * 2); c.fill();
   const degs = Math.round((forceLiveAngle(o) % 360 + 360) % 360);
   c.font = '600 17px sans-serif'; c.fillStyle = col;
@@ -664,7 +707,7 @@ function labeledArrow(c, a, b, col, dashed, lab) {
 // inclined-plane block (Module 3): drag/animate the slope angle; weight, normal, friction +
 // along/perpendicular components all update live.
 function inclineLiveAngle(o) {
-  const base = o.anim ? (5 + S.demoT * 80) : (o.angleDeg || 30);
+  const base = o.anim && !hasTargetTracks(page(), o.id) ? (5 + S.demoT * 80) : (o.angleDeg || 30);
   return Math.max(5, Math.min(85, base));
 }
 function inclineGeom(o) {
@@ -945,12 +988,14 @@ function shapeExtras() {
   return S.sketchy ? { sketchy: true } : {};
 }
 
-function drawObject(c, o) {
+function drawObject(c, o, drawProgress = 1) {
   const col = o.color || '#1b1b1b';
   if (o.sketchy && ['line', 'rect', 'ellipse'].includes(o.kind) && drawRoughShape(c, o, col)) return;
   if (o.kind === 'line') {
     c.strokeStyle = col; c.lineWidth = 3; c.lineCap = 'round'; c.setLineDash([]);
-    c.beginPath(); c.moveTo(o.from.x, o.from.y); c.lineTo(o.to.x, o.to.y); c.stroke();
+    const tx = o.from.x + (o.to.x - o.from.x) * drawProgress;
+    const ty = o.from.y + (o.to.y - o.from.y) * drawProgress;
+    c.beginPath(); c.moveTo(o.from.x, o.from.y); c.lineTo(tx, ty); c.stroke();
     return;
   }
   if (o.kind === 'text') { drawText(c, o); return; }
@@ -970,7 +1015,7 @@ function drawObject(c, o) {
   if (o.kind === 'complex') { drawComplex(c, o, col); return; }
   if (o.kind === 'circle') { drawCircle(c, o, col); return; }
   if (o.kind === 'tracer') { drawTracer(c, o); return; }
-  if (o.kind === 'forcevec') { drawForceVec(c, o); return; }
+  if (o.kind === 'forcevec') { drawForceVec(c, o, drawProgress); return; }
   if (o.kind === 'incline') { drawInclineObj(c, o); return; }
   if (o.kind === 'image') {
     const img = objImage(o);
@@ -1006,7 +1051,8 @@ function drawObject(c, o) {
     if (o.label) { c.font = '600 17px sans-serif'; c.fillText(o.label, o.at.x + 10, o.at.y + 5); }
     return;
   }
-  drawArrow(c, o.from, o.to, col, o.kind === 'resultant');
+  drawArrow(c, o.from, o.to, col, o.kind === 'resultant', drawProgress);
+  if (drawProgress < 1) return;
   const v = vecInfo(o);
   const lx = o.to.x + 12, ly = o.to.y - 10;
   c.fillStyle = col; c.font = '600 24px sans-serif';
@@ -1014,9 +1060,26 @@ function drawObject(c, o) {
   c.font = '18px sans-serif';
   c.fillText(`|v| = ${v.mag.toFixed(2)}   ${formatAngle(v.angRad)}`, lx, ly + 24);
 }
-function drawObjects(c, pg) {
+function drawObjects(c, pg, t = 0) {
   refreshGraphObjects();
-  for (const o of visibleObjects(pg)) drawObject(c, o);
+  for (const o of visibleObjects(pg)) {
+    const tracked = hasTargetTracks(pg, o.id);
+    const alpha = objAlpha(pg, o.id, t);
+    const scale = objPopScale(pg, o.id, t);
+    const drawProgress = objDrawProgress(pg, o.id, t);
+    if (tracked && alpha <= 0 && drawProgress <= 0) continue;
+    c.save();
+    if (alpha < 1) c.globalAlpha *= alpha;
+    if (scale !== 1 && tracked) {
+      const b = objBBox(o);
+      const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+      c.translate(cx, cy);
+      c.scale(scale, scale);
+      c.translate(-cx, -cy);
+    }
+    drawObject(c, o, drawProgress);
+    c.restore();
+  }
   if (pg.showParallelogram) {
     const vs = (pg.objects || []).filter((o) => o.kind === 'vector');
     if (vs.length >= 2) {
@@ -1340,9 +1403,15 @@ function drawPageContent(c, pg) {
 }
 
 function render() {
-  // live demo: advance the parameter while playing and force a redraw each frame
-  if (S.playing && S.notebook && !$('#editor').classList.contains('hidden')) {
-    const now = performance.now();
+  const now = performance.now();
+  const pg = page();
+  const hasScene = !!(pg?.scene?.steps?.length);
+  if (hasScene && S.notebook && !$('#editor').classList.contains('hidden')) {
+    if (sceneTick(now)) S.dirty = true;
+    S.demoT = sceneNormalized();
+    syncDemoUI();
+  } else if (S.playing && S.notebook && !$('#editor').classList.contains('hidden')) {
+    // legacy live demo: advance the parameter while playing
     const dt = (now - S.demoLast) / 1000; S.demoLast = now;
     S.demoT += dt / Math.max(0.5, S.demoPeriod);
     if (S.demoT > 1) S.demoT -= 1;
@@ -1350,6 +1419,8 @@ function render() {
     S.dirty = true;
   }
   if (S.dirty && S.notebook && !$('#editor').classList.contains('hidden')) {
+    const sceneT = hasScene ? sceneTime() : 0;
+    if (hasScene) S.demoT = sceneNormalized();
     const r = cv.getBoundingClientRect();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, cv.width, cv.height);
@@ -1376,12 +1447,16 @@ function render() {
     drawFunctions(ctx, page());
     drawTrig(ctx, page());
     drawCalcItems(ctx, page());
-    drawObjects(ctx, page());
+    drawObjects(ctx, page(), sceneT);
     drawMechItems(ctx, page());
     drawCplxLoci(ctx, page());
     drawInstruments(ctx, page());
     if (S.creating) drawObject(ctx, S.creating);
-    for (const s of visibleStrokes(page())) drawStroke(ctx, s);
+    for (const s of visibleStrokes(page())) {
+      const prog = strokeReveal(page(), s.id, sceneT);
+      if (hasTargetTracks(page(), s.id) && prog <= 0) continue;
+      drawStroke(ctx, s, prog);
+    }
     if (S.drawing && !S.drawing.eraser) drawStrokePreview(ctx, S.drawing);
     // selection highlight
     if (S.selection) {
@@ -1875,7 +1950,7 @@ function onDown(e) {
   }
   // pen / highlighter
   beginAction();
-  const stroke = { tool: S.tool, color: S.color, width: S.width, points: [{ x: p.x, y: p.y, p: pressureOf(e) }] };
+  const stroke = { id: uid(), tool: S.tool, color: S.color, width: S.width, points: [{ x: p.x, y: p.y, p: pressureOf(e) }] };
   if (S.tool === 'pen') stroke.penType = S.penType;
   S.drawing = stroke;
   mark();
@@ -1991,12 +2066,15 @@ function onUp(e) {
     if (o.kind === 'circle') ok = Math.hypot(o.edge.x - o.center.x, o.edge.y - o.center.y) > 6;
     else if (o.from && o.to) ok = Math.hypot(o.to.x - o.from.x, o.to.y - o.from.y) > 4;   // vector/line/rect/ellipse
     // complex (a single point) always commits
-    if (ok) objs().push(o);
+    if (ok) { objs().push(o); recordObject(o); }
     S.creating = null; commitAction(); mark(); return;
   }
   if (S.drawing && S.drawing.eraser) { S.drawing = null; commitAction(); return; }
   if (S.drawing) {
-    if (S.drawing.points.length) page().strokes.push(S.drawing);
+    if (S.drawing.points.length) {
+      page().strokes.push(S.drawing);
+      recordStroke(S.drawing);
+    }
     S.drawing = null;
     commitAction();
     mark();
@@ -2031,7 +2109,7 @@ function splitStrokeAtErase(s, r, p) {
   if (run.length) segs.push(run);
   return segs
     .filter((pts) => pts.length > 0)
-    .map((pts) => ({ tool: s.tool, penType: s.penType, color: s.color, width: s.width, points: pts }));
+    .map((pts) => ({ id: s.id, tool: s.tool, penType: s.penType, color: s.color, width: s.width, points: pts }));
 }
 function eraseAt(p) {
   const r = (S.width + 14);
@@ -2830,6 +2908,7 @@ function goToPage(i) {
   loadGeoPage(page());
   fitPage();
   if (typeof S.collabPageChange === 'function') S.collabPageChange();
+  scenePageChange();
   updatePageLabel();
   mark();
   if (isPresent && cvEl) {
@@ -3041,7 +3120,10 @@ function setPresentMode(on) {
   const btn = $('#present-toggle');
   btn.classList.toggle('brand-toggle-active', on);
   btn.textContent = on ? 'Exit' : 'Present';
-  btn.title = on ? 'Exit present mode (F)' : 'Present mode — clean layout for screen share (F)';
+  btn.title = on ? 'Exit present mode (Esc)' : 'Present mode — clean layout for screen share (F)';
+  const hotspot = $('#scene-next-hotspot');
+  const hasScene = !!(page()?.scene?.steps?.length);
+  if (hotspot) hotspot.classList.toggle('hidden', !on || !hasScene);
   if (on) {
     S._railWasOpen = !rail?.classList.contains('collapsed');
     rail?.classList.add('collapsed');
@@ -3313,9 +3395,14 @@ function bindEditor() {
     else if (e.key === 't') setTool('text');
     else if (e.key === 'q') setTool('equation');
     else if (e.key === 'Escape' && geoToolActive()) { cancelGeoDraft(); mark(); }
+    else if (e.key === 'Escape' && $('#editor')?.classList.contains('present-mode')) { e.preventDefault(); setPresentMode(false); }
     else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setPresentMode(!$('#editor').classList.contains('present-mode')); }
     else if ($('#editor')?.classList.contains('present-mode') && e.key === 'ArrowLeft') { e.preventDefault(); $('#prev')?.click(); }
-    else if ($('#editor')?.classList.contains('present-mode') && e.key === 'ArrowRight') { e.preventDefault(); $('#next')?.click(); }
+    else if ($('#editor')?.classList.contains('present-mode') && e.key === 'ArrowRight') {
+      e.preventDefault();
+      if (page()?.scene?.steps?.length) $('#scene-next')?.click();
+      else $('#next')?.click();
+    }
     else if ((e.key === 'Delete' || e.key === 'Backspace') && hasDeletableSelection()) { e.preventDefault(); deleteSelection(); }
   });
 }
@@ -4353,14 +4440,14 @@ function setupRail() {
 
 // ---- live demo animation bar (Module 1) --------------------------------------
 function syncDemoUI() {
-  const s = $('#demo-slider'); if (s) s.value = Math.round(S.demoT * 1000);
-  const v = $('#demo-val'); if (v) v.textContent = S.demoT.toFixed(2);
+  const s = $('#scene-slider') || $('#demo-slider'); if (s) s.value = Math.round(S.demoT * 1000);
+  const v = $('#scene-val') || $('#demo-val'); if (v) v.textContent = page()?.scene?.steps?.length ? `${sceneTime().toFixed(1)}s` : S.demoT.toFixed(2);
 }
 function demoPlay(on) {
   S.playing = on;
   S.demoLast = performance.now();
-  const b = $('#demo-play');
-  if (b) { b.textContent = on ? '❚❚ Pause' : '► Play'; b.classList.toggle('brand-toggle-active', on); }
+  const b = $('#scene-play') || $('#demo-play');
+  if (b) { b.textContent = on ? '❚❚' : '▶'; b.classList.toggle('brand-toggle-active', on); }
   mark();
 }
 function demoReset() { demoPlay(false); S.demoT = 0; syncDemoUI(); mark(); }
@@ -4395,6 +4482,7 @@ function addForceVec() {
   beginAction();
   const o = { id: uid(), kind: 'forcevec', at: { x: gridCx(), y: gridCy() }, mag: 5, angleDeg: 30, anim: true, color: S.color || '#d23b3b' };
   objs().push(o);
+  recordObject(o);
   commitAction();
   selectNewObject(o);
 }
@@ -4456,11 +4544,11 @@ function addIncline() {
   syncInclineObjectPanel(o);
 }
 function setupDemo() {
-  $('#demo-toggle')?.addEventListener('click', () => $('#demo-bar')?.classList.toggle('hidden'));
-  $('#demo-close')?.addEventListener('click', () => { demoPlay(false); $('#demo-bar')?.classList.add('hidden'); });
-  $('#demo-play')?.addEventListener('click', () => demoPlay(!S.playing));
-  $('#demo-reset')?.addEventListener('click', demoReset);
-  $('#demo-slider')?.addEventListener('input', (e) => { if (S.playing) demoPlay(false); S.demoT = (+e.target.value || 0) / 1000; syncDemoUI(); mark(); });
+  $('#demo-toggle')?.addEventListener('click', () => {
+    ensureScene(page());
+    $('#demo-bar')?.classList.toggle('hidden');
+  });
+  $('#demo-close')?.addEventListener('click', () => { demoPlay(false); sceneReset(); $('#demo-bar')?.classList.add('hidden'); });
   $('#demo-add')?.addEventListener('click', addTracer);
   $('#demo-force')?.addEventListener('click', addForceVec);
   $('#demo-incline')?.addEventListener('click', addIncline);
@@ -4651,6 +4739,7 @@ function init() {
   setupPanelMenu();
   setupRail();
   setupDemo();
+  setupScene({ page, objs, beginAction, commitAction, mark, persist });
   setupLayers({ page, beginAction, commitAction, persist, mark });
   setupLayersPanel();
   makeDraggable($('#layers'), $('#layers-head'));

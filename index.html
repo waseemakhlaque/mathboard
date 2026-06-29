@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- MathBoard — Copyright © 2026 Waseem Akhlaque. MIT License (see LICENSE). -->
+<!-- MathBoard — Copyright © 2026 Waseem Akhlaque. All rights reserved. Proprietary License (see LICENSE). -->
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -32,7 +32,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=84" />
+<link rel="stylesheet" href="./css/app.css?v=86" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -81,7 +81,7 @@
     <span id="sync-status" class="sync-status" title="Offline · saved on this device">● Local</span>
     · <button type="button" id="sync-settings-foot" class="sync-foot-link">Cloud sync</button>
     · Paginated notebook whiteboard · works offline · add to Home Screen on iPad
-    · <span id="mb-version" class="mb-version">v84</span>
+    · <span id="mb-version" class="mb-version">v86</span>
   </p>
 </section>
 
@@ -322,15 +322,23 @@
     <span class="collab-hint">Live strokes sync · same room name on each device</span>
   </div>
   <div id="demo-bar" class="demo-bar hidden">
-    <span class="demo-title">Live Demo</span>
-    <button type="button" id="demo-play" class="demo-btn">► Play</button>
-    <button type="button" id="demo-reset" class="demo-btn">⟲ Reset</button>
-    <label class="demo-slab">t<input id="demo-slider" type="range" min="0" max="1000" value="0" /><span id="demo-val">0.00</span></label>
+    <span class="demo-title">Scene</span>
+    <button type="button" id="scene-prev" class="demo-btn" title="Previous step">◀◀</button>
+    <button type="button" id="scene-play" class="demo-btn" title="Play / Pause">▶</button>
+    <button type="button" id="scene-next" class="demo-btn" title="Next step">▶▶</button>
+    <button type="button" id="scene-reset" class="demo-btn" title="Reset timeline">⟲</button>
+    <label class="demo-slab">t<input id="scene-slider" type="range" min="0" max="1000" value="0" /><span id="scene-val">0.0s</span></label>
+    <button type="button" id="scene-mode" class="demo-btn" title="Auto / Manual stepping">Manual</button>
+    <button type="button" id="scene-add-step" class="demo-btn">+ Step</button>
+    <button type="button" id="scene-record" class="demo-btn" title="Record new ink/objects into current step">Record</button>
+    <div id="scene-steps" class="scene-steps"></div>
+    <span class="demo-title demo-legacy">Demo</span>
     <button type="button" id="demo-add" class="demo-btn">+ Demo point</button>
     <button type="button" id="demo-force" class="demo-btn">+ Force</button>
     <button type="button" id="demo-incline" class="demo-btn">+ Incline</button>
     <button type="button" id="demo-close" class="demo-btn demo-x" title="Close demo bar">×</button>
   </div>
+  <button type="button" id="scene-next-hotspot" class="scene-next-hotspot hidden" title="Next step (Space)">Next ▶</button>
 
   <!-- Equation editor dock (MathLive + symbol palette + virtual keyboard) -->
   <div id="eq-dock" class="eq-dock hidden" aria-label="Equation editor">
@@ -1034,5 +1042,5 @@
 </div>
 
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=84"></script>
+<script type="module" src="./js/app.js?v=86"></script>
 </html>
