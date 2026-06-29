@@ -9,7 +9,7 @@ window.MB_CONFIG = {
   // Usage analytics (Cloudflare Web Analytics). Paste the beacon TOKEN from
   // Cloudflare dashboard → Analytics & Logs → Web Analytics → Add a site.
   // Leave '' to disable (no tracking). Privacy-friendly, no personal data.
-  cfAnalyticsToken: '',
+  cfAnalyticsToken: '4e4b4974dbbc4eb7b461b9ed730d7b21',
   // P1: Brand badge — shown in present mode. Override via config.local.js.
   brandName: 'MathBoard',
   brandTeacher: 'Waseem Akhlaque',
