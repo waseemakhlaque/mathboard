@@ -25,6 +25,19 @@
 <script src="./config.js"></script>
 <!-- Optional local overrides (gitignored). Copy config.example.js → config.local.js for Supabase/collab. -->
 <script src="./config.local.js" onerror="window.__cfgLocalMissing=true"></script>
+<!-- Privacy-friendly usage stats: loads Cloudflare Web Analytics ONLY if a token is configured
+     (config.js → cfAnalyticsToken) and the device is online. No personal data; offline PWA unaffected. -->
+<script>
+  (function () {
+    var t = (window.MB_CONFIG && window.MB_CONFIG.cfAnalyticsToken || '').trim();
+    if (!t || !navigator.onLine) return;
+    var s = document.createElement('script');
+    s.defer = true;
+    s.src = 'https://static.cloudflareinsights.com/beacon.min.js';
+    s.setAttribute('data-cf-beacon', JSON.stringify({ token: t }));
+    document.head.appendChild(s);
+  })();
+</script>
 <link rel="icon" href="./assets/logo.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="./assets/logo.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -32,7 +45,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=86" />
+<link rel="stylesheet" href="./css/app.css?v=87" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -81,7 +94,7 @@
     <span id="sync-status" class="sync-status" title="Offline · saved on this device">● Local</span>
     · <button type="button" id="sync-settings-foot" class="sync-foot-link">Cloud sync</button>
     · Paginated notebook whiteboard · works offline · add to Home Screen on iPad
-    · <span id="mb-version" class="mb-version">v86</span>
+    · <span id="mb-version" class="mb-version">v87</span>
   </p>
 </section>
 
@@ -1042,5 +1055,5 @@
 </div>
 
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=86"></script>
+<script type="module" src="./js/app.js?v=87"></script>
 </html>

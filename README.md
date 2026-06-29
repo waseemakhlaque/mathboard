@@ -87,6 +87,9 @@ For contributors, developers, and advanced configuration:
 ### Notes on offline capability
 All JavaScript libraries, math engines, and fonts (KaTeX) are bundled locally. The app loads the **Inter** font family from Google Fonts CDN for optimal typography on first visit; after that initial load, the app works fully offline. If offline on first visit, it falls back to system fonts.
 
+### Privacy
+MathBoard stores all your notebooks **locally on your device** (IndexedDB) — they are never uploaded unless you explicitly enable Cloud Sync. If the operator has configured a `cfAnalyticsToken`, the app loads **Cloudflare Web Analytics** to count anonymous, aggregate usage (page views, approximate region) with **no cookies and no personal data**; it is disabled by default and only runs when online.
+
 ## License
 **Proprietary — [© 2026 Waseem Akhlaque, all rights reserved](LICENSE).** You may download, install,
 and use MathBoard freely for personal and classroom use. You may **not** modify, redistribute, rehost,
