@@ -161,17 +161,23 @@ function drawIncline(c, item) {
   c.fill(); c.stroke();
   c.strokeStyle = '#88929c'; c.lineWidth = 2;
   c.beginPath(); c.moveTo(a.x - 40, a.y); c.lineTo(b.x + 50, b.y); c.stroke();
-  const mid = { x: a.x + base * 0.55, y: a.y - h * 0.55 };
+  // Animate block sliding down the slope
+  const dt = (typeof window.S !== 'undefined' && window.S?.demoT != null) ? window.S.demoT : 0;
+  const isAnim = item.anim && dt > 0;
+  const blockT = isAnim ? dt : 0.55; // static position at mid-slope
+  // Block slides from top to bottom along the slope
+  const blockX = a.x + base * blockT;
+  const blockY = a.y - h * blockT;
   const bw = 44, bh = 30;
   c.save();
-  c.translate(mid.x, mid.y);
+  c.translate(blockX, blockY);
   c.rotate(-alpha);
   c.fillStyle = '#c8d4e0'; c.strokeStyle = '#4a5560'; c.lineWidth = 2;
   c.fillRect(-bw / 2, -bh, bw, bh); c.strokeRect(-bw / 2, -bh, bw, bh);
   c.restore();
   const m = item.mass || 1, g = item.g || 9.8, mg = m * g;
   const sc = MECH_SCALE * 0.1;
-  const cx = mid.x, cy = mid.y - 8;
+  const cx = blockX, cy = blockY - 8;
   const pAng = 90 - item.angleDeg;
   const nAng = 90 + item.angleDeg;
   drawArrow(c, { x: cx, y: cy }, forceEnd({ x: cx, y: cy }, mg, -90, sc / 0.12), '#1f9d57', false);
@@ -188,8 +194,12 @@ function drawIncline(c, item) {
   c.fillStyle = '#4a5560'; c.font = '600 16px sans-serif';
   c.fillText(`α = ${item.angleDeg}°`, a.x + 12, a.y - 12);
   if (item.mu > 0) {
-    drawArrow(c, { x: cx, y: cy }, forceEnd({ x: cx, y: cy }, item.mu * mg * Math.cos(alpha), pAng + 180, sc / 0.12), '#d23b3b', false, 2.5);
-    c.fillStyle = '#d23b3b'; c.fillText('f', cx - 50, cy + 20);
+    // Friction arrow always at block position, pointing up-slope
+    const fMag = item.mu * mg * Math.cos(alpha);
+    const upAng = pAng + 180;
+    const fEnd = forceEnd({ x: cx, y: cy }, fMag, upAng, sc / 0.12);
+    drawArrow(c, { x: cx, y: cy }, fEnd, '#d23b3b', false, 2.5);
+    c.fillStyle = '#d23b3b'; c.fillText('f', fEnd.x - 16, fEnd.y - 8);
   }
 }
 
@@ -212,6 +222,22 @@ function drawProjectile(c, item) {
   c.stroke();
   c.fillStyle = '#1b1b1b';
   c.beginPath(); c.arc(item.at.x, item.at.y, 6, 0, Math.PI * 2); c.fill();
+  // Animated dot along trajectory
+  const dt = (typeof window.S !== 'undefined' && window.S?.demoT != null) ? window.S.demoT : 0;
+  const isAnim = item.anim && dt > 0;
+  if (isAnim && pts.length > 1) {
+    const idx = Math.min(pts.length - 1, Math.floor(dt * pts.length));
+    const dp = pts[idx];
+    c.save();
+    // Glowing animated dot
+    c.shadowColor = '#d23b3b'; c.shadowBlur = 18;
+    c.fillStyle = '#d23b3b';
+    c.beginPath(); c.arc(dp.x, dp.y, 8, 0, Math.PI * 2); c.fill();
+    c.shadowBlur = 0;
+    c.fillStyle = '#fff';
+    c.beginPath(); c.arc(dp.x, dp.y, 3, 0, Math.PI * 2); c.fill();
+    c.restore();
+  }
   if (item.showVel) {
     for (let t = 0; t <= tFlight; t += Math.max(0.4, tFlight / 5)) {
       const xm = ux * t, ym = uy * t - 0.5 * g * t * t;
@@ -311,6 +337,35 @@ function drawMotionGraph(c, item) {
     if (i === 0) c.moveTo(px, py); else c.lineTo(px, py);
   });
   c.stroke();
+  // Animated point along graph curve
+  const dt = (typeof window.S !== 'undefined' && window.S?.demoT != null) ? window.S.demoT : 0;
+  const isAnim = item.anim && dt > 0;
+  if (isAnim && samples.length > 1) {
+    const animT = dt * tMax;
+    const animV = isVt ? u + a * animT : u * animT + 0.5 * a * animT * animT;
+    const apx = mapX(animT);
+    const apy = mapY(animV);
+    c.save();
+    c.shadowColor = '#2566c8'; c.shadowBlur = 14;
+    c.fillStyle = '#2566c8';
+    c.beginPath(); c.arc(apx, apy, 7, 0, Math.PI * 2); c.fill();
+    c.shadowBlur = 0;
+    c.fillStyle = '#fff';
+    c.beginPath(); c.arc(apx, apy, 2.5, 0, Math.PI * 2); c.fill();
+    // Tangent line at point
+    c.strokeStyle = '#2566c8'; c.lineWidth = 1.5; c.setLineDash([4, 4]);
+    const dtSmall = 0.05;
+    const t2 = Math.min(tMax, animT + dtSmall);
+    const v2 = isVt ? u + a * t2 : u * t2 + 0.5 * a * t2 * t2;
+    const t0 = Math.max(0, animT - dtSmall);
+    const v0 = isVt ? u + a * t0 : u * t0 + 0.5 * a * t0 * t0;
+    c.beginPath();
+    c.moveTo(mapX(t0), mapY(v0));
+    c.lineTo(mapX(t2), mapY(v2));
+    c.stroke();
+    c.setLineDash([]);
+    c.restore();
+  }
   c.fillStyle = '#2566c8'; c.font = '14px sans-serif';
   const eq = isVt ? `v = ${fmt(u)}${a >= 0 ? '+' : ''}${fmt(a)}t` : `s = ${fmt(u)}t${a >= 0 ? '+' : ''}${fmt(0.5 * a)}t²`;
   c.fillText(eq, ox + 8, oy - gh + 18);
@@ -435,6 +490,7 @@ export function syncPanelFromItem(item) {
     setVal('mp-theta', item.thetaDeg ?? 40);
     setVal('mp-g', item.g ?? 9.8);
     setChk('mp-vel', item.showVel !== false);
+    setChk('mp-anim', !!item.anim);
     return;
   }
   if (item.kind === 'motion') {
@@ -442,11 +498,13 @@ export function syncPanelFromItem(item) {
     setVal('mm-u', item.u ?? 5);
     setVal('mm-a', item.a ?? -2);
     setVal('mm-t', item.tMax ?? 6);
+    setChk('mm-anim', !!item.anim);
     return;
   }
   if (item.kind === 'pulley') {
     setVal('mpul-m1', item.m1 ?? 2);
     setVal('mpul-m2', item.m2 ?? 1.5);
+    setChk('mpul-anim', !!item.anim);
     return;
   }
   if (item.kind === 'moment') {
@@ -479,17 +537,20 @@ export function applyPanelToSelectedItem(item) {
     item.thetaDeg = +document.getElementById('mp-theta')?.value || 40;
     item.g = +document.getElementById('mp-g')?.value || 9.8;
     item.showVel = !!document.getElementById('mp-vel')?.checked;
+    item.anim = !!document.getElementById('mp-anim')?.checked;
     return true;
   }
   if (item.kind === 'motion') {
     item.u = +document.getElementById('mm-u')?.value || 0;
     item.a = +document.getElementById('mm-a')?.value || 0;
     item.tMax = Math.max(1, +document.getElementById('mm-t')?.value || 5);
+    item.anim = !!document.getElementById('mm-anim')?.checked;
     return true;
   }
   if (item.kind === 'pulley') {
     item.m1 = +document.getElementById('mpul-m1')?.value || 2;
     item.m2 = +document.getElementById('mpul-m2')?.value || 1.5;
+    item.anim = !!document.getElementById('mpul-anim')?.checked;
     return true;
   }
   if (item.kind === 'moment') {
