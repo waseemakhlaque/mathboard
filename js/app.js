@@ -145,7 +145,9 @@ function newPage(paper = 'graph', format) {
   // Inherit the current page's format only when a notebook is actually open;
   // page() throws when S.notebook is null (e.g. creating the very first lesson).
   const inheritFormat = S.notebook?.sections?.length ? page()?.format : null;
-  return { id: uid(), paper, format: format || inheritFormat || 'a4', strokes: [], objects: [], instruments: [] };
+  // P1: Default new lessons to 16:9 wide format for classroom use
+  const defaultFormat = S._autoPresent ? 'wide' : 'a4';
+  return { id: uid(), paper, format: format || inheritFormat || defaultFormat, strokes: [], objects: [], instruments: [] };
 }
 
 function newNotebook(title, kind = 'lesson') {
@@ -1416,6 +1418,30 @@ function render() {
       syncGeoLayer(S.offsetX, S.offsetY, S.scale);
       refreshGraphView();
     }
+    // P1: Laser pointer overlay (device-space, unaffected by camera)
+    if (S.tool === 'laser' && S.laserPos) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      const lx = S.laserPos.x * dpr, ly = S.laserPos.y * dpr;
+      // Outer glow ring
+      const glow = ctx.createRadialGradient(lx, ly, 0, lx, ly, 40 * dpr);
+      glow.addColorStop(0, 'rgba(255, 50, 50, 0.4)');
+      glow.addColorStop(0.4, 'rgba(255, 50, 50, 0.15)');
+      glow.addColorStop(1, 'rgba(255, 50, 50, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(lx, ly, 40 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+      // Bright inner dot
+      ctx.fillStyle = 'rgba(255, 40, 40, 0.95)';
+      ctx.beginPath();
+      ctx.arc(lx, ly, 4 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+      // White center highlight
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.beginPath();
+      ctx.arc(lx, ly, 1.5 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+    }
     updateDeleteSelBtn();
     if (S.selObj?.kind === 'incline' && S.selObj.anim) {
       const el = $('#mi-angle');
@@ -1919,6 +1945,12 @@ function onMove(e) {
     else if (S.creating.kind === 'circle') S.creating.edge = sp;
     else S.creating.to = sp;
     mark(); return;
+  }
+  // P1: Laser pointer — track position in device coordinates
+  if (S.tool === 'laser') {
+    S.laserPos = cssPt(e);
+    mark();
+    return;
   }
   // P0: RAF batching for active drawing to reduce lag
   if (S.drawing) {
@@ -2688,6 +2720,11 @@ async function openNotebookData(raw) {
   closeLibraryDialogs();
   show('editor');
   ensureKatexSvgCss().catch(() => {});
+  // P1: URL param ?present=1 — auto-enter present mode after lesson opens
+  if (S._autoPresent) {
+    S._autoPresent = false;
+    requestAnimationFrame(() => setPresentMode(true));
+  }
   requestAnimationFrame(() => {
     resizeCanvas(); fitPage(); updatePageLabel(); updateTitle(); updatePresentTitle();
     renderSectionStrip(); loadGeoPage(page());
@@ -2786,11 +2823,20 @@ function goToPage(i) {
   S.undo = []; S.redo = [];
   clearSelection();
   setGeoTool(null); setInstTool(null);
+  // P1: Page transition — add fade class for present mode
+  const cvEl = $('#board');
+  const isPresent = $('#editor')?.classList.contains('present-mode');
+  if (isPresent && cvEl) cvEl.classList.remove('present-mode-fade');
   loadGeoPage(page());
   fitPage();
   if (typeof S.collabPageChange === 'function') S.collabPageChange();
   updatePageLabel();
   mark();
+  if (isPresent && cvEl) {
+    // Trigger reflow then add fade animation
+    void cvEl.offsetWidth;
+    cvEl.classList.add('present-mode-fade');
+  }
 }
 
 // Insert page(s) after current; wrapped for rule compliance, undo cleared (structural change).
@@ -2974,6 +3020,20 @@ function updatePresentHud() {
   if (hud) hud.setAttribute('aria-hidden', $('#editor')?.classList.contains('present-mode') ? 'false' : 'true');
 }
 
+// P1: Idle timer for auto-hide in present mode
+let presentIdleTimer = null;
+const PRESENT_IDLE_MS = 3000;
+
+function resetPresentIdle() {
+  const ed = $('#editor');
+  if (!ed?.classList.contains('present-mode')) return;
+  ed.classList.add('present-idle-active');
+  clearTimeout(presentIdleTimer);
+  presentIdleTimer = setTimeout(() => {
+    ed.classList.remove('present-idle-active');
+  }, PRESENT_IDLE_MS);
+}
+
 function setPresentMode(on) {
   const ed = $('#editor');
   const rail = $('#tool-rail');
@@ -2993,9 +3053,14 @@ function setPresentMode(on) {
       $('#brand-toggle')?.classList.add('brand-toggle-active');
     }
     fitPage();
+    // P1: Start idle timer; show chrome on any interaction
+    ed.classList.add('present-idle-active');
+    resetPresentIdle();
   } else {
     if (S._railWasOpen) rail?.classList.remove('collapsed');
     ed.classList.remove('present-rail-open');
+    ed.classList.remove('present-idle-active');
+    clearTimeout(presentIdleTimer);
     fitPage();
   }
   updatePresentTitle();
@@ -3025,7 +3090,7 @@ function updateTitle() { $('#nb-name').value = S.notebook.title; updatePresentTi
 
 const TOOL_TAB = {
   pen: 'draw', highlighter: 'draw', eraser: 'draw', lasso: 'draw', select: 'draw', text: 'draw', equation: 'draw', line: 'draw', rect: 'draw', ellipse: 'draw',
-  vector: 'maths', plotz: 'maths', circle: 'maths',
+  vector: 'maths', plotz: 'maths', circle: 'maths', laser: 'draw',
 };
 function setTab(name) {
   document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
@@ -3041,8 +3106,11 @@ function setTool(t) {
   S.tool = t;
   if (t !== 'lasso') clearSelection();
   if (cv) cv.classList.toggle('cur-select', t === 'select');
+  if (cv) cv.classList.toggle('cur-laser', t === 'laser');
   document.querySelectorAll('[data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === t));
   if (TOOL_TAB[t]) setTab(TOOL_TAB[t]);
+  // P1: Clear laser dot when switching away
+  if (t !== 'laser') S.laserPos = null;
 }
 
 function loadCustomColors() {
@@ -3269,6 +3337,10 @@ function bindCanvas() {
     const hit = [...objs()].reverse().find((o) => o.kind === 'text' && pointInText(o, p));
     if (hit) { beginAction(); openTextEditor(hit); }
   });
+  // P1: Present-mode idle — any interaction resets the auto-hide timer
+  cv.addEventListener('pointermove', resetPresentIdle);
+  cv.addEventListener('pointerdown', resetPresentIdle);
+  document.addEventListener('keydown', resetPresentIdle);
   window.addEventListener('resize', resizeCanvas);
 }
 
@@ -4594,6 +4666,13 @@ function init() {
   show('library');
   renderLibrary();
   requestAnimationFrame(render);
+
+  // P1: URL param ?present=1 — auto-enter present mode when lesson opens
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('present') === '1') {
+    S._autoPresent = true;
+    // Defer to after first notebook loads
+  }
 
   storageReady().then((ok) => {
     if (!ok) {

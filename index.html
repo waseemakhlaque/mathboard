@@ -32,7 +32,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=83" />
+<link rel="stylesheet" href="./css/app.css?v=84" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -81,7 +81,7 @@
     <span id="sync-status" class="sync-status" title="Offline · saved on this device">● Local</span>
     · <button type="button" id="sync-settings-foot" class="sync-foot-link">Cloud sync</button>
     · Paginated notebook whiteboard · works offline · add to Home Screen on iPad
-    · <span id="mb-version" class="mb-version">v83</span>
+    · <span id="mb-version" class="mb-version">v84</span>
   </p>
 </section>
 
@@ -163,6 +163,7 @@
         <button data-tool="lasso" class="tool" title="Lasso select (l)">Lasso</button>
         <button data-tool="text" class="tool" title="Text box (t)">Text</button>
         <button data-tool="equation" class="tool" title="Equation (LaTeX — edit with MathLive, render with KaTeX) (q)">Eq</button>
+        <button data-tool="laser" class="tool" title="Laser pointer — bright highlight for screen share">Laser</button>
       </div>
       <div class="group pen-group" data-tabs="draw">
         <button type="button" class="pen-btn active" data-pen="fine" title="Fine pen — pressure sensitive">Fine</button>
@@ -273,13 +274,27 @@
         <canvas id="board"></canvas>
         <div id="geo-layer" class="geo-layer"><div id="geo-inner" class="geo-inner"></div></div>
         <div id="brand" class="brand">
-          <img class="brand-photo" src="./assets/waseem.jpg" alt="Waseem Akhlaque" />
+          <img id="brand-photo" class="brand-photo" src="./assets/waseem.jpg" alt="Waseem Akhlaque" />
           <div class="brand-text">
-            <div class="brand-name">Waseem Akhlaque</div>
-            <div class="brand-title">A Level Mathematics Teacher</div>
-            <div class="brand-phone">03212890512</div>
+            <div id="brand-name" class="brand-name">Waseem Akhlaque</div>
+            <div id="brand-title" class="brand-title">A Level Mathematics Teacher</div>
+            <div id="brand-phone" class="brand-phone">03212890512</div>
           </div>
         </div>
+        <script>
+          // P1: Configurable brand badge — populate from MB_CONFIG if available
+          (function initBrand() {
+            const cfg = window.MB_CONFIG || {};
+            const img = document.getElementById('brand-photo');
+            const name = document.getElementById('brand-name');
+            const title = document.getElementById('brand-title');
+            const phone = document.getElementById('brand-phone');
+            if (cfg.brandImage && img) img.src = cfg.brandImage;
+            if (cfg.brandTeacher && name) name.textContent = cfg.brandTeacher;
+            if (cfg.brandTitle && title) title.textContent = cfg.brandTitle;
+            if (cfg.brandPhone && phone) phone.textContent = cfg.brandPhone;
+          })();
+        </script>
         <div id="present-hud" class="present-hud" aria-hidden="true">
           <div class="present-hud-inner">
             <button type="button" id="present-prev" class="present-hud-btn" title="Previous page (←)">‹</button>
@@ -1017,5 +1032,5 @@
 </div>
 
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=83"></script>
+<script type="module" src="./js/app.js?v=84"></script>
 </html>
