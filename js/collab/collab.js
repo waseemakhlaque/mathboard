@@ -83,9 +83,24 @@ function bindCurrentPage() {
   }
 }
 
+// P0: Pause sync during active drawing to prevent lag
+let syncPaused = false;
+
+/** Pause collaboration sync (call when starting a drawing stroke). */
+export function pauseCollabSync() {
+  syncPaused = true;
+}
+
+/** Resume collaboration sync and push accumulated changes (call after committing stroke). */
+export function resumeCollabSync() {
+  if (!syncPaused) return;
+  syncPaused = false;
+  collabPushPage(); // Push accumulated changes now
+}
+
 /** Push current page strokes to Yjs (call after local edits). */
 export function collabPushPage() {
-  if (!ydoc || !ctx?.page) return;
+  if (syncPaused || !ydoc || !ctx?.page) return;
   const pg = ctx.page();
   if (!pg) return;
   const yStrokes = yStrokesFor(pg.id);

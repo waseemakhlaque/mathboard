@@ -220,7 +220,11 @@ function restorePage(s) {
   updatePageLabel();
   if (!$('#graph').classList.contains('hidden')) renderGraphList();
 }
-function beginAction() { S.actionBefore = snapshotPage(); }
+function beginAction() {
+  S.actionBefore = snapshotPage();
+  // P0: Pause collab sync during drawing to reduce lag
+  if (typeof S.collabPause === 'function') S.collabPause();
+}
 function commitAction() {
   if (!S.actionBefore) return;
   if (JSON.stringify(S.actionBefore) !== JSON.stringify(snapshotPage())) {
@@ -232,6 +236,8 @@ function commitAction() {
     collabNotifyEdit();
   }
   S.actionBefore = null;
+  // P0: Resume collab sync and push changes after drawing completes
+  if (typeof S.collabResume === 'function') S.collabResume();
 }
 function collabNotifyEdit() {
   if (typeof S.collabPush === 'function') S.collabPush();
@@ -1849,6 +1855,21 @@ function onDown(e) {
   mark();
 }
 
+// P0: RAF-based batching for smooth iPad Pencil drawing
+let rafPending = false;
+let pendingMoveEvent = null;
+
+function processDrawMove(e) {
+  if (S.drawing && S.drawing.eraser) {
+    for (const { p } of coalescedPagePoints(e)) eraseAt(p);
+    return;
+  }
+  if (S.drawing) {
+    appendInkPoints(S.drawing, coalescedPagePoints(e));
+    mark();
+  }
+}
+
 function onMove(e) {
   if (e.pointerType === 'touch') {
     if (S.touch.has(e.pointerId)) S.touch.set(e.pointerId, cssPt(e));
@@ -1899,13 +1920,20 @@ function onMove(e) {
     else S.creating.to = sp;
     mark(); return;
   }
-  if (S.drawing && S.drawing.eraser) {
-    for (const { p } of coalescedPagePoints(e)) eraseAt(p);
-    return;
-  }
+  // P0: RAF batching for active drawing to reduce lag
   if (S.drawing) {
-    appendInkPoints(S.drawing, coalescedPagePoints(e));
-    mark();
+    pendingMoveEvent = e;
+    if (!rafPending) {
+      rafPending = true;
+      requestAnimationFrame(() => {
+        if (pendingMoveEvent) {
+          processDrawMove(pendingMoveEvent);
+        }
+        rafPending = false;
+        pendingMoveEvent = null;
+      });
+    }
+    return;
   }
 }
 
@@ -3227,6 +3255,10 @@ function bindEditor() {
 function bindCanvas() {
   cv.addEventListener('pointerdown', onDown);
   cv.addEventListener('pointermove', onMove);
+  // P0: Use pointerrawupdate for iPad Apple Pencil if available (higher frequency, lower latency)
+  if ('onpointerrawupdate' in window) {
+    cv.addEventListener('pointerrawupdate', onMove, { passive: true });
+  }
   cv.addEventListener('pointerup', onUp);
   cv.addEventListener('pointercancel', onUp);
   cv.addEventListener('pointerleave', (e) => { if (e.pointerType === 'touch') { S.touch.delete(e.pointerId); setGestureRef(); } });
@@ -4385,6 +4417,8 @@ function setupCollabGate() {
         m.stopCollab();
         S.collabPush = null;
         S.collabPageChange = null;
+        S.collabPause = null;
+        S.collabResume = null;
         cb.textContent = 'Collaborate';
         return;
       }
@@ -4397,6 +4431,9 @@ function setupCollabGate() {
       if (!r.connected) return;
       S.collabPush = () => m.collabPushPage();
       S.collabPageChange = () => m.onCollabPageSwitch();
+      // P0: Wire up pause/resume functions for drawing lag reduction
+      S.collabPause = () => m.pauseCollabSync();
+      S.collabResume = () => m.resumeCollabSync();
       cb.textContent = 'Leave room';
     } catch (e) {
       alert('Could not load collaboration: ' + e.message);
