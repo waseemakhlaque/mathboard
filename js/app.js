@@ -51,8 +51,12 @@ import { filterNotebooksBySearch } from './librarySearch.js';
 import {
   setupScene, tick as sceneTick, sceneTime, sceneNormalized, onPageChange as scenePageChange,
   objAlpha, objPopScale, objDrawProgress, strokeReveal, hasTargetTracks,
-  recordStroke, recordObject, ensureScene, reset as sceneReset,
+  recordStroke, recordObject, ensureScene, reset as sceneReset, nextStep as sceneNextStep,
 } from './scene.js';
+import {
+  loadTaxonomy, renderCourseLibrary, isCatalogued, notebookCatalog,
+  taxonomyCourses, taxonomyTopics, taxonomyExercises,
+} from './courseLibrary.js';
 import { pageW, pageH, thumbDims, A4_W, A4_H } from './pageLayout.js';
 import { getAllNotebooks, getNotebook, storageReady } from './storage.js';
 import getStroke from '../vendor/perfect-freehand.mjs';
@@ -2712,6 +2716,10 @@ function setLibTab(t) {
   const head = $('.lib-head');
   head.classList.toggle('lib-lesson', t === 'lesson');
   head.classList.toggle('lib-paper', t === 'paper');
+  head.classList.toggle('lib-course', t === 'course');
+  const search = $('#lib-search');
+  if (search) search.placeholder = t === 'course'
+    ? 'Search course examples…' : 'Search lessons and text…';
   document.querySelectorAll('.lib-tab').forEach((b) => b.classList.toggle('active', b.dataset.lib === t));
   renderLibrary();
 }
@@ -2728,6 +2736,7 @@ function notebookCardThumb(nb) {
 
 async function renderLibrary() {
   const list = $('#nb-list');
+  if (libTab === 'course') { await renderCourseTab(list); return; }
   list.innerHTML = '';
   const nbs = filterNotebooksBySearch(
     (await getAllNotebooks()).filter((nb) => notebookKind(nb) === libTab),
@@ -2753,6 +2762,7 @@ async function renderLibrary() {
         <div class="nb-meta">${allPages(nb).length} page${allPages(nb).length > 1 ? 's' : ''} · ${(nb.sections || []).length} sec · ${new Date(nb.updated).toLocaleDateString()}</div>
         <div class="nb-actions">
           <button class="open">Open</button>
+          <button class="cat">${isCatalogued(nb) ? '★ Catalogued' : '☆ Add to Course'}</button>
           <button class="exp">Export</button>
           <button class="ren">Rename</button>
           <button class="del danger">Delete</button>
@@ -2763,6 +2773,7 @@ async function renderLibrary() {
     // users tap the notebook, not the small button.
     card.querySelector('.nb-thumb')?.addEventListener('click', () => openNotebook(nb.id));
     card.querySelector('.nb-title')?.addEventListener('click', () => openNotebook(nb.id));
+    card.querySelector('.cat').onclick = () => catalogNotebook(nb);
     card.querySelector('.exp').onclick = () => exportNotebookJSON(nb).catch((e) => alert(e.message));
     card.querySelector('.ren').onclick = async () => {
       const t = await mbPrompt('Rename lesson', nb.title, { title: 'Rename' });
@@ -2779,16 +2790,111 @@ async function renderLibrary() {
 
 const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-async function openNotebook(id) {
+// ---- Course Library tab ------------------------------------------------------
+let courseTaxonomy = null;
+async function ensureTaxonomy() {
+  if (!courseTaxonomy) courseTaxonomy = await loadTaxonomy();
+  return courseTaxonomy;
+}
+
+async function renderCourseTab(list) {
+  list.innerHTML = '<p class="muted course-empty">Loading course library…</p>';
+  const tax = await ensureTaxonomy();
+  const notebooks = await getAllNotebooks();
+  renderCourseLibrary(list, {
+    notebooks,
+    taxonomy: tax,
+    search: libSearch,
+    thumb: (nb) => `<div class="example-thumb">${notebookCardThumb(nb)}</div>`,
+    // Open a filed example straight into Present mode and auto-play its scene.
+    onOpen: (id) => openNotebook(id, { present: true, play: true }),
+  });
+}
+
+// File a notebook into Course → Topic → Exercise (with simple datalist autocomplete).
+async function catalogNotebook(nb) {
+  const tax = await ensureTaxonomy();
+  const existing = notebookCatalog(nb) || {};
+  const courses = taxonomyCourses(tax);
+  const r = await mbCatalogDialog({
+    course: existing.course || courses[0] || '',
+    topic: existing.topic || '',
+    exercise: existing.exercise || '',
+    courses,
+    tax,
+  });
+  if (!r) return;
+  nb.catalog = {
+    course: r.course.trim(),
+    topic: (r.topic.trim() || 'General'),
+    exercise: (r.exercise.trim() || 'Examples'),
+    order: Number.isFinite(nb.catalog?.order) ? nb.catalog.order : Date.now(),
+  };
+  nb.updated = Date.now();
+  await sync.push(nb);
+  mbToast(`Filed under ${nb.catalog.course} › ${nb.catalog.topic}`);
+  renderLibrary();
+}
+
+// Catalog dialog: 3 linked inputs with <datalist> suggestions from the taxonomy.
+function mbCatalogDialog({ course, topic, exercise, courses, tax }) {
+  return new Promise((resolve) => {
+    const back = document.createElement('div');
+    back.className = 'sync-dialog mb-modal';
+    const opts = (arr) => arr.map((v) => `<option value="${escapeHtml(v)}"></option>`).join('');
+    back.innerHTML = `<div class="sync-box cat-box" role="dialog" aria-modal="true">
+      <h3>Add to Course Library</h3>
+      <p class="mb-modal-msg">File this animated example so students can find it by course, topic and exercise.</p>
+      <label class="cat-lbl">Course
+        <input class="ct-in cat-course" list="cat-courses" value="${escapeHtml(course)}" placeholder="e.g. Mechanics" />
+      </label>
+      <datalist id="cat-courses">${opts(courses)}</datalist>
+      <label class="cat-lbl">Topic
+        <input class="ct-in cat-topic" list="cat-topics" value="${escapeHtml(topic)}" placeholder="e.g. Projectiles" />
+      </label>
+      <datalist id="cat-topics"></datalist>
+      <label class="cat-lbl">Exercise
+        <input class="ct-in cat-exercise" list="cat-exercises" value="${escapeHtml(exercise)}" placeholder="e.g. Projection at an angle" />
+      </label>
+      <datalist id="cat-exercises"></datalist>
+      <div class="sync-btns">
+        <button type="button" class="primary mb-ok">Save</button>
+        <button type="button" class="ghost mb-cancel">Cancel</button>
+      </div>
+    </div>`;
+    document.body.appendChild(back);
+    const cIn = back.querySelector('.cat-course');
+    const tIn = back.querySelector('.cat-topic');
+    const eIn = back.querySelector('.cat-exercise');
+    const tList = back.querySelector('#cat-topics');
+    const eList = back.querySelector('#cat-exercises');
+    const fillTopics = () => { tList.innerHTML = taxonomyTopics(tax, cIn.value).map((v) => `<option value="${escapeHtml(v)}"></option>`).join(''); };
+    const fillExercises = () => { eList.innerHTML = taxonomyExercises(tax, cIn.value, tIn.value).map((v) => `<option value="${escapeHtml(v)}"></option>`).join(''); };
+    cIn.addEventListener('input', () => { fillTopics(); fillExercises(); });
+    tIn.addEventListener('input', fillExercises);
+    fillTopics(); fillExercises();
+    const close = (val) => { back.remove(); resolve(val); };
+    back.querySelector('.mb-ok').onclick = () => {
+      if (!cIn.value.trim()) { cIn.focus(); return; }
+      close({ course: cIn.value, topic: tIn.value, exercise: eIn.value });
+    };
+    back.querySelector('.mb-cancel').onclick = () => close(null);
+    back.addEventListener('click', (e) => { if (e.target === back) close(null); });
+    back.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(null); });
+    cIn.focus(); cIn.select();
+  });
+}
+
+async function openNotebook(id, opts = {}) {
   const raw = await getNotebook(id);
   if (!raw) {
     alert('Could not open lesson — it may have been deleted or storage is blocked.');
     return false;
   }
-  return openNotebookData(raw);
+  return openNotebookData(raw, opts);
 }
 
-async function openNotebookData(raw) {
+async function openNotebookData(raw, opts = {}) {
   if (!raw) return false;
   S.notebook = normalizeNotebook(clone(raw));
   await migrateNotebookMedia(S.notebook);
@@ -2798,10 +2904,16 @@ async function openNotebookData(raw) {
   closeLibraryDialogs();
   show('editor');
   ensureKatexSvgCss().catch(() => {});
-  // P1: URL param ?present=1 — auto-enter present mode after lesson opens
-  if (S._autoPresent) {
+  // Auto-enter present mode (URL ?present=1, or opening from Course Library).
+  if (S._autoPresent || opts.present) {
     S._autoPresent = false;
     requestAnimationFrame(() => setPresentMode(true));
+  }
+  // Course Library "Play": start the page's scene from step 1 once laid out.
+  if (opts.play) {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (page()?.scene?.steps?.length) { sceneReset(); sceneNextStep(); }
+    }));
   }
   requestAnimationFrame(() => {
     resizeCanvas(); fitPage(); updatePageLabel(); updateTitle(); updatePresentTitle();
