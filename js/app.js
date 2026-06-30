@@ -2824,10 +2824,12 @@ async function catalogNotebook(nb) {
     tax,
   });
   if (!r) return;
+  const course = r.course.trim();
+  if (!course) { mbToast('Course name is required'); return; }
   nb.catalog = {
-    course: r.course.trim(),
-    topic: (r.topic.trim() || 'General'),
-    exercise: (r.exercise.trim() || 'Examples'),
+    course,
+    topic: r.topic.trim() || 'General',
+    exercise: r.exercise.trim() || 'Examples',
     order: Number.isFinite(nb.catalog?.order) ? nb.catalog.order : Date.now(),
   };
   nb.updated = Date.now();
@@ -2841,22 +2843,25 @@ function mbCatalogDialog({ course, topic, exercise, courses, tax }) {
   return new Promise((resolve) => {
     const back = document.createElement('div');
     back.className = 'sync-dialog mb-modal';
+    // iOS Safari ignores <datalist> — plain text inputs still work on touch.
+    const useList = !window.matchMedia?.('(pointer: coarse)').matches;
+    const list = (id) => (useList ? ` list="${id}"` : '');
     const opts = (arr) => arr.map((v) => `<option value="${escapeHtml(v)}"></option>`).join('');
     back.innerHTML = `<div class="sync-box cat-box" role="dialog" aria-modal="true">
       <h3>Add to Course Library</h3>
       <p class="mb-modal-msg">File this animated example so students can find it by course, topic and exercise.</p>
       <label class="cat-lbl">Course
-        <input class="ct-in cat-course" list="cat-courses" value="${escapeHtml(course)}" placeholder="e.g. Mechanics" />
+        <input class="ct-in cat-course"${list('cat-courses')} value="${escapeHtml(course)}" placeholder="e.g. Mechanics" maxlength="120" />
       </label>
-      <datalist id="cat-courses">${opts(courses)}</datalist>
+      ${useList ? `<datalist id="cat-courses">${opts(courses)}</datalist>` : ''}
       <label class="cat-lbl">Topic
-        <input class="ct-in cat-topic" list="cat-topics" value="${escapeHtml(topic)}" placeholder="e.g. Projectiles" />
+        <input class="ct-in cat-topic"${list('cat-topics')} value="${escapeHtml(topic)}" placeholder="e.g. Projectiles" maxlength="120" />
       </label>
-      <datalist id="cat-topics"></datalist>
+      ${useList ? '<datalist id="cat-topics"></datalist>' : ''}
       <label class="cat-lbl">Exercise
-        <input class="ct-in cat-exercise" list="cat-exercises" value="${escapeHtml(exercise)}" placeholder="e.g. Projection at an angle" />
+        <input class="ct-in cat-exercise"${list('cat-exercises')} value="${escapeHtml(exercise)}" placeholder="e.g. Projection at an angle" maxlength="160" />
       </label>
-      <datalist id="cat-exercises"></datalist>
+      ${useList ? '<datalist id="cat-exercises"></datalist>' : ''}
       <div class="sync-btns">
         <button type="button" class="primary mb-ok">Save</button>
         <button type="button" class="ghost mb-cancel">Cancel</button>
@@ -2868,14 +2873,20 @@ function mbCatalogDialog({ course, topic, exercise, courses, tax }) {
     const eIn = back.querySelector('.cat-exercise');
     const tList = back.querySelector('#cat-topics');
     const eList = back.querySelector('#cat-exercises');
-    const fillTopics = () => { tList.innerHTML = taxonomyTopics(tax, cIn.value).map((v) => `<option value="${escapeHtml(v)}"></option>`).join(''); };
-    const fillExercises = () => { eList.innerHTML = taxonomyExercises(tax, cIn.value, tIn.value).map((v) => `<option value="${escapeHtml(v)}"></option>`).join(''); };
+    const fillTopics = () => {
+      if (!tList) return;
+      tList.innerHTML = taxonomyTopics(tax, cIn.value.trim()).map((v) => `<option value="${escapeHtml(v)}"></option>`).join('');
+    };
+    const fillExercises = () => {
+      if (!eList) return;
+      eList.innerHTML = taxonomyExercises(tax, cIn.value.trim(), tIn.value.trim()).map((v) => `<option value="${escapeHtml(v)}"></option>`).join('');
+    };
     cIn.addEventListener('input', () => { fillTopics(); fillExercises(); });
     tIn.addEventListener('input', fillExercises);
     fillTopics(); fillExercises();
     const close = (val) => { back.remove(); resolve(val); };
     back.querySelector('.mb-ok').onclick = () => {
-      if (!cIn.value.trim()) { cIn.focus(); return; }
+      if (!cIn.value.trim()) { mbToast('Course name is required'); cIn.focus(); return; }
       close({ course: cIn.value, topic: tIn.value, exercise: eIn.value });
     };
     back.querySelector('.mb-cancel').onclick = () => close(null);
@@ -2903,21 +2914,21 @@ async function openNotebookData(raw, opts = {}) {
   setPresentMode(false);
   closeLibraryDialogs();
   show('editor');
+  scenePageChange();
   ensureKatexSvgCss().catch(() => {});
   // Auto-enter present mode (URL ?present=1, or opening from Course Library).
   if (S._autoPresent || opts.present) {
     S._autoPresent = false;
     requestAnimationFrame(() => setPresentMode(true));
   }
-  // Course Library "Play": start the page's scene from step 1 once laid out.
-  if (opts.play) {
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (page()?.scene?.steps?.length) { sceneReset(); sceneNextStep(); }
-    }));
-  }
   requestAnimationFrame(() => {
     resizeCanvas(); fitPage(); updatePageLabel(); updateTitle(); updatePresentTitle();
     renderSectionStrip(); loadGeoPage(page());
+    // Course Library "Play": step 1 after layout; no-op cleanly when scene has no steps.
+    if (opts.play) {
+      const steps = page()?.scene?.steps;
+      if (steps?.length) { sceneReset(); sceneNextStep(); }
+    }
   });
   return true;
 }
@@ -4747,7 +4758,7 @@ function bindLibrary() {
     b.addEventListener('click', () => setLibTab(b.dataset.lib));
   });
   setLibTab('lesson');
-  $('#lib-search')?.addEventListener('input', (e) => { libSearch = e.target.value.trim(); renderLibrary(); });
+  $('#lib-search')?.addEventListener('input', (e) => { libSearch = e.target.value; renderLibrary(); });
   $('#pdf-file-lib')?.addEventListener('change', (e) => {
     const f = e.target.files?.[0];
     if (f) importPdfAsNotebook(f);

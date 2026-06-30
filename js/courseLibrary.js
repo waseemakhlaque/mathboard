@@ -63,11 +63,12 @@ export function taxonomyExercises(tax, course, topic) {
 /** Read & lightly normalize a notebook's catalog tag. */
 export function notebookCatalog(nb) {
   const c = nb?.catalog;
-  if (!c || !c.course) return null;
+  const course = String(c?.course ?? '').trim();
+  if (!c || !course) return null;
   return {
-    course: String(c.course).trim(),
-    topic: String(c.topic || 'General').trim(),
-    exercise: String(c.exercise || 'Examples').trim(),
+    course,
+    topic: String(c.topic || 'General').trim() || 'General',
+    exercise: String(c.exercise || 'Examples').trim() || 'Examples',
     order: Number.isFinite(c.order) ? c.order : 0,
   };
 }
@@ -98,10 +99,17 @@ export function buildCourseTree(notebooks, tax) {
 
   // 1) seed the shelves from taxonomy (in declared order)
   for (const c of tax?.courses || []) {
-    const course = ensureCourse(c.name);
+    const cName = String(c?.name ?? '').trim();
+    if (!cName) continue;
+    const course = ensureCourse(cName);
     for (const t of c.topics || []) {
-      const topic = ensureTopic(course, t.name);
-      for (const exName of t.exercises || []) ensureExercise(topic, exName);
+      const tName = String(t?.name ?? '').trim();
+      if (!tName) continue;
+      const topic = ensureTopic(course, tName);
+      for (const exName of t.exercises || []) {
+        const eName = String(exName ?? '').trim();
+        if (eName) ensureExercise(topic, eName);
+      }
     }
   }
 
@@ -112,6 +120,7 @@ export function buildCourseTree(notebooks, tax) {
     const course = ensureCourse(cat.course);
     const topic = ensureTopic(course, cat.topic);
     const exercise = ensureExercise(topic, cat.exercise);
+    if (exercise.examples.some((x) => x.nb.id === nb.id)) continue;
     exercise.examples.push({ nb, order: cat.order });
   }
 
@@ -158,24 +167,27 @@ export function renderCourseLibrary(container, opts = {}) {
   const matches = (nb) => !q || (nb.title || '').toLowerCase().includes(q);
 
   for (const course of tree) {
-    // course-level filter: show course if any example matches, or no query
-    const courseHasMatch = !q || course.topics.some((t) => t.exercises.some((e) => e.examples.some((x) => matches(x.nb))));
-    if (!courseHasMatch) continue;
+    const courseMatchCount = course.topics.reduce(
+      (n, t) => n + t.exercises.reduce((m, e) => m + e.examples.filter((x) => matches(x.nb)).length, 0), 0,
+    );
+    if (q && courseMatchCount === 0) continue;
 
     const cDet = document.createElement('details');
     cDet.className = 'course-node';
     cDet.open = true;
+    const cCount = q ? courseMatchCount : course.count;
     cDet.innerHTML = `<summary class="course-sum">
         <span class="course-name">${esc(course.name)}</span>
-        <span class="course-count">${course.count} example${course.count === 1 ? '' : 's'}</span>
+        <span class="course-count">${cCount} example${cCount === 1 ? '' : 's'}</span>
       </summary>`;
     const cBody = document.createElement('div');
     cBody.className = 'course-body';
 
     for (const topic of course.topics) {
-      const topicHasMatch = !q || topic.exercises.some((e) => e.examples.some((x) => matches(x.nb)));
-      if (!topicHasMatch) continue;
-      const tCount = topic.exercises.reduce((m, e) => m + e.examples.length, 0);
+      const tCount = topic.exercises.reduce(
+        (m, e) => m + e.examples.filter((x) => matches(x.nb)).length, 0,
+      );
+      if (q && tCount === 0) continue;
 
       const tDet = document.createElement('details');
       tDet.className = 'topic-node';
@@ -203,7 +215,7 @@ export function renderCourseLibrary(container, opts = {}) {
             const card = document.createElement('button');
             card.type = 'button';
             card.className = 'example-card';
-            card.title = `Play “${nb.title}”`;
+            card.title = `Play “${(nb.title || 'Untitled').replace(/"/g, '\u201d')}”`;
             const thumbHtml = thumb ? thumb(nb) : '<div class="example-thumb"></div>';
             card.innerHTML = `${thumbHtml}
               <div class="example-meta">
