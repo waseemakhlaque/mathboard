@@ -40,12 +40,9 @@
 </script>
 <link rel="icon" href="./assets/logo.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="./assets/logo.svg" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=91" />
+<link rel="stylesheet" href="./css/app.css?v=92" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -81,6 +78,12 @@
       </div>
     </div>
     <div class="lib-actions">
+      <div class="lib-util">
+        <button type="button" id="theme-toggle" class="icon-btn ghost" data-theme-toggle title="Theme" aria-label="Theme">◐</button>
+        <button type="button" id="upgrade-btn" class="pro-badge" title="Upgrade to MathBoard Pro">Upgrade</button>
+        <button type="button" id="help-tour" class="ghost" title="Interactive tour">Tour</button>
+        <button type="button" id="about-btn" class="ghost" title="About &amp; legal">About</button>
+      </div>
       <label for="json-file-lib" id="import-json-lib" class="lib-act-lesson lib-file-btn">Import lesson</label>
       <label for="pdf-file-lib" id="import-pdf-lib" class="lib-act-paper lib-file-btn">Import PDF</label>
       <button type="button" id="sync-settings" title="Cloud sync settings">Sync</button>
@@ -95,7 +98,8 @@
     <span id="sync-status" class="sync-status" title="Offline · saved on this device">● Local</span>
     · <button type="button" id="sync-settings-foot" class="sync-foot-link">Cloud sync</button>
     · Paginated notebook whiteboard · works offline · add to Home Screen on iPad
-    · <span id="mb-version" class="mb-version">v91</span>
+    · <span id="mb-version" class="mb-version">v92</span>
+    · © 2026 Waseem Akhlaque
   </p>
 </section>
 
@@ -112,26 +116,40 @@
       <button id="undo" title="Undo (⌘Z)">Undo</button>
       <button id="redo" title="Redo (⇧⌘Z)">Redo</button>
       <button id="fit" title="Fit page">Fit</button>
-      <button id="present-toggle" title="Present mode (classroom / projector)">Present</button>
-      <button id="demo-toggle" class="present-hide" title="Live Demo animation bar">Demo</button>
-      <button id="collab-toggle" class="hidden present-hide" title="Live collaboration (available when hosted online)">Collaborate</button>
-      <button id="brand-toggle" title="Show/hide branding overlay">Brand</button>
-      <div class="panel-menu-wrap present-hide">
-        <button type="button" id="panel-menu" title="Panels menu">Panels ▾</button>
-        <div id="panel-drop" class="panel-drop hidden">
-          <button type="button" data-panel="#layers">Layers</button>
-          <button type="button" data-panel="#graph">Graph f(x)</button>
-          <button type="button" data-panel="#calculus">Calculus ∫</button>
-          <button type="button" data-panel="#symbolic">Symbolic CAS</button>
-          <button type="button" data-panel="#algebra">Algebra (mathjs)</button>
-          <button type="button" data-panel="#rationals">Fractions</button>
-          <button type="button" data-panel="#stats">Statistics</button>
-          <button type="button" data-panel="#calc">Calculator</button>
-          <button type="button" data-panel="#mech">Mechanics</button>
-          <button type="button" data-panel="#cplx">Complex</button>
+      <button id="present-toggle" title="Present mode (F)">Present</button>
+      <div class="tbar-actions present-hide">
+        <button id="demo-toggle" title="Live Demo animation bar">Demo</button>
+        <button id="collab-toggle" class="hidden" title="Live collaboration">Collaborate</button>
+        <button id="brand-toggle" title="Show/hide branding overlay">Brand</button>
+        <div class="panel-menu-wrap">
+          <button type="button" id="panel-menu" title="Panels (P)">Panels ▾</button>
+          <div id="panel-drop" class="panel-drop hidden" role="menu">
+            <button type="button" data-panel="#layers" role="menuitem">Layers</button>
+            <button type="button" data-panel="#graph" role="menuitem">Graph f(x)</button>
+            <button type="button" data-panel="#calculus" role="menuitem">Calculus ∫</button>
+            <button type="button" data-panel="#symbolic" role="menuitem">Symbolic CAS</button>
+            <button type="button" data-panel="#algebra" role="menuitem">Algebra (mathjs)</button>
+            <button type="button" data-panel="#rationals" role="menuitem">Fractions</button>
+            <button type="button" data-panel="#stats" role="menuitem">Statistics</button>
+            <button type="button" data-panel="#calc" role="menuitem">Calculator</button>
+            <button type="button" data-panel="#mech" role="menuitem">Mechanics</button>
+            <button type="button" data-panel="#cplx" role="menuitem">Complex</button>
+            <button type="button" data-panel="#studio" role="menuitem">AR Studio</button>
+          </div>
+        </div>
+        <div class="tbar-more-wrap panel-menu-wrap">
+          <button type="button" id="tbar-more" title="More actions">More ▾</button>
+          <div id="tbar-more-drop" class="panel-drop hidden" role="menu">
+            <button type="button" id="share-lesson-more" role="menuitem">Share lesson</button>
+            <button type="button" id="sync-settings-editor-more" role="menuitem">Cloud sync</button>
+            <button type="button" id="export-json-more" role="menuitem">Backup JSON</button>
+            <button type="button" id="export-pdf-more" role="menuitem">Export PDF</button>
+            <button type="button" id="theme-toggle-editor" data-theme-toggle role="menuitem">Theme</button>
+            <button type="button" id="upgrade-btn-editor" role="menuitem">Upgrade to Pro</button>
+          </div>
         </div>
       </div>
-      <span class="panel-btns present-hide">
+      <span class="panel-btns present-hide" aria-hidden="true">
       <button id="layers-toggle" title="Layers panel">Layers</button>
       <button id="studio-toggle" title="Live AR Studio (webcam + 3D)">AR Studio</button>
       <button id="graph-toggle" title="Graph functions y = f(x)">f(x)</button>
@@ -144,10 +162,10 @@
       <button id="mech-toggle" title="Mechanics diagrams">Mech</button>
       <button id="cplx-toggle" title="Complex loci &amp; ω·z">Complex</button>
       </span>
-      <button id="share-lesson" class="present-hide" title="Share or export lesson file">Share</button>
-      <button id="sync-settings-editor" class="present-hide" title="Cloud sync">Sync</button>
-      <button id="export-json" class="present-hide" title="Download portable .mathboard.json backup">Backup</button>
-      <button id="export-pdf" class="present-hide primary">Export PDF</button>
+      <button id="share-lesson" class="present-hide hidden" title="Share or export lesson file">Share</button>
+      <button id="sync-settings-editor" class="present-hide hidden" title="Cloud sync">Sync</button>
+      <button id="export-json" class="present-hide hidden" title="Download portable .mathboard.json backup">Backup</button>
+      <button id="export-pdf" class="present-hide hidden primary">Export PDF</button>
     </div>
   </div>
 
@@ -315,6 +333,7 @@
             <div class="present-hud-meta">
               <span id="present-section-label" class="present-section-label"></span>
               <span id="present-page-label" class="present-page-label">1 / 1</span>
+              <div id="present-step-dots" class="present-step-dots" aria-hidden="true"></div>
             </div>
             <button type="button" id="present-next" class="present-hud-btn" title="Next page (→)">›</button>
           </div>
@@ -1056,6 +1075,71 @@
   </div>
 </div>
 
+<!-- Upgrade / paywall -->
+<div id="paywall-dialog" class="sync-dialog paywall-dialog hidden" role="dialog" aria-labelledby="paywall-title" aria-modal="true">
+  <div class="sync-box">
+    <div class="paywall-hero">
+      <h2 id="paywall-title">MathBoard Pro</h2>
+      <p class="muted">Unlock the full teaching toolkit</p>
+      <div class="paywall-price">£9.99 <span>/ month</span></div>
+    </div>
+    <ul class="paywall-features">
+      <li>Unlimited lessons &amp; past papers</li>
+      <li>Full Course Library — every animated example</li>
+      <li>Cloud sync across devices (opt-in)</li>
+      <li>Video export &amp; priority updates</li>
+    </ul>
+    <div class="sync-btns">
+      <button type="button" id="paywall-upgrade" class="primary">Upgrade — secure checkout</button>
+      <button type="button" id="paywall-manage" class="ghost">Manage subscription</button>
+      <button type="button" id="paywall-close" class="ghost">Not now</button>
+    </div>
+    <p class="paywall-note">Payments are processed by Stripe — card details never touch MathBoard. Your lessons stay on-device unless you opt into cloud sync.</p>
+  </div>
+</div>
+
+<!-- About / Legal -->
+<div id="about-dialog" class="sync-dialog about-dialog hidden" role="dialog" aria-labelledby="about-title" aria-modal="true">
+  <div class="sync-box">
+    <h3 id="about-title">About MathBoard</h3>
+    <div class="legal-text">
+      <p><strong>MathBoard</strong> — a pencil-first notebook whiteboard for A Level mathematics.</p>
+      <p>Copyright © 2026 Waseem Akhlaque. All rights reserved. Proprietary software — see LICENSE in the repository.</p>
+      <h4>Privacy</h4>
+      <p>Lessons are stored locally in your browser (IndexedDB). Cloud sync is optional and requires sign-in. No lesson content is uploaded unless you explicitly sync. Optional anonymous usage analytics via Cloudflare Web Analytics when online.</p>
+      <h4>Data</h4>
+      <p>MathBoard does not collect payment card numbers. Subscriptions are handled by a hosted checkout provider.</p>
+    </div>
+    <div class="sync-btns">
+      <button type="button" id="about-close" class="primary">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Onboarding tour -->
+<div id="onboard-overlay" class="onboard-overlay hidden" aria-hidden="true">
+  <div class="onboard-backdrop"></div>
+  <div id="onboard-spot" class="onboard-spot hidden"></div>
+  <div id="onboard-welcome" class="onboard-welcome">
+    <h2>Welcome to MathBoard</h2>
+    <p>A quick 60-second tour of draw → animate → file → present. Your work saves automatically on this device.</p>
+    <div class="onboard-actions">
+      <button type="button" id="onboard-welcome-skip" class="ghost">Skip</button>
+      <button type="button" id="onboard-welcome-start" class="primary">Start tour</button>
+    </div>
+  </div>
+  <div id="onboard-card" class="onboard-card hidden">
+    <div class="onboard-step">1 / 5</div>
+    <h3 class="onboard-title">Create a lesson</h3>
+    <p class="onboard-body"></p>
+    <div class="onboard-actions">
+      <button type="button" id="onboard-back" class="ghost">Back</button>
+      <button type="button" id="onboard-skip" class="ghost">Skip</button>
+      <button type="button" id="onboard-next" class="primary">Next</button>
+    </div>
+  </div>
+</div>
+
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=91"></script>
+<script type="module" src="./js/app.js?v=92"></script>
 </html>

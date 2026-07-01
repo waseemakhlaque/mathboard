@@ -15,6 +15,12 @@ import {
   signInWithPassword, signOut, isSignedIn, getAuthUser, defaultSyncApiUrl,
   getSupabaseUrl, getSupabaseAnonKey,
 } from './auth.js';
+import { initTheme } from './theme.js';
+import {
+  hasPro, canCreateLesson, canUseCloudSync, canOpenCourseExample,
+  startCheckout, initEntitlement, FREE_COURSE_PREVIEW,
+} from './entitlement.js';
+import { initOnboarding } from './onboarding.js';
 import {
   setupGeo, setGeoTool, syncGeoLayer, loadGeoPage, teardownGeo, clearGeoPage,
   restoreGeoItems, drawGeoSvgToCanvas, geoToolActive, flushGeo, cancelGeoDraft,
@@ -2746,9 +2752,14 @@ async function renderLibrary() {
     const msg = libSearch
       ? 'No notebooks match your search.'
       : libTab === 'paper'
-        ? 'No past papers yet. Import a PDF to annotate exam questions.'
-        : 'No lessons yet. Create your first blank lesson notebook.';
-    list.innerHTML = `<p class="muted lib-empty">${msg}</p>`;
+        ? 'Import a PDF past paper to annotate exam questions with pen, highlights, and vectors.'
+        : 'Create your first blank lesson — draw, animate scenes, and present in class.';
+    const cta = libSearch ? '' : libTab === 'paper'
+      ? '<button type="button" class="primary" id="lib-empty-import">Import PDF</button>'
+      : '<button type="button" class="primary" id="lib-empty-new">+ New lesson</button>';
+    list.innerHTML = `<div class="lib-empty-state"><div class="lib-empty-icon">${libTab === 'paper' ? '📄' : '📝'}</div><h2>${libSearch ? 'No results' : libTab === 'paper' ? 'Past papers' : 'Your lessons'}</h2><p class="muted">${msg}</p>${cta}</div>`;
+    $('#lib-empty-new')?.addEventListener('click', () => createNotebook());
+    $('#lib-empty-import')?.addEventListener('click', () => $('#pdf-file-lib')?.click());
     return;
   }
   for (const nb of nbs) {
@@ -2798,7 +2809,7 @@ async function ensureTaxonomy() {
 }
 
 async function renderCourseTab(list) {
-  list.innerHTML = '<p class="muted course-empty">Loading course library…</p>';
+  list.innerHTML = '<div class="lib-skeleton"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div>';
   const tax = await ensureTaxonomy();
   const notebooks = await getAllNotebooks();
   renderCourseLibrary(list, {
@@ -2806,7 +2817,10 @@ async function renderCourseTab(list) {
     taxonomy: tax,
     search: libSearch,
     thumb: (nb) => `<div class="example-thumb">${notebookCardThumb(nb)}</div>`,
-    // Open a filed example straight into Present mode and auto-play its scene.
+    hasPro,
+    previewLimit: FREE_COURSE_PREVIEW,
+    canOpen: (i) => canOpenCourseExample(i),
+    onLocked: () => showPaywall('course'),
     onOpen: (id) => openNotebook(id, { present: true, play: true }),
   });
 }
@@ -2988,6 +3002,12 @@ function askNewLessonName(defaultTitle = 'Vectors — Lesson 1') {
 async function createNotebook() {
   if (!(await storageReady())) {
     alert('Local storage is blocked. In Safari: turn off Private Browsing, or Settings → Safari → allow site data.');
+    return;
+  }
+  const all = await getAllNotebooks();
+  const lessonCount = all.filter((nb) => notebookKind(nb) === 'lesson').length;
+  if (!canCreateLesson(lessonCount)) {
+    showPaywall('lessons');
     return;
   }
   const t = await askNewLessonName();
@@ -3213,11 +3233,27 @@ function updatePresentHud() {
   const pgEl = $('#present-page-label');
   const secEl = $('#present-section-label');
   const hud = $('#present-hud');
+  const dotsEl = $('#present-step-dots');
   if (!pgEl || !S.notebook) return;
   pgEl.textContent = `${S.pageIndex + 1} / ${pages().length}`;
   const sec = sections()[S.sectionIndex];
   if (secEl) {
     secEl.textContent = sections().length > 1 ? (sec?.title || '') : '';
+  }
+  const steps = page()?.scene?.steps || [];
+  if (dotsEl) {
+    dotsEl.innerHTML = '';
+    if (steps.length > 1) {
+      dotsEl.setAttribute('aria-hidden', 'false');
+      const cur = Math.min(Math.floor(sceneNormalized() * steps.length), steps.length - 1);
+      steps.forEach((_, i) => {
+        const d = document.createElement('span');
+        d.className = 'present-step-dot' + (i === cur ? ' active' : '');
+        dotsEl.appendChild(d);
+      });
+    } else {
+      dotsEl.setAttribute('aria-hidden', 'true');
+    }
   }
   if (hud) hud.setAttribute('aria-hidden', $('#editor')?.classList.contains('present-mode') ? 'false' : 'true');
 }
@@ -4435,6 +4471,73 @@ function addComplexPoint(re, im, tag, omega) {
   mark();
 }
 
+function updateProBadge() {
+  const pro = hasPro();
+  document.querySelectorAll('#upgrade-btn, #upgrade-btn-editor').forEach((el) => {
+    if (!el) return;
+    if (el.id === 'upgrade-btn') {
+      el.textContent = pro ? 'Pro ✓' : 'Upgrade';
+      el.classList.toggle('is-pro', pro);
+      el.title = pro ? 'MathBoard Pro — thank you!' : 'Upgrade to MathBoard Pro';
+    } else {
+      el.textContent = pro ? 'Pro active' : 'Upgrade to Pro';
+    }
+  });
+}
+
+function showPaywall(reason = '') {
+  const dlg = $('#paywall-dialog');
+  if (!dlg) return;
+  dlg.classList.remove('hidden');
+  dlg.dataset.reason = reason;
+}
+
+function hidePaywall() {
+  $('#paywall-dialog')?.classList.add('hidden');
+}
+
+function setupProductUI() {
+  initEntitlement();
+  initTheme();
+  updateProBadge();
+
+  const about = $('#about-dialog');
+  $('#about-btn')?.addEventListener('click', () => about?.classList.remove('hidden'));
+  $('#about-close')?.addEventListener('click', () => about?.classList.add('hidden'));
+  about?.addEventListener('click', (e) => { if (e.target === about) about.classList.add('hidden'); });
+
+  document.querySelectorAll('#upgrade-btn, #upgrade-btn-editor').forEach((el) => {
+    el.addEventListener('click', () => showPaywall());
+  });
+  $('#paywall-close')?.addEventListener('click', hidePaywall);
+  $('#paywall-dialog')?.addEventListener('click', (e) => { if (e.target === $('#paywall-dialog')) hidePaywall(); });
+  $('#paywall-upgrade')?.addEventListener('click', async () => {
+    try {
+      await startCheckout();
+    } catch (e) {
+      mbToast(e.message || 'Checkout unavailable');
+    }
+  });
+  $('#paywall-manage')?.addEventListener('click', () => {
+    mbToast('Subscription management — connect Stripe Customer Portal in billing-worker (TODO).');
+  });
+
+  // Editor "More" overflow menu
+  const moreBtn = $('#tbar-more');
+  const moreDrop = $('#tbar-more-drop');
+  if (moreBtn && moreDrop) {
+    moreBtn.onclick = (e) => { e.stopPropagation(); moreDrop.classList.toggle('hidden'); };
+    document.addEventListener('click', () => moreDrop.classList.add('hidden'));
+    $('#share-lesson-more')?.addEventListener('click', () => { moreDrop.classList.add('hidden'); $('#share-lesson')?.click(); });
+    $('#sync-settings-editor-more')?.addEventListener('click', () => { moreDrop.classList.add('hidden'); $('#sync-settings-editor')?.click(); });
+    $('#export-json-more')?.addEventListener('click', () => { moreDrop.classList.add('hidden'); $('#export-json')?.click(); });
+    $('#export-pdf-more')?.addEventListener('click', () => { moreDrop.classList.add('hidden'); $('#export-pdf')?.click(); });
+    $('#upgrade-btn-editor')?.addEventListener('click', () => { moreDrop.classList.add('hidden'); });
+  }
+
+  initOnboarding();
+}
+
 function setupPanelMenu() {
   const wrap = $('#panel-menu');
   const drop = $('#panel-drop');
@@ -4472,6 +4575,10 @@ function setupSyncSettings() {
   }
 
   function openSyncDialog() {
+    if (!canUseCloudSync()) {
+      showPaywall('sync');
+      return;
+    }
     urlIn.value = getSyncBaseUrl() || defaultSyncApiUrl();
     refreshSyncAuthUI();
     dlg.classList.remove('hidden');
@@ -4565,6 +4672,7 @@ function setupRail() {
 function syncDemoUI() {
   const s = $('#scene-slider') || $('#demo-slider'); if (s) s.value = Math.round(S.demoT * 1000);
   const v = $('#scene-val') || $('#demo-val'); if (v) v.textContent = page()?.scene?.steps?.length ? `${sceneTime().toFixed(1)}s` : S.demoT.toFixed(2);
+  if ($('#editor')?.classList.contains('present-mode')) updatePresentHud();
 }
 function demoPlay(on) {
   S.playing = on;
@@ -4877,6 +4985,7 @@ function init() {
   });
   setupGraphViewPanel();
   setupStudioUI();
+  setupProductUI();
   setupCollabGate();
   setupSyncSettings();
   show('library');
