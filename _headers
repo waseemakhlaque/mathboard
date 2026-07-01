@@ -1,5 +1,21 @@
-# Cloudflare Pages headers — caching rules (mirror of vercel.json).
+# Cloudflare Pages headers — caching + security rules (mirror of vercel.json).
 # Cloudflare consumes this file at deploy time; it is not served to users.
+
+# ---- Security headers (apply to every response) -----------------------------
+# CSP allows what MathBoard actually needs and blocks the rest:
+#  - 'unsafe-eval' is REQUIRED by the maths engines (mathjs/nerdamer compile via
+#    new Function). 'unsafe-inline' covers KaTeX/MathLive injected styles + small
+#    inline snippets. blob:/data: cover PDF/worker rasters, webcam captureStream
+#    and inline images/fonts. connect https:/wss: allow the optional Supabase +
+#    collab backends the user configures. object/base/form/frame are locked down.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https: wss:; worker-src 'self' blob:; media-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Copyright: (c) 2026 Waseem Akhlaque. All rights reserved. Proprietary — see LICENSE.
 
 # Service worker must NEVER be cached, so updates roll out immediately.
 /sw.js

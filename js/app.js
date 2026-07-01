@@ -4672,6 +4672,10 @@ function setupDemo() {
     $('#demo-bar')?.classList.toggle('hidden');
   });
   $('#demo-close')?.addEventListener('click', () => { demoPlay(false); sceneReset(); $('#demo-bar')?.classList.add('hidden'); });
+  $('#scene-catalog')?.addEventListener('click', () => {
+    if (!S.notebook) { mbToast('Open a lesson first'); return; }
+    catalogNotebook(S.notebook);
+  });
   $('#demo-add')?.addEventListener('click', addTracer);
   $('#demo-force')?.addEventListener('click', addForceVec);
   $('#demo-incline')?.addEventListener('click', addIncline);
