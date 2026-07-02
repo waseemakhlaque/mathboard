@@ -5,8 +5,11 @@
 .github
 .claude
 .cursor
+.wrangler
 node_modules
 collab-server
+worker
+.claude-state
 supabase
 scripts
 docs

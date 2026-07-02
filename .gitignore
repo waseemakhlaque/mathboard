@@ -3,5 +3,10 @@
 Thumbs.db
 .claude/
 config.local.js
+content/sources/
 collab-server/node_modules/
 collab-worker/node_modules/
+scripts/node_modules/
+.claude-state
+scripts/.rag-ingest-progress.json
+.wrangler/

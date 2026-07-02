@@ -2529,6 +2529,29 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
   line-height: 1.4;
 }
 
+/* ---------- RAG search (Course Library) + animated tools ---------- */
+.rag-search { margin: 0 0 16px; }
+.rag-form { display: flex; gap: 8px; }
+.rag-form #rag-q { flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--text); font-size: 14px; }
+.rag-form #rag-course { padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--text); font-size: 13px; }
+.rag-results { margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.rag-msg { grid-column: 1 / -1; }
+.rag-card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 12px; background: var(--surface); font-size: 13px; line-height: 1.45; }
+.rag-card header { font-weight: 600; font-size: 11px; color: var(--text-3); margin-bottom: 4px; }
+.rag-card p { margin: 0 0 8px; color: var(--text); }
+.rag-card-actions { display: flex; gap: 8px; }
+.rag-card-actions button { font-size: 12px; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); cursor: pointer; }
+.rag-card-actions .rag-anim { background: var(--accent-light); }
+.rag-locked-row { grid-column: 1 / -1; padding: 8px 12px; border: 1px dashed var(--border); border-radius: var(--radius-md); background: var(--accent-light); color: var(--text); font-size: 13px; cursor: pointer; }
+.anim-dialog { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(720px, 94vw); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-lg, 0 12px 40px rgba(0,0,0,.35)); z-index: 300; }
+.anim-dialog #anim-host { padding: 8px 12px 14px; }
+mb-suvat-anim, mb-vector-lines-anim { display: block; }
+.mb-anim-svg { width: 100%; height: auto; }
+.mb-anim-controls { display: flex; gap: 10px; align-items: center; margin-top: 6px; }
+.mb-anim-controls button { width: 36px; height: 30px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); cursor: pointer; }
+.mb-anim-controls input[type="range"] { flex: 1; }
+.mb-anim-caption { min-height: 20px; margin-top: 8px; font-size: 13px; color: var(--text-2); }
+
 /* ---------- Mechanics Panel ---------- */
 .panel-mech {
   width: 300px;

@@ -25,3 +25,12 @@ alwaysApply: true
 - **Test in a real visible browser**; service worker is disabled on localhost. Hard-refresh
   (Cmd+Shift+R) after asset changes. IndexedDB writes are debounced ~400 ms.
 - **One solid, verified module per round.**
+
+## Teaching UI + RAG exceptions (allowed)
+
+- **Core PWA stays vanilla** — ink, objects, scene, notebooks remain plain ES modules + Canvas 2D.
+- **Fable 5 teaching canvas only:** source under `fable/`, compile output **vendored** to
+  `vendor/fable-mathcanvas.mjs`. No runtime CDN. Build step is dev-only for that module.
+- **Optional online RAG tutor:** `js/rag.js` calls `rag-worker` when `config.js` `ragApiUrl` is set.
+  When empty, tutor panel is hidden and the app works fully offline.
+- **RAG Worker** lives in `rag-worker/` (D1 + Vectorize + Workers AI). Not required for core use.

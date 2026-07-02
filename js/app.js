@@ -61,8 +61,9 @@ import {
 } from './scene.js';
 import {
   loadTaxonomy, renderCourseLibrary, isCatalogued, notebookCatalog,
-  taxonomyCourses, taxonomyTopics, taxonomyExercises,
+  taxonomyCourses, taxonomyTopics, taxonomyExercises, expandCoursePath,
 } from './courseLibrary.js';
+import { setupRagSearch } from './ragSearch.js';
 import { pageW, pageH, thumbDims, A4_W, A4_H } from './pageLayout.js';
 import { getAllNotebooks, getNotebook, storageReady } from './storage.js';
 import getStroke from '../vendor/perfect-freehand.mjs';
@@ -673,18 +674,26 @@ function compArrow(c, a, b, col) {
   c.lineTo(b.x - h * Math.cos(ang + 0.4), b.y - h * Math.sin(ang + 0.4));
   c.closePath(); c.fill();
 }
+// Vector Arrow Engine: one 'forcevec' kind covers Force/Velocity/Acceleration — vtype only
+// changes the default colour + label prefix/unit, geometry & dragging are shared.
+const VTYPE_META = {
+  force: { color: '#d23b3b', prefix: 'F', unit: 'N' },
+  velocity: { color: '#2566c8', prefix: 'v', unit: 'm/s' },
+  acceleration: { color: '#1f9d57', prefix: 'a', unit: 'm/s²' },
+};
 function forceTip(o) {
   const th = forceLiveAngle(o) * Math.PI / 180;
   return { x: o.at.x + o.mag * Math.cos(th) * FORCE_SCALE, y: o.at.y - o.mag * Math.sin(th) * FORCE_SCALE };
 }
 function drawForceVec(c, o, drawProgress = 1) {
-  const col = o.color || '#d23b3b';
+  const meta = VTYPE_META[o.vtype] || VTYPE_META.force;
+  const col = o.color || meta.color;
   const th = forceLiveAngle(o) * Math.PI / 180;
   const Fx = o.mag * Math.cos(th), Fy = o.mag * Math.sin(th);
   const tip = forceTip(o), corner = { x: tip.x, y: o.at.y };
   if (drawProgress >= 1) {
-    compArrow(c, o.at, corner, '#1f9d57');         // horizontal component Fx
-    compArrow(c, corner, tip, '#2566c8');          // vertical component Fy
+    compArrow(c, o.at, corner, '#1f9d57');         // horizontal component
+    compArrow(c, corner, tip, '#2566c8');          // vertical component
     // right-angle marker at the corner
     if (Math.abs(Fx) > 0.05 && Math.abs(Fy) > 0.05) {
       const dx = Math.sign(o.at.x - corner.x) * 12, dy = Math.sign(tip.y - corner.y) * 12;
@@ -692,27 +701,28 @@ function drawForceVec(c, o, drawProgress = 1) {
       c.beginPath(); c.moveTo(corner.x + dx, corner.y); c.lineTo(corner.x + dx, corner.y + dy); c.lineTo(corner.x, corner.y + dy); c.stroke();
     }
   }
-  drawArrow(c, o.at, tip, col, false, drawProgress);            // the force itself
+  drawArrow(c, o.at, tip, col, false, drawProgress);            // the vector itself
   c.fillStyle = '#1b1b1b'; c.beginPath(); c.arc(o.at.x, o.at.y, 4, 0, Math.PI * 2); c.fill();
   const degs = Math.round((forceLiveAngle(o) % 360 + 360) % 360);
   c.font = '600 17px sans-serif'; c.fillStyle = col;
-  c.fillText(`F = ${fmt(o.mag)} N  @ ${degs}°`, tip.x + 10, tip.y - 6);
+  c.fillText(`${meta.prefix} = ${fmt(o.mag)} ${meta.unit}  @ ${degs}°`, tip.x + 10, tip.y - 6);
   c.font = '14px sans-serif';
-  c.fillStyle = '#1f9d57'; c.fillText(`Fx = ${fmt(Fx)}`, (o.at.x + corner.x) / 2 - 24, o.at.y + (Fy >= 0 ? 20 : -8));
-  c.fillStyle = '#2566c8'; c.fillText(`Fy = ${fmt(Fy)}`, corner.x + 8, (corner.y + tip.y) / 2);
+  c.fillStyle = '#1f9d57'; c.fillText(`${meta.prefix}x = ${fmt(Fx)}`, (o.at.x + corner.x) / 2 - 24, o.at.y + (Fy >= 0 ? 20 : -8));
+  c.fillStyle = '#2566c8'; c.fillText(`${meta.prefix}y = ${fmt(Fy)}`, corner.x + 8, (corner.y + tip.y) / 2);
 }
-// labelled arrow used by the live mechanics primitives
-function labeledArrow(c, a, b, col, dashed, lab) {
-  c.strokeStyle = col; c.fillStyle = col; c.lineWidth = dashed ? 2 : 3; c.setLineDash(dashed ? [8, 6] : []);
+// labelled arrow used by the live mechanics primitives — `scale` grows line/arrowhead/label
+// together so a diagram enlarged for classroom visibility stays legible, not just wireframe-bigger.
+function labeledArrow(c, a, b, col, dashed, lab, scale = 1) {
+  c.strokeStyle = col; c.fillStyle = col; c.lineWidth = (dashed ? 2 : 3) * scale; c.setLineDash(dashed ? [8, 6] : []);
   c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke(); c.setLineDash([]);
   if (Math.hypot(b.x - a.x, b.y - a.y) > 4) {
-    const ang = Math.atan2(b.y - a.y, b.x - a.x), h = 13;
+    const ang = Math.atan2(b.y - a.y, b.x - a.x), h = 13 * scale;
     c.beginPath(); c.moveTo(b.x, b.y);
     c.lineTo(b.x - h * Math.cos(ang - 0.4), b.y - h * Math.sin(ang - 0.4));
     c.lineTo(b.x - h * Math.cos(ang + 0.4), b.y - h * Math.sin(ang + 0.4));
     c.closePath(); c.fill();
   }
-  if (lab) { c.font = '600 14px sans-serif'; c.fillStyle = col; c.fillText(lab, b.x + 5, b.y - 4); }
+  if (lab) { c.font = `600 ${Math.round(14 * scale)}px sans-serif`; c.fillStyle = col; c.fillText(lab, b.x + 5, b.y - 4); }
 }
 // inclined-plane block (Module 3): drag/animate the slope angle; weight, normal, friction +
 // along/perpendicular components all update live.
@@ -725,12 +735,36 @@ function inclineGeom(o) {
   const h = B * Math.tan(ang);
   return { a, B, ang, h, b: { x: a.x + B, y: a.y }, top: { x: a.x + B, y: a.y - h } };
 }
+// Point where the sliding block/mass sits on the slope surface — shared by the incline's own
+// force-diagram draw AND the Vector Arrow Engine's snap-to-object logic (drag a force/velocity/
+// acceleration arrow's tail near this point and it locks onto the mass).
+function inclineBlockAnchor(o) {
+  const { a, b, top } = inclineGeom(o);
+  const hx = top.x - a.x, hy = top.y - a.y, len = Math.hypot(hx, hy) || 1;
+  const ux = hx / len, uy = hy / len;
+  let outx = uy, outy = -ux;
+  const mid = { x: a.x + hx * 0.5, y: a.y + hy * 0.5 };
+  if ((b.x - mid.x) * outx + (b.y - mid.y) * outy > 0) { outx = -outx; outy = -outy; }
+  const bh = 30 * (o.scale || 1);
+  return { x: mid.x + outx * (bh / 2 + 2), y: mid.y + outy * (bh / 2 + 2) };
+}
+function nearestInclineAnchor(p, tol) {
+  let best = null, bestD = tol * tol;
+  for (const o of objs()) {
+    if (o.kind !== 'incline') continue;
+    const anchor = inclineBlockAnchor(o);
+    const d = (p.x - anchor.x) ** 2 + (p.y - anchor.y) ** 2;
+    if (d < bestD) { bestD = d; best = anchor; }
+  }
+  return best;
+}
 function drawInclineObj(c, o) {
   const { a, ang, b, top } = inclineGeom(o);
-  c.fillStyle = 'rgba(200,210,220,0.35)'; c.strokeStyle = '#5a6570'; c.lineWidth = 2.5; c.setLineDash([]);
+  const SC = o.scale || 1;                          // whole-diagram size — drag the ⤢ handle or "Diagram size"
+  c.fillStyle = 'rgba(200,210,220,0.35)'; c.strokeStyle = '#5a6570'; c.lineWidth = 2.5 * SC; c.setLineDash([]);
   c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.lineTo(top.x, top.y); c.closePath(); c.fill(); c.stroke();
-  c.strokeStyle = '#88929c'; c.lineWidth = 2;
-  c.beginPath(); c.moveTo(a.x - 50, a.y); c.lineTo(b.x + 40, b.y); c.stroke();
+  c.strokeStyle = '#88929c'; c.lineWidth = 2 * SC;
+  c.beginPath(); c.moveTo(a.x - 50 * SC, a.y); c.lineTo(b.x + 40 * SC, b.y); c.stroke();
   // up-slope unit (a -> top) and outward normal (away from interior corner b)
   const hx = top.x - a.x, hy = top.y - a.y, len = Math.hypot(hx, hy) || 1;
   const ux = hx / len, uy = hy / len;
@@ -738,23 +772,97 @@ function drawInclineObj(c, o) {
   const mid = { x: a.x + hx * 0.5, y: a.y + hy * 0.5 };
   if ((b.x - mid.x) * outx + (b.y - mid.y) * outy > 0) { outx = -outx; outy = -outy; }
   // block on the slope
-  const bw = 46, bh = 30;
+  const bw = 46 * SC, bh = 30 * SC;
   c.save(); c.translate(mid.x, mid.y); c.rotate(Math.atan2(uy, ux));
-  c.fillStyle = '#c8d4e0'; c.strokeStyle = '#4a5560'; c.lineWidth = 2;
+  c.fillStyle = '#c8d4e0'; c.strokeStyle = '#4a5560'; c.lineWidth = 2 * SC;
   c.fillRect(-bw / 2, -bh, bw, bh); c.strokeRect(-bw / 2, -bh, bw, bh);
   c.restore();
   const C = { x: mid.x + outx * (bh / 2 + 2), y: mid.y + outy * (bh / 2 + 2) };
-  const m = o.mass || 2, g = 9.8, mg = m * g, mu = o.mu || 0, FS = 4;
+  const m = o.mass || 2, g = 9.8, mg = m * g, mu = o.mu || 0, FS = 4 * SC;
   const N = mg * Math.cos(ang);
-  labeledArrow(c, C, { x: C.x, y: C.y + mg * FS }, '#1f9d57', false, 'mg');
-  labeledArrow(c, C, { x: C.x + outx * N * FS, y: C.y + outy * N * FS }, '#2566c8', false, 'N');
+  labeledArrow(c, C, { x: C.x, y: C.y + mg * FS }, '#1f9d57', false, 'mg', SC);
+  labeledArrow(c, C, { x: C.x + outx * N * FS, y: C.y + outy * N * FS }, '#2566c8', false, 'N', SC);
   if (o.showComponents !== false) {
-    labeledArrow(c, C, { x: C.x - ux * mg * Math.sin(ang) * FS, y: C.y - uy * mg * Math.sin(ang) * FS }, '#e0892a', true, 'mg sinα');
-    labeledArrow(c, C, { x: C.x - outx * mg * Math.cos(ang) * FS, y: C.y - outy * mg * Math.cos(ang) * FS }, '#8a4fd0', true, 'mg cosα');
+    labeledArrow(c, C, { x: C.x - ux * mg * Math.sin(ang) * FS, y: C.y - uy * mg * Math.sin(ang) * FS }, '#e0892a', true, 'mg sinα', SC);
+    labeledArrow(c, C, { x: C.x - outx * mg * Math.cos(ang) * FS, y: C.y - outy * mg * Math.cos(ang) * FS }, '#8a4fd0', true, 'mg cosα', SC);
   }
-  if (mu > 0) { const f = mu * N; labeledArrow(c, C, { x: C.x + ux * f * FS, y: C.y + uy * f * FS }, '#d23b3b', false, 'f'); }
-  c.fillStyle = '#4a5560'; c.font = '600 16px sans-serif';
-  c.fillText(`α = ${Math.round(inclineLiveAngle(o))}°   m = ${fmt(m)} kg   μ = ${fmt(mu)}`, a.x + 6, a.y - 12);
+  if (mu > 0) { const f = mu * N; labeledArrow(c, C, { x: C.x + ux * f * FS, y: C.y + uy * f * FS }, '#d23b3b', false, 'f', SC); }
+  c.fillStyle = '#4a5560'; c.font = `600 ${Math.round(16 * SC)}px sans-serif`;
+  c.fillText(`α = ${Math.round(inclineLiveAngle(o))}°   m = ${fmt(m)} kg   μ = ${fmt(mu)}`, a.x + 6, a.y - 12 * SC);
+}
+// Interactive trig triangle: drag any of the 3 vertices (p1/p2/p3, via the Select tool's generic
+// handle system) and side lengths (page units / UNIT) + interior angles recompute every frame.
+// When one vertex sits within ~3° of 90° it's treated as the right angle, and the two legs get
+// opp/adj labels relative to whichever of the other two vertices is p1 (falls back to p2 if p1
+// IS the right angle) — otherwise (dragged into a non-right shape) we just show plain side/angle values.
+function angleAtVertex(v, p, q) {           // interior angle at v, radians, between rays v->p and v->q
+  const v1x = p.x - v.x, v1y = p.y - v.y, v2x = q.x - v.x, v2y = q.y - v.y;
+  const m1 = Math.hypot(v1x, v1y) || 1, m2 = Math.hypot(v2x, v2y) || 1;
+  const cos = Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / (m1 * m2)));
+  return Math.acos(cos);
+}
+function triangleInfo(o) {
+  const { p1, p2, p3 } = o;
+  const angs = { p1: angleAtVertex(p1, p2, p3), p2: angleAtVertex(p2, p1, p3), p3: angleAtVertex(p3, p1, p2) };
+  const rightKey = Object.keys(angs).find((k) => Math.abs(angs[k] - Math.PI / 2) < 0.052); // ~3°
+  let refKey = null;
+  if (rightKey) refKey = rightKey === 'p1' ? 'p2' : 'p1';
+  return { angs, rightKey, refKey };
+}
+function drawTriangleObj(c, o) {
+  const col = o.color || '#2566c8';
+  const { p1, p2, p3 } = o;
+  const { angs, rightKey, refKey } = triangleInfo(o);
+  c.fillStyle = col + '22'; c.strokeStyle = col; c.lineWidth = 3; c.lineJoin = 'round'; c.setLineDash([]);
+  c.beginPath(); c.moveTo(p1.x, p1.y); c.lineTo(p2.x, p2.y); c.lineTo(p3.x, p3.y); c.closePath();
+  c.fill(); c.stroke();
+  const V = { p1, p2, p3 };
+  if (rightKey) {                            // small square marker at the right angle
+    const R = V[rightKey];
+    const others = Object.keys(V).filter((k) => k !== rightKey).map((k) => V[k]);
+    const u1x = others[0].x - R.x, u1y = others[0].y - R.y, l1 = Math.hypot(u1x, u1y) || 1;
+    const u2x = others[1].x - R.x, u2y = others[1].y - R.y, l2 = Math.hypot(u2x, u2y) || 1;
+    const s = 14, ax = u1x / l1 * s, ay = u1y / l1 * s, bx = u2x / l2 * s, by = u2y / l2 * s;
+    c.strokeStyle = '#4a5560'; c.lineWidth = 1.5;
+    c.beginPath(); c.moveTo(R.x + ax, R.y + ay); c.lineTo(R.x + ax + bx, R.y + ay + by); c.lineTo(R.x + bx, R.y + by); c.stroke();
+  }
+  // side lengths (math units) at each edge midpoint, opp/adj/hyp tagged when right-angled
+  const sideDefs = [
+    { a: p2, b: p3, oppOf: 'p1' }, { a: p1, b: p3, oppOf: 'p2' }, { a: p1, b: p2, oppOf: 'p3' },
+  ];
+  c.font = '600 15px sans-serif'; c.fillStyle = col;
+  for (const s of sideDefs) {
+    const len = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) / UNIT;
+    const mx = (s.a.x + s.b.x) / 2, my = (s.a.y + s.b.y) / 2;
+    let tag = '';
+    if (refKey) {
+      if (s.oppOf === rightKey) tag = 'hyp = ';
+      else if (s.oppOf === refKey) tag = 'opp = ';
+      else tag = 'adj = ';
+    }
+    c.fillText(`${tag}${len.toFixed(2)}`, mx + 6, my - 6);
+  }
+  // angle labels at each vertex; the reference angle (θ) is called out when right-angled
+  c.font = '600 16px sans-serif';
+  for (const k of ['p1', 'p2', 'p3']) {
+    const v = V[k], lab = refKey === k ? `θ = ${formatAngle(angs[k])}` : formatAngle(angs[k]);
+    c.fillStyle = k === refKey ? '#d23b3b' : '#4a5560';
+    c.fillText(lab, v.x + 8, v.y + (v.y > (p1.y + p2.y + p3.y) / 3 ? 18 : -8));
+  }
+}
+function addTriangle() {
+  beginAction();
+  const cx = gridCx(), cy = gridCy();
+  const o = {
+    id: uid(), kind: 'triangle', color: S.color || '#2566c8',
+    p1: { x: cx, y: cy - 3 * UNIT },        // default 3-4-5 right triangle, right angle at p2
+    p2: { x: cx, y: cy },
+    p3: { x: cx + 4 * UNIT, y: cy },
+  };
+  objs().push(o);
+  recordObject(o);
+  commitAction();
+  selectNewObject(o);
 }
 function drawCircle(c, o, col) {
   const r = Math.hypot(o.edge.x - o.center.x, o.edge.y - o.center.y);
@@ -1027,6 +1135,7 @@ function drawObject(c, o, drawProgress = 1) {
   if (o.kind === 'tracer') { drawTracer(c, o); return; }
   if (o.kind === 'forcevec') { drawForceVec(c, o, drawProgress); return; }
   if (o.kind === 'incline') { drawInclineObj(c, o); return; }
+  if (o.kind === 'triangle') { drawTriangleObj(c, o); return; }
   if (o.kind === 'image') {
     const img = objImage(o);
     const x0 = Math.min(o.from.x, o.to.x), y0 = Math.min(o.from.y, o.to.y);
@@ -1590,6 +1699,7 @@ function objectInLasso(o, poly) {
 function objPoints(o) {                 // the point refs that define an object's geometry
   if (o.kind === 'text' || o.kind === 'equation' || o.kind === 'complex' || o.kind === 'graphpt' || o.kind === 'intersect' || o.kind === 'forcevec' || o.kind === 'incline') return [o.at];
   if (o.kind === 'circle' || o.kind === 'tracer') return [o.center, o.edge];
+  if (o.kind === 'triangle') return [o.p1, o.p2, o.p3];
   return [o.from, o.to];               // vector / line / rect / ellipse
 }
 function objBBox(o) {
@@ -1606,8 +1716,14 @@ function objBBox(o) {
     return { x: x0, y: y0, w: Math.abs(tip.x - o.at.x), h: Math.abs(tip.y - o.at.y) };
   }
   if (o.kind === 'incline') {
-    const g = inclineGeom(o);
-    return { x: g.a.x - 50, y: g.top.y - 70, w: g.B + 110, h: (g.a.y - g.top.y) + 120 };
+    const g = inclineGeom(o), SC = o.scale || 1;
+    const padL = 70 * SC + 30, padR = 110 * SC, padT = 70 * SC, padB = 60 * SC + 50;
+    return { x: g.a.x - padL, y: g.top.y - padT, w: g.B + padL + padR, h: (g.a.y - g.top.y) + padB };
+  }
+  if (o.kind === 'triangle') {
+    const xs = [o.p1.x, o.p2.x, o.p3.x], ys = [o.p1.y, o.p2.y, o.p3.y];
+    const x0 = Math.min(...xs) - 60, y0 = Math.min(...ys) - 40;
+    return { x: x0, y: y0, w: Math.max(...xs) - x0 + 60, h: Math.max(...ys) - y0 + 60 };
   }
   if (o.kind === 'graphpt' || o.kind === 'intersect') return { x: o.at.x - 12, y: o.at.y - 12, w: 24, h: 24 };
   if (o.kind === 'tangent') return { x: Math.min(o.from.x, o.to.x), y: Math.min(o.from.y, o.to.y), w: Math.abs(o.to.x - o.from.x), h: Math.abs(o.to.y - o.from.y) };
@@ -1626,13 +1742,16 @@ function objHandles(o) {                 // named drag handles, in page units
     return [{ name: 'at', x: o.at.x, y: o.at.y }, { name: 'tip', x: tip.x, y: tip.y }];
   }
   if (o.kind === 'incline') {
-    const g = inclineGeom(o);
+    const g = inclineGeom(o), SC = o.scale || 1;
     return [
       { name: 'at', x: g.a.x, y: g.a.y },
       { name: 'apex', x: g.top.x, y: g.top.y },
       { name: 'base', x: g.b.x, y: g.b.y },
+      { name: 'scale', x: g.a.x - 70 * SC, y: g.a.y + 50 * SC },   // drag to enlarge the whole diagram
     ];
   }
+  if (o.kind === 'triangle')
+    return [{ name: 'p1', x: o.p1.x, y: o.p1.y }, { name: 'p2', x: o.p2.x, y: o.p2.y }, { name: 'p3', x: o.p3.x, y: o.p3.y }];
   if (o.kind === 'rect' || o.kind === 'ellipse' || o.kind === 'image') {
     const x0 = Math.min(o.from.x, o.to.x), y0 = Math.min(o.from.y, o.to.y),
           x1 = Math.max(o.from.x, o.to.x), y1 = Math.max(o.from.y, o.to.y);
@@ -1661,7 +1780,14 @@ function applyHandle(o, name, p) {        // drag a handle to point p (snapped o
     o.anim = false;
     o.base = Math.max(120, Math.min(520, p.x - o.at.x));
   }
-  else if (name === 'at') o.at = sp;
+  else if (name === 'scale') {
+    const d = Math.hypot(o.at.x - p.x, p.y - o.at.y);
+    o.scale = Math.max(0.5, Math.min(3, d / Math.hypot(70, 50)));
+  }
+  else if (name === 'p1' || name === 'p2' || name === 'p3') o[name] = sp;
+  else if (name === 'at') {
+    o.at = o.kind === 'forcevec' ? (nearestInclineAnchor(p, 26 / S.scale) || sp) : sp;
+  }
   else if (name === 'edge') o.edge = sp;
   else if (name === 'center') { const dx = sp.x - o.center.x, dy = sp.y - o.center.y; o.center = sp; o.edge = { x: o.edge.x + dx, y: o.edge.y + dy }; }
   else if (name === 'size') {
@@ -2147,6 +2273,9 @@ function objHit(o, p, r) {
   if (o.kind === 'tangent') return pointSegDist(p, o.from, o.to) < r + 4;
   if (o.kind === 'forcevec') return pointSegDist(p, o.at, forceTip(o)) < r + 6 || Math.hypot(p.x - o.at.x, p.y - o.at.y) < r + 8;
   if (o.kind === 'incline') { const bb = objBBox(o); return p.x >= bb.x - r && p.x <= bb.x + bb.w + r && p.y >= bb.y - r && p.y <= bb.y + bb.h + r; }
+  if (o.kind === 'triangle') {
+    return pointSegDist(p, o.p1, o.p2) < r + 4 || pointSegDist(p, o.p2, o.p3) < r + 4 || pointSegDist(p, o.p3, o.p1) < r + 4;
+  }
   if (o.kind === 'text') return pointInText(o, p);
   if (o.kind === 'complex') return Math.hypot(p.x - o.at.x, p.y - o.at.y) < r + 8;
   if (o.kind === 'circle' || o.kind === 'tracer') {
@@ -2742,6 +2871,7 @@ function notebookCardThumb(nb) {
 
 async function renderLibrary() {
   const list = $('#nb-list');
+  $('#rag-search')?.classList.toggle('hidden', libTab !== 'course');
   if (libTab === 'course') { await renderCourseTab(list); return; }
   list.innerHTML = '';
   const nbs = filterNotebooksBySearch(
@@ -2808,7 +2938,15 @@ async function ensureTaxonomy() {
   return courseTaxonomy;
 }
 
+let ragSearchReady = false;
 async function renderCourseTab(list) {
+  if (!ragSearchReady) {
+    ragSearchReady = true;
+    setupRagSearch($('#rag-search'), {
+      onOpenShelf: (course, topic) => expandCoursePath(list, course, topic),
+      onLocked: () => showPaywall('course'),
+    });
+  }
   list.innerHTML = '<div class="lib-skeleton"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div>';
   const tax = await ensureTaxonomy();
   const notebooks = await getAllNotebooks();
@@ -3588,6 +3726,8 @@ function bindCanvas() {
   cv.addEventListener('pointerdown', resetPresentIdle);
   document.addEventListener('keydown', resetPresentIdle);
   window.addEventListener('resize', resizeCanvas);
+  window.visualViewport?.addEventListener('resize', () => resizeCanvas());
+  window.visualViewport?.addEventListener('scroll', () => resizeCanvas());
 }
 
 // ---- fx-991-equivalent scientific calculator --------------------------------
@@ -4542,7 +4682,10 @@ function setupPanelMenu() {
   const wrap = $('#panel-menu');
   const drop = $('#panel-drop');
   if (!wrap || !drop) return;
-  wrap.onclick = (e) => { e.stopPropagation(); drop.classList.toggle('hidden'); };
+  wrap.onclick = (e) => {
+    e.stopPropagation();
+    drop.classList.toggle('hidden');
+  };
   drop.querySelectorAll('[data-panel]').forEach((b) => {
     b.onclick = () => {
       const id = b.dataset.panel;
@@ -4654,7 +4797,9 @@ function setupSyncSettings() {
 // ---- tool rail (classroom layout): pin/unpin + close-all panels ---------------
 function setupRail() {
   const rail = $('#tool-rail');
-  const collapse = (on) => rail?.classList.toggle('collapsed', on);
+  const collapse = (on) => {
+    rail?.classList.toggle('collapsed', on);
+  };
   const pin = $('#rail-pin');
   if (pin) pin.onclick = () => collapse(!rail.classList.contains('collapsed'));
   const reopen = $('#rail-reopen');
@@ -4709,9 +4854,10 @@ function selectNewObject(o) {
   $('#demo-bar')?.classList.remove('hidden');
   mark();
 }
-function addForceVec() {
+function addForceVec(vtype = 'force') {
   beginAction();
-  const o = { id: uid(), kind: 'forcevec', at: { x: gridCx(), y: gridCy() }, mag: 5, angleDeg: 30, anim: true, color: S.color || '#d23b3b' };
+  const meta = VTYPE_META[vtype] || VTYPE_META.force;
+  const o = { id: uid(), kind: 'forcevec', vtype, at: { x: gridCx(), y: gridCy() }, mag: 5, angleDeg: 30, anim: true, color: meta.color };
   objs().push(o);
   recordObject(o);
   commitAction();
@@ -4725,6 +4871,7 @@ function syncInclineObjectPanel(o) {
   $('#mi-mass').value = o.mass ?? 2;
   $('#mi-mu').value = o.mu ?? 0;
   $('#mi-base').value = o.base ?? 300;
+  $('#mi-scale').value = o.scale ?? 1;
   $('#mi-comp').checked = o.showComponents !== false;
   $('#mi-anim').checked = !!o.anim;
   if (o.anim) $('#demo-bar')?.classList.remove('hidden');
@@ -4738,6 +4885,7 @@ function applyInclinePanel(o) {
   o.mass = +$('#mi-mass')?.value || 2;
   o.mu = +$('#mi-mu')?.value || 0;
   o.base = Math.max(120, +$('#mi-base')?.value || 300);
+  o.scale = Math.max(0.5, Math.min(3, +$('#mi-scale')?.value || 1));
   o.showComponents = !!$('#mi-comp')?.checked;
   if (anim) $('#demo-bar')?.classList.remove('hidden');
   persist();
@@ -4751,6 +4899,7 @@ function placeInclineObject(at, props) {
     angleDeg: props.angleDeg ?? 30,
     mass: props.mass ?? 2,
     mu: props.mu ?? 0,
+    scale: props.scale ?? 1,
     showComponents: props.showComponents !== false,
     anim: false,
   };
@@ -4766,7 +4915,7 @@ function addIncline() {
   const o = {
     id: uid(), kind: 'incline',
     at: { x: gridCx() - 150, y: gridCy() + 130 },
-    base: 300, angleDeg: 30, mass: 2, mu: 0.2,
+    base: 300, angleDeg: 30, mass: 2, mu: 0.2, scale: 1,
     showComponents: true, anim: true,
   };
   objs().push(o);
@@ -4785,8 +4934,11 @@ function setupDemo() {
     catalogNotebook(S.notebook);
   });
   $('#demo-add')?.addEventListener('click', addTracer);
-  $('#demo-force')?.addEventListener('click', addForceVec);
+  $('#demo-force')?.addEventListener('click', () => addForceVec('force'));
+  $('#demo-velocity')?.addEventListener('click', () => addForceVec('velocity'));
+  $('#demo-accel')?.addEventListener('click', () => addForceVec('acceleration'));
   $('#demo-incline')?.addEventListener('click', addIncline);
+  $('#demo-triangle')?.addEventListener('click', addTriangle);
   syncDemoUI();
 }
 

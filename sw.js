@@ -1,7 +1,7 @@
 // sw.js — offline support.
 // Same-origin app files: network-first (always get the latest, fall back to cache offline).
 // Cross-origin CDN (jsPDF): cache-first (immutable, fine to pin).
-const CACHE = 'mathboard-v92';
+const CACHE = 'mathboard-v96';
 // NOTE: js/collab/* is intentionally NOT precached — collaboration is loaded only via dynamic
 // import() when collabAvailable() is true, so the offline solo app never fetches it.
 const ASSETS = [
@@ -23,6 +23,11 @@ const ASSETS = [
   './js/rationals.js',
   './js/librarySearch.js',
   './js/courseLibrary.js',
+  './js/ragSearch.js',
+  './js/anim/mbAnim.js',
+  './js/anim/suvatAnim.js',
+  './js/anim/vectorLinesAnim.js',
+  './js/anim/ragRoutes.js',
   './content/catalog.json',
   './js/pageLayout.js',
   './vendor/fuse.min.js',
@@ -109,7 +114,9 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
-  const sameOrigin = new URL(req.url).origin === self.location.origin;
+  const url = new URL(req.url);
+  if (url.pathname.startsWith('/api/')) return; // RAG API: network-only, never cached
+  const sameOrigin = url.origin === self.location.origin;
 
   if (sameOrigin) {
     e.respondWith(

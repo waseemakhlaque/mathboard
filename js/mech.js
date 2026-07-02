@@ -9,7 +9,7 @@ let placeKind = null;
 let draft = {
   forces: [{ label: 'F', mag: 5, angleDeg: 30 }, { label: 'mg', mag: 9.8, angleDeg: -90 }],
   showResultant: true,
-  incline: { angleDeg: 30, mass: 2, mu: 0, base: 280, showComponents: true },
+  incline: { angleDeg: 30, mass: 2, mu: 0, base: 280, scale: 1, showComponents: true },
   projectile: { u: 12, thetaDeg: 40, g: 9.8, showVel: true },
   motion: { graph: 'vt', u: 5, a: -2, tMax: 6 },
   pulley: { m1: 2, m2: 1.5, g: 9.8 },
@@ -655,7 +655,7 @@ function bindDraft() {
       if (el.type === 'checkbox') el.onchange = apply;
     });
   };
-  bind3(['mi-angle', 'mi-mass', 'mi-mu', 'mi-base'], draft.incline, ['angleDeg', 'mass', 'mu', 'base']);
+  bind3(['mi-angle', 'mi-mass', 'mi-mu', 'mi-base', 'mi-scale'], draft.incline, ['angleDeg', 'mass', 'mu', 'base', 'scale']);
   document.getElementById('mi-angle')?.addEventListener('input', () => {
     const a = document.getElementById('mi-anim');
     if (a?.checked) a.checked = false;

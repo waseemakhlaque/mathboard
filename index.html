@@ -42,7 +42,7 @@
 <link rel="apple-touch-icon" href="./assets/logo.svg" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=92" />
+<link rel="stylesheet" href="./css/app.css?v=96" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -93,12 +93,13 @@
   <input id="lib-search" class="lib-search" type="search" placeholder="Search lessons and text…" autocomplete="off" />
   <input id="pdf-file-lib" class="file-offscreen" type="file" accept="application/pdf,.pdf" />
   <input id="json-file-lib" class="file-offscreen" type="file" accept=".json,.mathboard.json,application/json" />
+  <div id="rag-search" class="rag-search hidden"></div>
   <div id="nb-list" class="nb-grid"></div>
   <p class="muted footnote">
     <span id="sync-status" class="sync-status" title="Offline · saved on this device">● Local</span>
     · <button type="button" id="sync-settings-foot" class="sync-foot-link">Cloud sync</button>
     · Paginated notebook whiteboard · works offline · add to Home Screen on iPad
-    · <span id="mb-version" class="mb-version">v92</span>
+    · <span id="mb-version" class="mb-version">v96</span>
     · © 2026 Waseem Akhlaque
   </p>
 </section>
@@ -368,8 +369,11 @@
     <div id="scene-steps" class="scene-steps"></div>
     <span class="demo-title demo-legacy">Demo</span>
     <button type="button" id="demo-add" class="demo-btn">+ Demo point</button>
-    <button type="button" id="demo-force" class="demo-btn">+ Force</button>
+    <button type="button" id="demo-force" class="demo-btn" title="Force vector (red)">+ Force</button>
+    <button type="button" id="demo-velocity" class="demo-btn" title="Velocity vector (blue)">+ Velocity</button>
+    <button type="button" id="demo-accel" class="demo-btn" title="Acceleration vector (green)">+ Accel</button>
     <button type="button" id="demo-incline" class="demo-btn">+ Incline</button>
+    <button type="button" id="demo-triangle" class="demo-btn" title="Draggable right-angled triangle — opp/adj/hyp + angles">+ Triangle</button>
     <button type="button" id="demo-close" class="demo-btn demo-x" title="Close demo bar">×</button>
   </div>
   <button type="button" id="scene-next-hotspot" class="scene-next-hotspot hidden" title="Next step (Space)">Next ▶</button>
@@ -713,8 +717,12 @@
       <label class="mech-chk"><input type="checkbox" id="mi-comp" checked /> Show mg sinα / mg cosα</label>
       <label class="ct-lab">Slope length</label>
       <input id="mi-base" class="mech-in full" type="text" value="280" />
+      <label class="ct-lab">Diagram size (0.5 – 3×)</label>
+      <input id="mi-scale" class="mech-in full" type="text" value="1" />
       <label class="mech-chk"><input type="checkbox" id="mi-anim" /> Animate angle (Live Demo bar)</label>
-      <p class="mech-hint">Select tool: drag blue handles on corners · edit values live when selected</p>
+      <p class="mech-hint">Select tool: drag blue handles on corners to reshape · drag the ⤢ handle
+        (bottom-left, below the ramp) to enlarge the whole diagram for the class · edit values live
+        when selected</p>
       <button type="button" data-mplace="incline" class="ck ck-eq2 mech-place">Tap page to place</button>
     </div>
     <div id="mech-projectile" class="mech-pane hidden">
@@ -1075,6 +1083,15 @@
   </div>
 </div>
 
+<!-- Animated worked-example tool (opened from RAG search results) -->
+<div id="anim-dialog" class="sync-dialog anim-dialog hidden" role="dialog" aria-labelledby="anim-title" aria-modal="true">
+  <div class="gp-head">
+    <span class="calc-title" id="anim-title"></span>
+    <button type="button" class="calc-x" id="anim-close" title="Close" aria-label="Close animation">×</button>
+  </div>
+  <div id="anim-host"></div>
+</div>
+
 <!-- Upgrade / paywall -->
 <div id="paywall-dialog" class="sync-dialog paywall-dialog hidden" role="dialog" aria-labelledby="paywall-title" aria-modal="true">
   <div class="sync-box">
@@ -1141,5 +1158,5 @@
 </div>
 
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=92"></script>
+<script type="module" src="./js/app.js?v=96"></script>
 </html>

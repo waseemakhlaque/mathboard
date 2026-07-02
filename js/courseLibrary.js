@@ -275,3 +275,19 @@ export function renderCourseLibrary(container, opts = {}) {
     container.innerHTML = `<p class="muted course-empty">No examples match your search.</p>`;
   }
 }
+
+/** Deep link from RAG search: open the course + topic shelves and scroll there. */
+export function expandCoursePath(container, course, topic) {
+  for (const cDet of container.querySelectorAll('details.course-node')) {
+    if (cDet.querySelector('.course-name')?.textContent !== course) continue;
+    cDet.open = true;
+    for (const tDet of cDet.querySelectorAll('details.topic-node')) {
+      if (tDet.querySelector('.topic-name')?.textContent !== topic) continue;
+      tDet.open = true;
+      tDet.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      return;
+    }
+    cDet.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    return;
+  }
+}
