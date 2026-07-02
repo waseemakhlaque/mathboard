@@ -1,7 +1,7 @@
 // sw.js — offline support.
 // Same-origin app files: network-first (always get the latest, fall back to cache offline).
 // Cross-origin CDN (jsPDF): cache-first (immutable, fine to pin).
-const CACHE = 'mathboard-v96';
+const CACHE = 'mathboard-v97';
 // NOTE: js/collab/* is intentionally NOT precached — collaboration is loaded only via dynamic
 // import() when collabAvailable() is true, so the offline solo app never fetches it.
 const ASSETS = [
@@ -27,6 +27,10 @@ const ASSETS = [
   './js/anim/mbAnim.js',
   './js/anim/suvatAnim.js',
   './js/anim/vectorLinesAnim.js',
+  './js/anim/mbLab.js',
+  './js/anim/inclineLab.js',
+  './js/anim/pulleyLab.js',
+  './js/anim/suvatLab.js',
   './js/anim/ragRoutes.js',
   './content/catalog.json',
   './js/pageLayout.js',

@@ -3,7 +3,7 @@
 // corpus, deep-linking into Course Library shelves and animated tools.
 
 import { hasPro } from './entitlement.js';
-import { animForTopic } from './anim/ragRoutes.js';
+import { animForTopic, LABS } from './anim/ragRoutes.js';
 
 const FREE_RAG_RESULTS = 3;
 const PRO_RAG_RESULTS = 10;
@@ -11,18 +11,42 @@ const COURSES = ['Pure Mathematics 3', 'Mechanics', 'Statistics', 'Pure Mathemat
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+function mountTool(tag, title, defaults) {
+  const dlg = document.querySelector('#anim-dialog');
+  const host = document.querySelector('#anim-host');
+  document.querySelector('#anim-title').textContent = title;
+  host.replaceChildren();
+  const el = document.createElement(tag);
+  if (defaults) el.setAttribute('params', JSON.stringify(defaults));
+  host.appendChild(el);
+  dlg.classList.remove('hidden');
+  if (el instanceof HTMLElement && typeof el.play === 'function') el.play();
+}
+
 export function openAnimDialog(topic) {
   const route = animForTopic(topic);
   if (!route) return;
+  mountTool(route.tag, route.title, route.defaults);
+}
+
+/** Interactive physics-lab picker inside the anim dialog. */
+export function openLabPicker() {
   const dlg = document.querySelector('#anim-dialog');
   const host = document.querySelector('#anim-host');
-  document.querySelector('#anim-title').textContent = route.title;
+  document.querySelector('#anim-title').textContent = 'Physics Labs — drag to explore';
   host.replaceChildren();
-  const el = document.createElement(route.tag);
-  el.setAttribute('params', JSON.stringify(route.defaults));
-  host.appendChild(el);
+  const row = document.createElement('div');
+  row.className = 'mb-lab-picker';
+  for (const lab of LABS) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'mb-lab-chip';
+    chip.textContent = `${lab.icon} ${lab.title}`;
+    chip.addEventListener('click', () => mountTool(lab.tag, lab.title));
+    row.appendChild(chip);
+  }
+  host.appendChild(row);
   dlg.classList.remove('hidden');
-  el.play();
 }
 
 function closeAnimDialog() {
@@ -39,10 +63,12 @@ export function setupRagSearch(host, hooks = {}) {
         ${COURSES.map((c) => `<option>${esc(c)}</option>`).join('')}
       </select>
       <button type="submit" class="primary">Search</button>
+      <button type="button" class="rag-labs-btn" title="Interactive physics labs">🧪 Labs</button>
     </form>
     <div class="rag-results"></div>`;
   const results = host.querySelector('.rag-results');
   const form = host.querySelector('.rag-form');
+  host.querySelector('.rag-labs-btn').addEventListener('click', () => openLabPicker());
 
   document.querySelector('#anim-close')?.addEventListener('click', closeAnimDialog);
 

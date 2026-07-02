@@ -63,7 +63,7 @@ import {
   loadTaxonomy, renderCourseLibrary, isCatalogued, notebookCatalog,
   taxonomyCourses, taxonomyTopics, taxonomyExercises, expandCoursePath,
 } from './courseLibrary.js';
-import { setupRagSearch } from './ragSearch.js';
+import { setupRagSearch, openLabPicker } from './ragSearch.js';
 import { pageW, pageH, thumbDims, A4_W, A4_H } from './pageLayout.js';
 import { getAllNotebooks, getNotebook, storageReady } from './storage.js';
 import getStroke from '../vendor/perfect-freehand.mjs';
@@ -4682,6 +4682,7 @@ function setupPanelMenu() {
   const wrap = $('#panel-menu');
   const drop = $('#panel-drop');
   if (!wrap || !drop) return;
+  $('#open-labs')?.addEventListener('click', () => { drop.classList.add('hidden'); openLabPicker(); });
   wrap.onclick = (e) => {
     e.stopPropagation();
     drop.classList.toggle('hidden');

@@ -1,15 +1,24 @@
-// ragRoutes.js — deterministic map: catalog topic name → animated tool component.
+// ragRoutes.js — deterministic map: catalog topic name → animated/interactive tool.
 // Importing registers the custom elements (side effect).
 
 import './suvatAnim.js';
 import './vectorLinesAnim.js';
+import './inclineLab.js';
+import './pulleyLab.js';
+import './suvatLab.js';
+
+export const LABS = [
+  { tag: 'mb-incline-lab', title: 'Inclined plane — forces & friction', icon: '📐' },
+  { tag: 'mb-pulley-lab', title: 'Pulley (Atwood machine)', icon: '⚙️' },
+  { tag: 'mb-suvat-lab', title: 'SUVAT — motion & v–t graph', icon: '🚀' },
+];
 
 export const TOPIC_ANIM = {
-  'Kinematics': {
-    tag: 'mb-suvat-anim',
-    title: 'Kinematics — constant acceleration',
-    defaults: { u: 20, a: -9.8, tMax: 4 },
-  },
+  'Kinematics': { tag: 'mb-suvat-lab', title: 'SUVAT — motion & v–t graph' },
+  'Motion on a slope': { tag: 'mb-incline-lab', title: 'Inclined plane — forces & friction' },
+  'Forces & equilibrium': { tag: 'mb-incline-lab', title: 'Inclined plane — forces & friction' },
+  "Newton's laws": { tag: 'mb-pulley-lab', title: 'Pulley (Atwood machine)' },
+  'Work, energy & power': { tag: 'mb-incline-lab', title: 'Inclined plane — forces & friction' },
   'Vectors': {
     tag: 'mb-vector-lines-anim',
     title: 'Vectors — intersection of lines in 3D',

@@ -2551,6 +2551,17 @@ mb-suvat-anim, mb-vector-lines-anim { display: block; }
 .mb-anim-controls button { width: 36px; height: 30px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); cursor: pointer; }
 .mb-anim-controls input[type="range"] { flex: 1; }
 .mb-anim-caption { min-height: 20px; margin-top: 8px; font-size: 13px; color: var(--text-2); }
+mb-incline-lab, mb-pulley-lab, mb-suvat-lab { display: block; }
+.mb-lab-readout { margin-top: 8px; padding: 6px 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; color: var(--text); background: var(--surface-2); border-radius: var(--radius-sm); min-height: 20px; }
+.mb-drag-handle { cursor: grab; touch-action: none; }
+.mb-drag-handle.is-dragging { cursor: grabbing; }
+.mb-lab-picker { display: flex; flex-direction: column; gap: 10px; padding: 12px 4px; }
+.mb-lab-chip { padding: 12px 16px; font-size: 14px; text-align: left; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); color: var(--text); cursor: pointer; }
+.mb-lab-chip:hover { background: var(--accent-light); }
+.mb-lab-massrow { display: flex; gap: 6px; align-items: center; justify-content: center; margin-top: 6px; }
+.mb-lab-massrow button { width: 28px; height: 26px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); cursor: pointer; }
+.mb-lab-masslbl { font-size: 13px; color: var(--text-2); min-width: 84px; text-align: center; }
+.rag-labs-btn { padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); color: var(--text); font-size: 13px; cursor: pointer; }
 
 /* ---------- Mechanics Panel ---------- */
 .panel-mech {
