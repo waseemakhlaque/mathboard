@@ -1774,6 +1774,7 @@ function render() {
         ctx.clip();
         drawStrokePreview(ctx, S.drawing);
         ctx.restore();
+        perfFrame();
       }
       S.dirty = false;
       requestAnimationFrame(render);
@@ -1822,7 +1823,7 @@ function render() {
     // after) — snapshot it so following frames can blit. Also capture at rest
     // so the NEXT pen-down starts warm; skip while erasing or mid-gesture.
     if (inking || (!S.drawing && S.touch.size === 0)) captureInkSnapshot();
-    if (inking) drawStrokePreview(ctx, S.drawing);
+    if (inking) { drawStrokePreview(ctx, S.drawing); perfFrame(); }
     // selection highlight (hidden while inking so blitted frames match)
     if (S.selection && !inking) {
       ctx.globalAlpha = 0.18; ctx.fillStyle = '#2566c8';
@@ -2158,6 +2159,60 @@ function finishLasso() {
   mark();
 }
 
+// ---- on-device ink perf monitor (?perf=1) --------------------------------------
+// Overlay showing where pen latency goes, measurable on the iPad itself:
+// "deliver" = how long iPadOS/Safari sat on the event before JS saw it (system
+// side, not fixable from the app); "down→ink" = our handler-to-paint time.
+const perfOn = /[?&]perf/.test(location.search) || localStorage.getItem('mb-perf') === '1';
+const perf = { el: null, downDeliver: 0, downPaint: -1, downAt: 0, pendingDown: false,
+  moveDeliverMax: 0, gapMax: 0, lastMoveAt: 0, coalSum: 0, coalN: 0,
+  frameSum: 0, frameN: 0, frameMax: 0, lastFrameAt: 0 };
+function perfHud() {
+  if (perf.el) return perf.el;
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;top:70px;right:8px;z-index:99999;background:rgba(0,0,0,0.78);color:#4ade80;font:12px/1.6 ui-monospace,monospace;padding:8px 10px;border-radius:8px;pointer-events:none;white-space:pre';
+  document.body.appendChild(d);
+  perf.el = d;
+  return d;
+}
+function perfDown(e) {
+  if (!perfOn) return;
+  const now = performance.now();
+  perf.downDeliver = now - e.timeStamp;
+  perf.downAt = now; perf.pendingDown = true; perf.downPaint = -1;
+  perf.moveDeliverMax = 0; perf.gapMax = 0; perf.lastMoveAt = 0;
+  perf.coalSum = 0; perf.coalN = 0;
+  perf.frameSum = 0; perf.frameN = 0; perf.frameMax = 0; perf.lastFrameAt = 0;
+}
+function perfMove(e, nPts) {
+  if (!perfOn) return;
+  const now = performance.now();
+  perf.moveDeliverMax = Math.max(perf.moveDeliverMax, now - e.timeStamp);
+  if (perf.lastMoveAt) perf.gapMax = Math.max(perf.gapMax, now - perf.lastMoveAt);
+  perf.lastMoveAt = now;
+  perf.coalSum += nPts; perf.coalN++;
+}
+function perfFrame() {
+  if (!perfOn) return;
+  const now = performance.now();
+  if (perf.pendingDown) { perf.downPaint = now - perf.downAt; perf.pendingDown = false; }
+  if (perf.lastFrameAt) {
+    const dt = now - perf.lastFrameAt;
+    perf.frameSum += dt; perf.frameN++;
+    if (dt > perf.frameMax) perf.frameMax = dt;
+  }
+  perf.lastFrameAt = now;
+}
+function perfReport() {
+  if (!perfOn) return;
+  perfHud().textContent =
+    `deliver: down ${perf.downDeliver.toFixed(0)}ms · move ≤${perf.moveDeliverMax.toFixed(0)}ms\n` +
+    `down→ink paint: ${perf.downPaint < 0 ? '—' : perf.downPaint.toFixed(0) + 'ms'}\n` +
+    `ink frames: avg ${(perf.frameN ? perf.frameSum / perf.frameN : 0).toFixed(1)} · max ${perf.frameMax.toFixed(1)}ms\n` +
+    `move gap ≤${perf.gapMax.toFixed(0)}ms · pts/evt ${(perf.coalN ? perf.coalSum / perf.coalN : 0).toFixed(1)}\n` +
+    `dpr ${dpr} · ${cv.width}×${cv.height}`;
+}
+
 // ---- pointer input -----------------------------------------------------------
 function pressureOf(e) {
   if (e.pointerType === 'pen' && e.pressure > 0) return e.pressure;
@@ -2213,6 +2268,8 @@ function abortGesture() {
 
 function onDown(e) {
   if (eqDockOpen()) return;
+  // keep iPadOS from running its own gesture recognition on pen input
+  if (e.pointerType === 'pen' && e.cancelable) e.preventDefault();
   try { cv.setPointerCapture(e.pointerId); } catch (_) { /* non-fatal */ }
   if (e.pointerType === 'touch') {
     S.touch.set(e.pointerId, cssPt(e));
@@ -2343,6 +2400,7 @@ function onDown(e) {
   }
   // pen / highlighter
   beginInkAction();
+  perfDown(e);
   const stroke = { id: uid(), tool: S.tool, color: S.color, width: S.width, points: [{ x: p.x, y: p.y, p: pressureOf(e) }] };
   if (S.tool === 'pen') stroke.penType = S.penType;
   S.drawing = stroke;
@@ -2369,8 +2427,10 @@ function processDrawMove(e) {
     return;
   }
   if (S.drawing) {
-    appendInkPoints(S.drawing, coalescedPagePoints(e));
+    const pts = coalescedPagePoints(e);
+    appendInkPoints(S.drawing, pts);
     inkPredicted = predictedPagePoints(e);
+    perfMove(e, pts.length);
     markInk();
   }
 }
@@ -2503,6 +2563,7 @@ function onUp(e) {
       collabNotifyEdit();
     }
     if (typeof S.collabResume === 'function') S.collabResume();
+    perfReport();
     markInk();
   }
 }

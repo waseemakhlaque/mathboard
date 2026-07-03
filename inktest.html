@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>MathBoard — raw ink latency test</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
+  canvas { position: fixed; inset: 0; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  #hud { position: fixed; top: max(env(safe-area-inset-top), 8px); left: 8px; font: 13px/1.6 ui-monospace, monospace;
+         background: rgba(0,0,0,.78); color: #4ade80; padding: 10px 12px; border-radius: 10px;
+         pointer-events: none; white-space: pre; z-index: 10; }
+  #note { position: fixed; bottom: max(env(safe-area-inset-bottom), 8px); left: 8px; right: 8px;
+          font: 12px -apple-system, sans-serif; color: #64748b; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">write with the Apple Pencil…</div>
+<div id="note">Raw ink test — draws straight from the input event with zero app code. If THIS feels smooth, the remaining lag is inside MathBoard; if this also lags, it is Safari/iPadOS input delivery. Compare the feel with GoodNotes, then screenshot the numbers.</div>
+<script>
+  const c = document.getElementById('c'), hud = document.getElementById('hud');
+  const dpr = window.devicePixelRatio || 1;
+  let ctx;
+  function size() {
+    c.width = Math.round(innerWidth * dpr);
+    c.height = Math.round(innerHeight * dpr);
+    ctx = c.getContext('2d', { alpha: false, desynchronized: true });
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, innerWidth, innerHeight);
+    ctx.lineCap = ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#111827';
+  }
+  addEventListener('resize', size);
+  size();
+
+  let last = null, downT = 0, downDeliver = 0, painted = false;
+  let gapMax = 0, lastMove = 0, delivMax = 0, coalSum = 0, coalN = 0;
+
+  c.addEventListener('pointerdown', (e) => {
+    if (e.cancelable) e.preventDefault();
+    if (e.pointerType === 'touch') return;          // finger reserved so palm does nothing
+    try { c.setPointerCapture(e.pointerId); } catch (_) {}
+    last = { x: e.clientX, y: e.clientY };
+    downT = performance.now();
+    downDeliver = downT - e.timeStamp;
+    painted = false; gapMax = 0; lastMove = 0; delivMax = 0; coalSum = 0; coalN = 0;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(last.x, last.y, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#111827';
+    ctx.fill();
+  });
+
+  c.addEventListener('pointermove', (e) => {
+    if (!last) return;
+    const now = performance.now();
+    delivMax = Math.max(delivMax, now - e.timeStamp);
+    if (lastMove) gapMax = Math.max(gapMax, now - lastMove);
+    lastMove = now;
+    const co = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+    const list = co.length ? co : [e];
+    coalSum += list.length; coalN++;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(last.x, last.y);
+    for (const ev of list) { ctx.lineTo(ev.clientX, ev.clientY); last = { x: ev.clientX, y: ev.clientY }; }
+    ctx.stroke();
+    if (!painted) {
+      painted = true;
+      hud.textContent = `pen-down deliver: ${downDeliver.toFixed(0)} ms\nfirst ink after: ${(now - downT).toFixed(0)} ms`;
+    }
+  });
+
+  const up = () => {
+    if (last) {
+      hud.textContent += `\nmove deliver max: ${delivMax.toFixed(0)} ms` +
+        `\nmove gap max: ${gapMax.toFixed(0)} ms` +
+        `\nsamples/event: ${(coalN ? coalSum / coalN : 0).toFixed(1)}  dpr: ${dpr}`;
+    }
+    last = null;
+  };
+  c.addEventListener('pointerup', up);
+  c.addEventListener('pointercancel', up);
+</script>
+</body>
+</html>
