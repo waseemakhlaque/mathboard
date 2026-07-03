@@ -409,16 +409,11 @@ button.ghost:hover {
   color: var(--success);
 }
 
+/* Always visible — hover-reveal hid Delete/Rename on iPad (no hover on touch). */
 .nb-actions {
   display: flex;
   gap: 6px;
   margin-top: 10px;
-  opacity: 0;
-  transition: opacity var(--duration-normal) var(--ease);
-}
-
-.nb-card:hover .nb-actions {
-  opacity: 1;
 }
 
 .nb-actions button {
@@ -1378,11 +1373,11 @@ button.ghost:hover {
 
 /* P1: Page transition fade */
 .present-mode-fade {
-  animation: presentPageIn 0.25s ease-out;
+  animation: presentPageIn 0.14s ease-out;
 }
 @keyframes presentPageIn {
-  from { opacity: 0; transform: scale(0.98); }
-  to { opacity: 1; transform: scale(1); }
+  from { opacity: 0.35; }
+  to { opacity: 1; }
 }
 
 /* P1: Laser pointer cursor */
@@ -3165,10 +3160,6 @@ textarea:focus-visible,
 .present-step-dot.active {
   background: var(--accent);
   transform: scale(1.25);
-}
-#board.present-mode-fade {
-  opacity: 0;
-  transition: opacity 0.28s var(--ease);
 }
 
 /* Paywall / upgrade / about modals */

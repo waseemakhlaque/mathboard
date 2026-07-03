@@ -314,12 +314,72 @@ function resizeCanvas() {
 function fitPage() {
   const r = cv.getBoundingClientRect();
   const present = $('#editor')?.classList.contains('present-mode');
-  const m = present ? 20 : 24;
+  const m = present ? 12 : 24;
   const bottom = present ? 72 : 0;
   const pw = pgW(), ph = pgH();
-  S.scale = Math.min((r.width - m * 2) / pw, (r.height - m - bottom) / ph);
+  const fitAll = Math.min((r.width - m * 2) / pw, (r.height - m - bottom) / ph);
+  const fitW = (r.width - m * 2) / pw;
+  // Present mode: portrait pages fill the width and scroll vertically, so
+  // handwriting is legible on a shared screen without manual zooming.
+  if (present && fitW > fitAll * 1.02) {
+    S.scale = fitW;
+    S.offsetX = (r.width - pw * S.scale) / 2;
+    S.offsetY = m;
+    mark();
+    return;
+  }
+  S.scale = fitAll;
   S.offsetX = (r.width - pw * S.scale) / 2;
   S.offsetY = (r.height - bottom - ph * S.scale) / 2;
+  mark();
+}
+
+// Present-mode camera rail: the page rides a vertical track. Bounds collapse to
+// the centred position on any axis where the page fits inside the viewport.
+function presentCamBounds() {
+  const r = cv.getBoundingClientRect();
+  const m = 12, bottom = 72;
+  const pw = pgW() * S.scale, ph = pgH() * S.scale;
+  const cx = (r.width - pw) / 2;
+  const cy = (r.height - bottom - ph) / 2;
+  return {
+    minX: Math.min(cx, r.width - m - pw), maxX: Math.max(cx, m),
+    minY: Math.min(cy, r.height - bottom - m - ph), maxY: Math.max(cy, m),
+  };
+}
+
+// Scroll within the page; overscroll past an edge accumulates and flips to the
+// adjacent page (GoodNotes-style continuous scrolling). The cooldown swallows
+// trackpad momentum so one fling turns one page.
+const FLIP_PX = 160, FLIP_COOLDOWN_MS = 450, FLIP_STALE_MS = 300;
+let flipAcc = 0, flipCooldownUntil = 0, flipLastT = 0;
+function presentScrollBy(dx, dy) {
+  const b = presentCamBounds();
+  S.offsetX = Math.max(b.minX, Math.min(b.maxX, S.offsetX - dx));
+  const now = performance.now();
+  if (now < flipCooldownUntil) { flipAcc = 0; mark(); return; }
+  if (now - flipLastT > FLIP_STALE_MS) flipAcc = 0;
+  const ny = S.offsetY - dy;
+  if (ny < b.minY) {
+    S.offsetY = b.minY;
+    flipAcc = Math.max(0, flipAcc) + (b.minY - ny);
+    flipLastT = now;
+    if (flipAcc > FLIP_PX && S.pageIndex < pages().length - 1) {
+      flipAcc = 0; flipCooldownUntil = now + FLIP_COOLDOWN_MS;
+      goToPage(S.pageIndex + 1, { align: 'top', instant: true });
+    }
+  } else if (ny > b.maxY) {
+    S.offsetY = b.maxY;
+    flipAcc = Math.min(0, flipAcc) - (ny - b.maxY);
+    flipLastT = now;
+    if (flipAcc < -FLIP_PX && S.pageIndex > 0) {
+      flipAcc = 0; flipCooldownUntil = now + FLIP_COOLDOWN_MS;
+      goToPage(S.pageIndex - 1, { align: 'bottom', instant: true });
+    }
+  } else {
+    S.offsetY = ny;
+    flipAcc = 0;
+  }
   mark();
 }
 
@@ -2533,10 +2593,21 @@ function handleGesture() {
     S.scale = ns;
     S.offsetX = mid.x - S.gref.pageMid.x * ns;
     S.offsetY = mid.y - S.gref.pageMid.y * ns;
+    if ($('#editor')?.classList.contains('present-mode')) {
+      const b = presentCamBounds();
+      S.offsetX = Math.max(b.minX, Math.min(b.maxX, S.offsetX));
+      S.offsetY = Math.max(b.minY, Math.min(b.maxY, S.offsetY));
+    }
     mark();
   } else if (S.gref.mode === 1 && pts.length === 1) {
-    S.offsetX = S.gref.offX + (pts[0].x - S.gref.start.x);
-    S.offsetY = S.gref.offY + (pts[0].y - S.gref.start.y);
+    if ($('#editor')?.classList.contains('present-mode')) {
+      const last = S.gref.last || S.gref.start;
+      presentScrollBy(last.x - pts[0].x, last.y - pts[0].y);
+      S.gref.last = { ...pts[0] };
+    } else {
+      S.offsetX = S.gref.offX + (pts[0].x - S.gref.start.x);
+      S.offsetY = S.gref.offY + (pts[0].y - S.gref.start.y);
+    }
     mark();
   }
 }
@@ -2547,10 +2618,19 @@ function onWheel(e) {
   const r = cv.getBoundingClientRect();
   const cx = e.clientX - r.left, cy = e.clientY - r.top;
   const pageX = (cx - S.offsetX) / S.scale, pageY = (cy - S.offsetY) / S.scale;
+  const present = $('#editor')?.classList.contains('present-mode');
   if (e.ctrlKey || e.metaKey) {
     const ns = Math.max(0.08, Math.min(8, S.scale * (1 - e.deltaY * 0.01)));
     S.scale = ns;
     S.offsetX = cx - pageX * ns; S.offsetY = cy - pageY * ns;
+    if (present) {
+      const b = presentCamBounds();
+      S.offsetX = Math.max(b.minX, Math.min(b.maxX, S.offsetX));
+      S.offsetY = Math.max(b.minY, Math.min(b.maxY, S.offsetY));
+    }
+  } else if (present) {
+    presentScrollBy(e.deltaX, e.deltaY);
+    return;
   } else {
     S.offsetX -= e.deltaX; S.offsetY -= e.deltaY;
   }
@@ -2869,15 +2949,20 @@ function notebookCardThumb(nb) {
   return `<div class="nb-thumb"><img class="nb-thumb-blank" src="${makePageThumbUrl(pg)}" alt="" /></div>`;
 }
 
+let libRenderSeq = 0;
 async function renderLibrary() {
+  const seq = ++libRenderSeq;
   const list = $('#nb-list');
   $('#rag-search')?.classList.toggle('hidden', libTab !== 'course');
   if (libTab === 'course') { await renderCourseTab(list); return; }
-  list.innerHTML = '';
   const nbs = filterNotebooksBySearch(
     (await getAllNotebooks()).filter((nb) => notebookKind(nb) === libTab),
     libSearch,
   ).sort((a, b) => b.updated - a.updated);
+  // Overlapping renders (startup + cloud merge) must not append twice —
+  // duplicate cards of the same lesson made Delete look like it removed two.
+  if (seq !== libRenderSeq) return;
+  list.innerHTML = '';
   if (!nbs.length) {
     const msg = libSearch
       ? 'No notebooks match your search.'
@@ -3175,24 +3260,31 @@ async function clearPage() {
   updatePageLabel(); persist(); mark();
 }
 
-function goToPage(i) {
+function goToPage(i, opts = {}) {
   if (!S.notebook || i < 0 || i >= pages().length || i === S.pageIndex) return;
   flushGeo();
+  const isPresent = $('#editor')?.classList.contains('present-mode');
+  // Present mode keeps the teacher's zoom & horizontal position across page
+  // turns (same-width pages only); land at the top, or bottom when scrolling up.
+  const keepCam = isPresent && pageW(pages()[i]) === pgW();
   S.pageIndex = i;
   S.undo = []; S.redo = [];
   clearSelection();
   setGeoTool(null); setInstTool(null);
   // P1: Page transition — add fade class for present mode
   const cvEl = $('#board');
-  const isPresent = $('#editor')?.classList.contains('present-mode');
   if (isPresent && cvEl) cvEl.classList.remove('present-mode-fade');
   loadGeoPage(page());
-  fitPage();
+  if (keepCam) {
+    const b = presentCamBounds();
+    S.offsetX = Math.max(b.minX, Math.min(b.maxX, S.offsetX));
+    S.offsetY = opts.align === 'bottom' ? b.minY : b.maxY;
+  } else fitPage();
   if (typeof S.collabPageChange === 'function') S.collabPageChange();
   scenePageChange();
   updatePageLabel();
   mark();
-  if (isPresent && cvEl) {
+  if (isPresent && cvEl && !opts.instant) {
     // Trigger reflow then add fade animation
     void cvEl.offsetWidth;
     cvEl.classList.add('present-mode-fade');
@@ -3694,7 +3786,13 @@ function bindEditor() {
     else if (e.key === 'Escape' && geoToolActive()) { cancelGeoDraft(); mark(); }
     else if (e.key === 'Escape' && $('#editor')?.classList.contains('present-mode')) { e.preventDefault(); setPresentMode(false); }
     else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setPresentMode(!$('#editor').classList.contains('present-mode')); }
-    else if ($('#editor')?.classList.contains('present-mode') && e.key === 'ArrowLeft') { e.preventDefault(); $('#prev')?.click(); }
+    else if ($('#editor')?.classList.contains('present-mode') && (e.key === 'ArrowLeft' || e.key === 'PageUp')) { e.preventDefault(); $('#prev')?.click(); }
+    else if ($('#editor')?.classList.contains('present-mode') && (e.key === 'PageDown' || e.key === ' ')) {
+      // presenter clickers send PageUp/PageDown; space = next, like slide apps
+      e.preventDefault();
+      if (page()?.scene?.steps?.length) $('#scene-next')?.click();
+      else $('#next')?.click();
+    }
     else if ($('#editor')?.classList.contains('present-mode') && e.key === 'ArrowRight') {
       e.preventDefault();
       if (page()?.scene?.steps?.length) $('#scene-next')?.click();
