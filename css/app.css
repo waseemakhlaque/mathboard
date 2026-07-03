@@ -409,15 +409,18 @@ button.ghost:hover {
   color: var(--success);
 }
 
-/* Always visible — hover-reveal hid Delete/Rename on iPad (no hover on touch). */
+/* Always visible — hover-reveal hid Delete/Rename on iPad (no hover on touch).
+   Wraps to a second row: five buttons overflow the card width otherwise,
+   which clipped Delete off the card edge. */
 .nb-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 10px;
 }
 
 .nb-actions button {
-  flex: 1;
+  flex: 1 1 auto;
   padding: 6px 10px;
   font-size: 12px;
   border-radius: var(--radius-sm);
