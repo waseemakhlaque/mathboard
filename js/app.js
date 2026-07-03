@@ -178,12 +178,26 @@ function pageIsPdf(pg) {
 }
 
 // ---- persistence (debounced) -------------------------------------------------
-let saveTimer = null;
+// The notebook clone is the most expensive main-thread hit outside rendering,
+// so while the teacher writes continuously it is deferred to an idle gap — but
+// never longer than 8 s from the first unsaved change.
+let saveTimer = null, savePendingSince = 0;
+function flushPersist() {
+  clearTimeout(saveTimer);
+  if (!savePendingSince || !S.notebook) return;
+  savePendingSince = 0;
+  sync.push(typeof structuredClone === 'function' ? structuredClone(S.notebook) : clone(S.notebook));
+}
 function persist() {
   if (!S.notebook) return;
   S.notebook.updated = Date.now();
+  if (!savePendingSince) savePendingSince = Date.now();
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => sync.push(clone(S.notebook)), 400);
+  if (Date.now() - savePendingSince > 8000) { flushPersist(); return; }
+  saveTimer = setTimeout(() => {
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(flushPersist, { timeout: 3000 });
+    else flushPersist();
+  }, 800);
 }
 
 // ---- undo / redo (full page snapshot: ink, objects, grapher, flags, paper) ---
@@ -247,6 +261,20 @@ function beginAction() {
   // P0: Pause collab sync during drawing to reduce lag
   if (typeof S.collabPause === 'function') S.collabPause();
 }
+// Pen strokes and erases are far too frequent for snapshotPage()'s full-page
+// JSON clone (it caused a visible hitch on every pen-down on written pages).
+// They use cheap typed undo entries instead — see applyTypedUndo.
+function beginInkAction() {
+  if (typeof S.collabPause === 'function') S.collabPause();
+}
+let eraseDidChange = false;
+function beginEraseAction() {
+  eraseDidChange = false;
+  // eraseAt replaces the arrays and never mutates surviving strokes, so undo
+  // can simply keep the old array references — no clone
+  S.eraseBefore = { strokes: page().strokes, objects: page().objects };
+  if (typeof S.collabPause === 'function') S.collabPause();
+}
 function commitAction() {
   if (!S.actionBefore) return;
   if (JSON.stringify(S.actionBefore) !== JSON.stringify(snapshotPage())) {
@@ -264,16 +292,46 @@ function commitAction() {
 function collabNotifyEdit() {
   if (typeof S.collabPush === 'function') S.collabPush();
 }
+// Undo entries are either full page snapshots (legacy, for object/graph edits)
+// or cheap typed entries: {kind:'stroke', id} for a committed pen stroke and
+// {kind:'arrays', strokes, objects} holding pre-erase array references (eraseAt
+// always builds new arrays, so the old ones can be kept without cloning).
+function applyTypedUndo(entry, from) {
+  if (entry.kind === 'stroke') {
+    if (from === 'undo') {
+      const i = page().strokes.findIndex((s) => s.id === entry.id);
+      const stroke = i >= 0 ? page().strokes.splice(i, 1)[0] : null;
+      return { kind: 'stroke', id: entry.id, stroke };
+    }
+    if (entry.stroke) page().strokes.push(entry.stroke);
+    return { kind: 'stroke', id: entry.id };
+  }
+  // kind === 'arrays'
+  const inverse = { kind: 'arrays', strokes: page().strokes, objects: page().objects };
+  page().strokes = entry.strokes;
+  page().objects = entry.objects;
+  return inverse;
+}
 function doUndo() {
   if (!S.undo.length) return;
-  S.redo.push(snapshotPage());
-  restorePage(S.undo.pop());
+  const entry = S.undo.pop();
+  if (entry.kind) S.redo.push(applyTypedUndo(entry, 'undo'));
+  else {
+    S.redo.push(snapshotPage());
+    restorePage(entry);
+  }
+  thumbCache.delete(page().id);
   clearSelection(); mark(); persist();
 }
 function doRedo() {
   if (!S.redo.length) return;
-  S.undo.push(snapshotPage());
-  restorePage(S.redo.pop());
+  const entry = S.redo.pop();
+  if (entry.kind) S.undo.push(applyTypedUndo(entry, 'redo'));
+  else {
+    S.undo.push(snapshotPage());
+    restorePage(entry);
+  }
+  thumbCache.delete(page().id);
   clearSelection(); mark(); persist();
 }
 
@@ -298,7 +356,14 @@ function pointInPoly(pt, poly) {
 function dist2(a, b) { const dx = a.x - b.x, dy = a.y - b.y; return dx * dx + dy * dy; }
 
 // ---- rendering ---------------------------------------------------------------
-function mark() { S.dirty = true; }
+// Warm bitmap of all committed page content (see captureInkSnapshot). Content
+// stays valid until anything other than live ink repaints — mark() invalidates,
+// markInk() (ink-only changes already reflected in the snapshot) does not.
+let inkSnapCanvas = null;
+let inkSnapState = null;
+let inkSnapContent = false;
+function mark() { S.dirty = true; inkSnapContent = false; }
+function markInk() { S.dirty = true; }
 
 function resizeCanvas() {
   const r = cv.getBoundingClientRect();
@@ -367,6 +432,13 @@ function presentScrollBy(dx, dy) {
     if (flipAcc > FLIP_PX && S.pageIndex < pages().length - 1) {
       flipAcc = 0; flipCooldownUntil = now + FLIP_COOLDOWN_MS;
       goToPage(S.pageIndex + 1, { align: 'top', instant: true });
+    } else if (flipAcc > FLIP_PX * 2 && S.pageIndex === pages().length - 1) {
+      // keep scrolling past the end — add a fresh page and land on it
+      flipAcc = 0; flipCooldownUntil = now + FLIP_COOLDOWN_MS;
+      addPagesAfterCurrent(newPage(page().paper, page().format));
+      const nb = presentCamBounds();
+      S.offsetX = Math.max(nb.minX, Math.min(nb.maxX, S.offsetX));
+      S.offsetY = nb.maxY;
     }
   } else if (ny > b.maxY) {
     S.offsetY = b.maxY;
@@ -610,17 +682,55 @@ function sliceStrokePoints(pts, progress) {
   return out.length >= 2 ? out : [pts[0], pts[Math.min(1, pts.length - 1)]];
 }
 
+// Committed strokes never change their points, so the perfect-freehand outline
+// is computed once and cached as a Path2D. The fingerprint (length + endpoints)
+// catches in-place mutation from lasso/selection moves, which shift every point.
+const inkPathCache = new WeakMap();
+function strokeFingerprint(s) {
+  const pts = s.points, n = pts.length;
+  const a = pts[0], b = pts[n - 1];
+  return `${n}|${a.x},${a.y}|${b.x},${b.y}|${s.width}|${s.tool}|${s.penType || ''}`;
+}
+function strokeOutline(s) {
+  const fp = strokeFingerprint(s);
+  const hit = inkPathCache.get(s);
+  if (hit && hit.fp === fp) return hit;
+  const input = s.points.map((pt) => [pt.x, pt.y, pt.p ?? 0.5]);
+  const outline = getStroke(input, { ...strokeOpts(s), last: true });
+  const path = new Path2D();
+  if (outline.length >= 2) {
+    path.moveTo(outline[0][0], outline[0][1]);
+    for (let i = 1; i < outline.length; i++) path.lineTo(outline[i][0], outline[i][1]);
+    path.closePath();
+  }
+  const entry = { fp, path, n: outline.length };
+  inkPathCache.set(s, entry);
+  return entry;
+}
+
 function drawStroke(c, s, progress = 1) {
   // Defensive: a malformed/partial stroke (no points array) must never crash the
   // render loop — it would throw every frame and flood the global error banner.
   const ptsRaw = s?.points;
   if (!ptsRaw || !ptsRaw.length) return;
-  const pts = progress < 1 ? sliceStrokePoints(ptsRaw, progress) : ptsRaw;
   const hl = s.tool === 'highlighter';
-  const input = pts.map((pt) => [pt.x, pt.y, pt.p ?? 0.5]);
-  const outline = getStroke(input, { ...strokeOpts(s), last: true });
   c.fillStyle = s.color;
   c.globalAlpha = hl ? 0.3 : 1;
+  if (progress >= 1) {
+    const entry = strokeOutline(s);
+    if (entry.n < 2) {
+      const r = Math.max(strokeOpts(s).size / 2, 0.6);
+      c.beginPath();
+      c.arc(ptsRaw[0].x, ptsRaw[0].y, r, 0, Math.PI * 2);
+      c.fill();
+    } else c.fill(entry.path);
+    c.globalAlpha = 1;
+    return;
+  }
+  // partial reveal during scene playback — transient, so computed live
+  const pts = sliceStrokePoints(ptsRaw, progress);
+  const input = pts.map((pt) => [pt.x, pt.y, pt.p ?? 0.5]);
+  const outline = getStroke(input, { ...strokeOpts(s), last: true });
   if (outline.length < 2) {
     const r = Math.max(strokeOpts(s).size / 2, 0.6);
     c.beginPath();
@@ -637,10 +747,13 @@ function drawStroke(c, s, progress = 1) {
   c.globalAlpha = 1;
 }
 
-// Lightweight live ink while the Pencil is down — avoids perfect-freehand every frame.
+// Lightweight live ink while the Pencil is down — avoids perfect-freehand every
+// frame. inkPredicted holds Safari's predicted Pencil samples: drawn as a short
+// tail so the ink hugs the pen tip, but never committed to the stroke.
+let inkPredicted = [];
 function drawStrokePreview(c, s) {
   const pts = s?.points;
-  if (!pts || pts.length < 2) return;
+  if (!pts || !pts.length) return;
   const w = s.width || 4;
   c.save();
   c.strokeStyle = s.color;
@@ -648,9 +761,19 @@ function drawStrokePreview(c, s) {
   c.lineCap = 'round';
   c.lineJoin = 'round';
   c.globalAlpha = s.tool === 'highlighter' ? 0.3 : 1;
+  if (pts.length === 1 && !inkPredicted.length) {
+    // ink appears the instant the pen touches, before any movement
+    c.fillStyle = s.color;
+    c.beginPath();
+    c.arc(pts[0].x, pts[0].y, c.lineWidth / 2, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+    return;
+  }
   c.beginPath();
   c.moveTo(pts[0].x, pts[0].y);
   for (let i = 1; i < pts.length; i++) c.lineTo(pts[i].x, pts[i].y);
+  for (const q of inkPredicted) c.lineTo(q.x, q.y);
   c.stroke();
   c.restore();
 }
@@ -1581,12 +1704,50 @@ function drawPageContent(c, pg) {
   for (const s of pg.strokes) drawStroke(c, s);
 }
 
+// Bitmap of all committed page content, kept warm across strokes: while inking,
+// each frame just blits it and draws the live stroke; at pen-down and pen-up no
+// full-page redraw happens at all. Invalidated by mark() (any non-ink change)
+// or a camera/size mismatch. Canvas-to-canvas drawImage stays on the GPU, so
+// capturing is cheap.
+function inkSnapValid() {
+  return inkSnapContent && inkSnapState &&
+    inkSnapState.w === cv.width && inkSnapState.h === cv.height &&
+    inkSnapState.scale === S.scale && inkSnapState.ox === S.offsetX && inkSnapState.oy === S.offsetY;
+}
+function captureInkSnapshot() {
+  if (!inkSnapCanvas) inkSnapCanvas = document.createElement('canvas');
+  if (inkSnapCanvas.width !== cv.width || inkSnapCanvas.height !== cv.height) {
+    inkSnapCanvas.width = cv.width;
+    inkSnapCanvas.height = cv.height;
+  }
+  const c = inkSnapCanvas.getContext('2d');
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.clearRect(0, 0, inkSnapCanvas.width, inkSnapCanvas.height);
+  c.drawImage(cv, 0, 0);
+  inkSnapState = { w: cv.width, h: cv.height, scale: S.scale, ox: S.offsetX, oy: S.offsetY };
+  inkSnapContent = true;
+}
+// Stamp a just-committed stroke into the warm snapshot so the next pen-down
+// starts from a fast blit instead of a full-page redraw.
+function stampStrokeIntoSnapshot(stroke) {
+  if (!inkSnapValid()) return;
+  const c = inkSnapCanvas.getContext('2d');
+  c.setTransform(dpr * S.scale, 0, 0, dpr * S.scale, dpr * S.offsetX, dpr * S.offsetY);
+  c.save();
+  c.beginPath();
+  c.rect(0, 0, pgW(), pgH());
+  c.clip();
+  drawStroke(c, stroke);
+  c.restore();
+  c.setTransform(1, 0, 0, 1, 0, 0);
+}
+
 function render() {
   const now = performance.now();
   const pg = page();
   const hasScene = !!(pg?.scene?.steps?.length);
   if (hasScene && S.notebook && !$('#editor').classList.contains('hidden')) {
-    if (sceneTick(now)) S.dirty = true;
+    if (sceneTick(now)) mark();   // animating content — snapshot must not be reused
     S.demoT = sceneNormalized();
     syncDemoUI();
   } else if (S.playing && S.notebook && !$('#editor').classList.contains('hidden')) {
@@ -1595,9 +1756,29 @@ function render() {
     S.demoT += dt / Math.max(0.5, S.demoPeriod);
     if (S.demoT > 1) S.demoT -= 1;
     syncDemoUI();
-    S.dirty = true;
+    mark();
   }
   if (S.dirty && S.notebook && !$('#editor').classList.contains('hidden')) {
+    // Fast path: committed content is warm in the snapshot — blit it and draw
+    // only the live stroke (if any). This covers every frame of a pen stroke
+    // AND the pen-down/pen-up frames between letters, so writing never pays
+    // for a full-page redraw.
+    if (inkSnapValid() && !(S.drawing && S.drawing.eraser)) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(inkSnapCanvas, 0, 0);
+      if (S.drawing) {
+        ctx.setTransform(dpr * S.scale, 0, 0, dpr * S.scale, dpr * S.offsetX, dpr * S.offsetY);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, pgW(), pgH());
+        ctx.clip();
+        drawStrokePreview(ctx, S.drawing);
+        ctx.restore();
+      }
+      S.dirty = false;
+      requestAnimationFrame(render);
+      return;
+    }
     const sceneT = hasScene ? sceneTime() : 0;
     if (hasScene) S.demoT = sceneNormalized();
     const r = cv.getBoundingClientRect();
@@ -1636,9 +1817,14 @@ function render() {
       if (hasTargetTracks(page(), s.id) && prog <= 0) continue;
       drawStroke(ctx, s, prog);
     }
-    if (S.drawing && !S.drawing.eraser) drawStrokePreview(ctx, S.drawing);
-    // selection highlight
-    if (S.selection) {
+    const inking = !!(S.drawing && !S.drawing.eraser);
+    // Static content is now fully painted (live ink, chrome and laser come
+    // after) — snapshot it so following frames can blit. Also capture at rest
+    // so the NEXT pen-down starts warm; skip while erasing or mid-gesture.
+    if (inking || (!S.drawing && S.touch.size === 0)) captureInkSnapshot();
+    if (inking) drawStrokePreview(ctx, S.drawing);
+    // selection highlight (hidden while inking so blitted frames match)
+    if (S.selection && !inking) {
       ctx.globalAlpha = 0.18; ctx.fillStyle = '#2566c8';
       const b = S.selection.bbox;
       ctx.fillRect(b.x, b.y, b.w, b.h);
@@ -1649,7 +1835,8 @@ function render() {
       ctx.setLineDash([]);
     }
     // selected object or ink: dashed bbox + square drag handles
-    if (S.selObj && objs().includes(S.selObj)) drawSelBox(ctx, objBBox(S.selObj), objHandles(S.selObj));
+    if (inking) { /* no selection chrome while a stroke is in progress */ }
+    else if (S.selObj && objs().includes(S.selObj)) drawSelBox(ctx, objBBox(S.selObj), objHandles(S.selObj));
     else if (selectedMechItem()) {
       const m = selectedMechItem();
       drawSelBox(ctx, mechBBox(m), mechHandles(m));
@@ -1978,7 +2165,10 @@ function pressureOf(e) {
 }
 
 function coalescedPagePoints(e) {
-  const evs = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e];
+  // getCoalescedEvents can legitimately return an empty list (untrusted events,
+  // some browser states) — fall back to the event itself so no sample is lost
+  const co = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
+  const evs = co.length ? co : [e];
   return evs.map((ev) => ({ p: toPage(...cssArr(ev)), pr: pressureOf(ev) }));
 }
 
@@ -2007,10 +2197,17 @@ function abortGesture() {
     S.selStrokes = [];
     S.selection = null;
   }
+  if (S.eraseBefore) {
+    page().strokes = S.eraseBefore.strokes;
+    page().objects = S.eraseBefore.objects;
+    S.eraseBefore = null;
+  }
   S.creating = null; S.drawing = null; S.lassoPath = null;
   S.moving = null; S.objMove = null; S.objResize = null;
   S.mechMove = null; S.mechResize = null; S.instDrag = null;
   S.actionBefore = null;
+  inkPredicted = [];
+  if (typeof S.collabResume === 'function') S.collabResume();
   mark();
 }
 
@@ -2031,7 +2228,7 @@ function onDown(e) {
 
   // Apple Pencil eraser end — always erase, any selected tool
   if (e.pointerType === 'eraser') {
-    beginAction();
+    beginEraseAction();
     eraseAt(p);
     S.drawing = { eraser: true };
     return;
@@ -2139,23 +2336,33 @@ function onDown(e) {
     return;
   }
   if (S.tool === 'eraser') {
-    beginAction();
+    beginEraseAction();
     eraseAt(p);
     S.drawing = { eraser: true };  // flag active erase
     return;
   }
   // pen / highlighter
-  beginAction();
+  beginInkAction();
   const stroke = { id: uid(), tool: S.tool, color: S.color, width: S.width, points: [{ x: p.x, y: p.y, p: pressureOf(e) }] };
   if (S.tool === 'pen') stroke.penType = S.penType;
   S.drawing = stroke;
-  mark();
+  markInk();
 }
 
-// P0: RAF-based batching for smooth iPad Pencil drawing
-let rafPending = false;
-let pendingMoveEvent = null;
+// Safari's predicted Pencil samples for the live stroke tail. Read them
+// synchronously in the handler (stale events may return nothing) and cap the
+// tail so mispredictions can't visibly overshoot.
+function predictedPagePoints(e) {
+  if (typeof e.getPredictedEvents !== 'function') return [];
+  return e.getPredictedEvents().slice(0, 3).map((ev) => {
+    const pt = toPage(...cssArr(ev));
+    return ['pen', 'highlighter'].includes(S.drawing?.tool) ? snapToRuler(pt) : pt;
+  });
+}
 
+// Ink points are appended synchronously in the pointermove handler — deferring
+// to rAF both lost coalesced 240 Hz samples (events overwrote each other) and
+// added a frame of latency before render() picked the points up.
 function processDrawMove(e) {
   if (S.drawing && S.drawing.eraser) {
     for (const { p } of coalescedPagePoints(e)) eraseAt(p);
@@ -2163,7 +2370,8 @@ function processDrawMove(e) {
   }
   if (S.drawing) {
     appendInkPoints(S.drawing, coalescedPagePoints(e));
-    mark();
+    inkPredicted = predictedPagePoints(e);
+    markInk();
   }
 }
 
@@ -2171,6 +2379,14 @@ function onMove(e) {
   if (e.pointerType === 'touch') {
     if (S.touch.has(e.pointerId)) S.touch.set(e.pointerId, cssPt(e));
     if (S.touch.size > 1) { handleGesture(); return; }
+    // Present mode: one finger scrolls the page (GoodNotes-style) whenever the
+    // finger isn't mid-interaction — the Pencil stays the writing instrument
+    if (S.touch.size === 1 && !S.drawing && !S.moving && !S.objMove && !S.objResize &&
+        !S.mechMove && !S.mechResize && !S.instDrag && !S.creating && !S.lassoPath &&
+        $('#editor')?.classList.contains('present-mode')) {
+      handleGesture();
+      return;
+    }
     if (!S.fingerDraw && !touchToolCanInteract()) return;
   }
   if (S.objResize) { applyHandle(S.selObj, S.objResize, toPage(...cssArr(e))); mark(); return; }
@@ -2223,19 +2439,8 @@ function onMove(e) {
     mark();
     return;
   }
-  // P0: RAF batching for active drawing to reduce lag
   if (S.drawing) {
-    pendingMoveEvent = e;
-    if (!rafPending) {
-      rafPending = true;
-      requestAnimationFrame(() => {
-        if (pendingMoveEvent) {
-          processDrawMove(pendingMoveEvent);
-        }
-        rafPending = false;
-        pendingMoveEvent = null;
-      });
-    }
+    processDrawMove(e);
     return;
   }
 }
@@ -2265,15 +2470,40 @@ function onUp(e) {
     if (ok) { objs().push(o); recordObject(o); }
     S.creating = null; commitAction(); mark(); return;
   }
-  if (S.drawing && S.drawing.eraser) { S.drawing = null; commitAction(); return; }
-  if (S.drawing) {
-    if (S.drawing.points.length) {
-      page().strokes.push(S.drawing);
-      recordStroke(S.drawing);
-    }
+  if (S.drawing && S.drawing.eraser) {
     S.drawing = null;
-    commitAction();
-    mark();
+    const before = S.eraseBefore;
+    S.eraseBefore = null;
+    if (before && eraseDidChange) {
+      S.undo.push({ kind: 'arrays', strokes: before.strokes, objects: before.objects });
+      if (S.undo.length > UNDO_CAP) S.undo.shift();
+      S.redo = [];
+      thumbCache.delete(page().id);
+      persist();
+      collabNotifyEdit();
+    }
+    if (typeof S.collabResume === 'function') S.collabResume();
+    return;
+  }
+  if (S.drawing) {
+    const stroke = S.drawing;
+    S.drawing = null;
+    inkPredicted = [];
+    if (stroke.points.length) {
+      page().strokes.push(stroke);
+      recordStroke(stroke);
+      S.undo.push({ kind: 'stroke', id: stroke.id });
+      if (S.undo.length > UNDO_CAP) S.undo.shift();
+      S.redo = [];
+      thumbCache.delete(page().id);
+      // final perfect-freehand ink goes straight into the warm snapshot, so
+      // the repaint (and the next pen-down) is a blit, not a full redraw
+      stampStrokeIntoSnapshot(stroke);
+      persist();
+      collabNotifyEdit();
+    }
+    if (typeof S.collabResume === 'function') S.collabResume();
+    markInk();
   }
 }
 
@@ -2309,20 +2539,21 @@ function splitStrokeAtErase(s, r, p) {
 }
 function eraseAt(p) {
   const r = (S.width + 14);
-  const strokesBefore = page().strokes.length;
   const next = [];
+  let changed = false;
   for (const s of page().strokes) {
     if (!strokeEraseHit(s, p, r)) next.push(s);
-    else next.push(...splitStrokeAtErase(s, r, p));
+    else { changed = true; next.push(...splitStrokeAtErase(s, r, p)); }
   }
-  page().strokes = next;
+  if (changed) page().strokes = next;
   const objBefore = objs().length;
-  page().objects = objs().filter((o) => {
+  const nextObjs = objs().filter((o) => {
     if (!objHit(o, p, r)) return true;
     if (o.kind === 'image') purgeObjImage(o.id);
     return false;
   });
-  if (page().strokes.length !== strokesBefore || page().objects.length !== objBefore) mark();
+  if (nextObjs.length !== objBefore) { page().objects = nextObjs; changed = true; }
+  if (changed) { eraseDidChange = true; mark(); }
 }
 function pointInText(o, p) {
   const b = textBox(o);
@@ -3675,7 +3906,10 @@ function setPenType(t) {
 
 function bindEditor() {
   setupEqEditor();
-  document.querySelectorAll('[data-tool]').forEach((b) => b.onclick = () => setTool(b.dataset.tool));
+  // Laser is a toggle: tapping it while active returns to the pen, so the
+  // pointer can be dismissed without hunting for another tool mid-presentation.
+  document.querySelectorAll('[data-tool]').forEach((b) => b.onclick = () =>
+    setTool(b.dataset.tool === 'laser' && S.tool === 'laser' ? 'pen' : b.dataset.tool));
   document.querySelectorAll('.tab-btn').forEach((b) => b.onclick = () => setTab(b.dataset.tab));
   setTab('draw');
   buildSwatches();
@@ -3698,6 +3932,15 @@ function bindEditor() {
   $('#present-toggle').onclick = () => setPresentMode(!$('#editor').classList.contains('present-mode'));
   $('#present-prev')?.addEventListener('click', () => $('#prev')?.click());
   $('#present-next')?.addEventListener('click', () => $('#next')?.click());
+  $('#present-add-page')?.addEventListener('click', () => {
+    const paper = pageIsPdf(page()) ? 'plain' : (page().paper || 'graph');
+    addPagesAfterCurrent(newPage(paper, page().format));
+    resetPresentIdle();
+  });
+  // don't lose up to 8 s of debounced work when the app is backgrounded
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushPersist();
+  });
   $('#present-rail-toggle')?.addEventListener('click', () => {
     const rail = $('#tool-rail');
     if (!rail) return;
