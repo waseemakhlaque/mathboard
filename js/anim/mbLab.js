@@ -109,6 +109,22 @@ export class MbLab extends HTMLElement {
 
 export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
+/** Parse `params` attribute against a registry paramSchema object. */
+export function applyParamSchema(el, schema) {
+  let raw = {};
+  try { raw = JSON.parse(el.getAttribute('params') || '{}'); } catch (_) { /* bad JSON */ }
+  const out = {};
+  for (const [k, spec] of Object.entries(schema)) {
+    let v = raw[k] ?? spec.default;
+    if (spec.type === 'number') {
+      v = Number(v);
+      if (Number.isNaN(v)) v = spec.default;
+      out[k] = clamp(v, spec.min, spec.max);
+    } else out[k] = v;
+  }
+  return out;
+}
+
 /** Arrow with head, updated in place: pass a <g>, start, end, color, label. */
 export function drawArrow(g, x1, y1, x2, y2, color, label) {
   g.replaceChildren();

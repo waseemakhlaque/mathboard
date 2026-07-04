@@ -2,7 +2,7 @@
 // the rope constraint moves the other one oppositely; ± buttons change the masses.
 // ▶ Run releases the system: a = (m₂−m₁)g/(m₁+m₂), T = 2m₁m₂g/(m₁+m₂).
 
-import { MbLab, svgEl, clamp, G } from './mbLab.js';
+import { MbLab, svgEl, clamp, G, applyParamSchema } from './mbLab.js';
 
 const W = 640, H = 380;
 const PULLEY = { x: 320, y: 70, r: 34 };
@@ -16,7 +16,11 @@ export class MbPulleyLab extends MbLab {
   get hint() { return 'Drag either mass up or down — the rope moves the other. Use ±  to change masses, then ▶ Run to release.'; }
 
   reset() {
-    this.m1 = 3; this.m2 = 5;
+    const p = applyParamSchema(this, {
+      m1: { type: 'number', min: 1, max: 10, default: 3, unit: 'kg', label: 'Mass m₁' },
+      m2: { type: 'number', min: 1, max: 10, default: 5, unit: 'kg', label: 'Mass m₂' },
+    });
+    this.m1 = p.m1; this.m2 = p.m2;
     this.y1 = 200; this.y2 = 240;   // SVG y of each mass centre; y1 + y2 stays constant
     this.v = 0;                      // velocity of m2 downward (m/s)
   }

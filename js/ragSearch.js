@@ -3,7 +3,7 @@
 // corpus, deep-linking into Course Library shelves and animated tools.
 
 import { hasPro } from './entitlement.js';
-import { animForTopic, LABS } from './anim/ragRoutes.js';
+import { animForTopic, LABS, defaultParams, simByTag } from './anim/ragRoutes.js';
 
 const FREE_RAG_RESULTS = 3;
 const PRO_RAG_RESULTS = 10;
@@ -11,16 +11,90 @@ const COURSES = ['Pure Mathematics 3', 'Mechanics', 'Statistics', 'Pure Mathemat
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-function mountTool(tag, title, defaults) {
+function buildParamsEditor(el, sim) {
+  const panel = document.querySelector('#anim-params');
+  const schema = sim?.paramSchema || {};
+  if (!Object.keys(schema).length) {
+    panel.classList.add('hidden');
+    return;
+  }
+
+  panel.replaceChildren();
+  panel.classList.remove('hidden');
+  for (const [name, spec] of Object.entries(schema)) {
+    const group = document.createElement('div');
+    group.className = 'anim-param-group';
+    const label = document.createElement('label');
+    label.textContent = spec.label || name;
+    group.appendChild(label);
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = spec.min;
+    input.max = spec.max;
+    input.step = spec.step || ((spec.max - spec.min) <= 1 ? 0.01 : 1);
+    input.value = el.params?.[name] ?? spec.default ?? 0;
+    input.addEventListener('change', () => {
+      const v = Math.min(spec.max, Math.max(spec.min, Number(input.value) || spec.default));
+      input.value = v;
+      if (!el.params) el.params = {};
+      el.params[name] = v;
+      el.setAttribute('params', JSON.stringify(el.params));
+      if (typeof el.reset === 'function') el.reset();
+      if (typeof el.refresh === 'function') el.refresh();
+    });
+    group.appendChild(input);
+
+    const unit = spec.unit ? ` ${spec.unit}` : '';
+    const display = document.createElement('div');
+    display.className = 'anim-param-value';
+    display.textContent = `${input.value}${unit}`;
+    input.addEventListener('input', () => {
+      display.textContent = `${input.value}${unit}`;
+    });
+    group.appendChild(display);
+    panel.appendChild(group);
+  }
+}
+
+export function mountAnimTool(tag, title, defaults) {
   const dlg = document.querySelector('#anim-dialog');
   const host = document.querySelector('#anim-host');
+  const paramsPanel = document.querySelector('#anim-params');
+  const pinBtn = document.querySelector('#anim-pin');
+  const fullscreenBtn = document.querySelector('#anim-fullscreen');
+
   document.querySelector('#anim-title').textContent = title;
   host.replaceChildren();
+  paramsPanel.replaceChildren();
+
   const el = document.createElement(tag);
-  if (defaults) el.setAttribute('params', JSON.stringify(defaults));
+  if (defaults) {
+    el.params = defaults;
+    el.setAttribute('params', JSON.stringify(defaults));
+  }
   host.appendChild(el);
+
+  // Build params editor
+  const sim = simByTag(tag);
+  buildParamsEditor(el, sim);
+
+  // Setup dialog buttons
+  pinBtn?.classList.add('hidden'); // Phase 4 enables this
+  fullscreenBtn?.addEventListener('click', () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      dlg.requestFullscreen().catch(() => {});
+    }
+  });
+
   dlg.classList.remove('hidden');
   if (el instanceof HTMLElement && typeof el.play === 'function') el.play();
+}
+
+function mountTool(tag, title, defaults) {
+  mountAnimTool(tag, title, defaults);
 }
 
 export function openAnimDialog(topic) {
@@ -29,23 +103,38 @@ export function openAnimDialog(topic) {
   mountTool(route.tag, route.title, route.defaults);
 }
 
-/** Interactive physics-lab picker inside the anim dialog. */
+/** Interactive lab picker inside the anim dialog (grouped M1 / P1 / P3). */
 export function openLabPicker() {
   const dlg = document.querySelector('#anim-dialog');
   const host = document.querySelector('#anim-host');
-  document.querySelector('#anim-title').textContent = 'Physics Labs — drag to explore';
+  document.querySelector('#anim-title').textContent = 'Interactive Labs — drag to explore';
   host.replaceChildren();
-  const row = document.createElement('div');
-  row.className = 'mb-lab-picker';
-  for (const lab of LABS) {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'mb-lab-chip';
-    chip.textContent = `${lab.icon} ${lab.title}`;
-    chip.addEventListener('click', () => mountTool(lab.tag, lab.title));
-    row.appendChild(chip);
+  const wrap = document.createElement('div');
+  wrap.className = 'mb-lab-picker';
+  const GROUP_LABELS = { M1: 'Mechanics (M1)', P1: 'Pure 1 (P1)', P3: 'Pure 3 (P3)' };
+  for (const group of ['M1', 'P1', 'P3']) {
+    const labs = LABS.filter((lab) => lab.group === group);
+    if (!labs.length) continue;
+    const heading = document.createElement('div');
+    heading.className = 'mb-lab-picker-heading';
+    heading.textContent = GROUP_LABELS[group];
+    wrap.appendChild(heading);
+    const row = document.createElement('div');
+    row.className = 'mb-lab-picker-row';
+    for (const lab of labs) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'mb-lab-chip';
+      chip.textContent = `${lab.icon} ${lab.title}`;
+      chip.addEventListener('click', () => {
+        const params = Object.keys(lab.paramSchema || {}).length ? defaultParams(lab) : undefined;
+        mountTool(lab.tag, lab.title, params);
+      });
+      row.appendChild(chip);
+    }
+    wrap.appendChild(row);
   }
-  host.appendChild(row);
+  host.appendChild(wrap);
   dlg.classList.remove('hidden');
 }
 

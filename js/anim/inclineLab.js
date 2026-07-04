@@ -3,7 +3,7 @@
 // Drag the apex handle to steepen the incline; when tan θ > μ the block slides
 // with a = g(sinθ − μ cosθ). Force arrows and work/energy readouts update live.
 
-import { MbLab, svgEl, drawArrow, clamp, G } from './mbLab.js';
+import { MbLab, svgEl, drawArrow, clamp, G, applyParamSchema } from './mbLab.js';
 
 const W = 640, H = 380;
 const BASE_X = 60, BASE_Y = 300, BASE_LEN = 460; // incline base line
@@ -16,15 +16,18 @@ export class MbInclineLab extends MbLab {
   get hint() { return 'Drag the red apex handle (angle), the μ knob (friction), or the block itself. ▶ Run releases the block.'; }
 
   reset() {
-    this.theta = (this.theta0 ?? 25) * Math.PI / 180;
-    this.mu = this.mu0 ?? 0.3;
+    const p = applyParamSchema(this, {
+      theta: { type: 'number', min: 5, max: 60, default: 25, unit: '°', label: 'Angle θ' },
+      mu: { type: 'number', min: 0, max: 1, default: 0.3, unit: '', label: 'Coefficient μ' },
+    });
+    this.theta = p.theta * Math.PI / 180;
+    this.mu = p.mu;
     this.s = 2.5;   // distance up the slope from the base corner (m)
     this.v = 0;
     this.s0 = this.s;
   }
 
   buildScene() {
-    this.theta0 = 25; this.mu0 = 0.3;
     this.reset();
     const s = this.svg;
     this.gIncline = svgEl('g');

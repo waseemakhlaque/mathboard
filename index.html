@@ -44,7 +44,7 @@
 <link rel="apple-touch-icon" href="./assets/icon-512.png" sizes="512x512" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=104" />
+<link rel="stylesheet" href="./css/app.css?v=105" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -108,7 +108,7 @@
     <span id="sync-status" class="sync-status" title="Offline · saved on this device">● Local</span>
     · <button type="button" id="sync-settings-foot" class="sync-foot-link">Cloud sync</button>
     · Paginated notebook whiteboard · works offline · add to Home Screen on iPad
-    · <span id="mb-version" class="mb-version">v104</span>
+    · <span id="mb-version" class="mb-version">v105</span>
     · © 2026 Waseem Akhlaque
   </p>
 </section>
@@ -1104,9 +1104,15 @@
 <div id="anim-dialog" class="sync-dialog anim-dialog hidden" role="dialog" aria-labelledby="anim-title" aria-modal="true">
   <div class="gp-head">
     <span class="calc-title" id="anim-title"></span>
+    <div style="flex:1"></div>
+    <button type="button" id="anim-fullscreen" class="icon-btn ghost" title="Fullscreen (⛶)">⛶</button>
+    <button type="button" id="anim-pin" class="icon-btn ghost hidden" title="Pin to page (📌)">📌</button>
     <button type="button" class="calc-x" id="anim-close" title="Close" aria-label="Close animation">×</button>
   </div>
-  <div id="anim-host"></div>
+  <div class="anim-main">
+    <div id="anim-host"></div>
+    <div id="anim-params" class="anim-params hidden"></div>
+  </div>
 </div>
 
 <!-- Upgrade / paywall -->

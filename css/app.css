@@ -2600,8 +2600,19 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 .rag-card-actions button { font-size: 12px; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); cursor: pointer; }
 .rag-card-actions .rag-anim { background: var(--accent-light); }
 .rag-locked-row { grid-column: 1 / -1; padding: 8px 12px; border: 1px dashed var(--border); border-radius: var(--radius-md); background: var(--accent-light); color: var(--text); font-size: 13px; cursor: pointer; }
-.anim-dialog { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(720px, 94vw); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-lg, 0 12px 40px rgba(0,0,0,.35)); z-index: 300; }
-.anim-dialog #anim-host { padding: 8px 12px 14px; }
+.anim-dialog { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(900px, 94vw); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-lg, 0 12px 40px rgba(0,0,0,.35)); z-index: 300; display: flex; flex-direction: column; max-height: 90vh; }
+.anim-dialog:fullscreen { top: 0; left: 0; transform: none; width: 100vw; max-height: 100vh; border-radius: 0; }
+.anim-dialog .gp-head { display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.anim-main { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.anim-dialog #anim-host { flex: 1; padding: 12px; overflow: auto; }
+.anim-params { width: 240px; padding: 12px; border-left: 1px solid var(--border); overflow-y: auto; background: var(--surface-2); }
+.anim-params:not(.hidden) { display: block; }
+.anim-param-group { margin-bottom: 16px; }
+.anim-param-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text-2); margin-bottom: 4px; }
+.anim-param-group input[type="number"] { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); font-size: 12px; }
+.anim-param-group input[type="range"] { width: 100%; margin: 4px 0; }
+.anim-param-value { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+#anim-pin { margin-left: auto; }
 mb-suvat-anim, mb-vector-lines-anim { display: block; }
 .mb-anim-svg { width: 100%; height: auto; }
 .mb-anim-controls { display: flex; gap: 10px; align-items: center; margin-top: 6px; }

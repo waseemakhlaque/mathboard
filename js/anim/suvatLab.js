@@ -2,7 +2,7 @@
 // velocity, drag the orange slope handle on the v–t graph to set acceleration.
 // ▶ Run animates the particle and traces v = u + at with shaded displacement.
 
-import { MbLab, svgEl, drawArrow, clamp, G } from './mbLab.js';
+import { MbLab, svgEl, drawArrow, clamp, G, applyParamSchema } from './mbLab.js';
 
 const W = 640, H = 380;
 const TRACK = { x: 90, top: 40, bot: 320 };
@@ -15,7 +15,11 @@ export class MbSuvatLab extends MbLab {
   get hint() { return 'Drag the green arrow (u) and the orange handle (a), then ▶ Run. Try u = 20, a = −9.8 for vertical throw.'; }
 
   reset() {
-    this.u = 20; this.a = -G;
+    const p = applyParamSchema(this, {
+      u: { type: 'number', min: -30, max: 30, default: 20, unit: 'm/s', label: 'Initial velocity u' },
+      a: { type: 'number', min: -20, max: 20, default: -G, unit: 'm/s²', label: 'Acceleration a' },
+    });
+    this.u = p.u; this.a = p.a;
     this.tau = 0;
   }
 
