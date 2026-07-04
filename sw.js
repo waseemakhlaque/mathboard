@@ -1,7 +1,7 @@
 // sw.js — offline support.
 // Same-origin app files: network-first (always get the latest, fall back to cache offline).
 // Cross-origin CDN (jsPDF): cache-first (immutable, fine to pin).
-const CACHE = 'mathboard-v101';
+const CACHE = 'mathboard-v104';
 // NOTE: js/collab/* is intentionally NOT precached — collaboration is loaded only via dynamic
 // import() when collabAvailable() is true, so the offline solo app never fetches it.
 const ASSETS = [
@@ -24,6 +24,7 @@ const ASSETS = [
   './js/librarySearch.js',
   './js/courseLibrary.js',
   './js/ragSearch.js',
+  './js/snipSim.js',
   './js/anim/mbAnim.js',
   './js/anim/suvatAnim.js',
   './js/anim/vectorLinesAnim.js',
@@ -31,6 +32,11 @@ const ASSETS = [
   './js/anim/inclineLab.js',
   './js/anim/pulleyLab.js',
   './js/anim/suvatLab.js',
+  './js/anim/forcesParticleLab.js',
+  './js/anim/projectileLab.js',
+  './js/anim/quadraticLab.js',
+  './js/anim/tangentLab.js',
+  './js/anim/simRegistry.js',
   './js/anim/ragRoutes.js',
   './content/catalog.json',
   './js/pageLayout.js',
@@ -43,6 +49,7 @@ const ASSETS = [
   './js/theme.js',
   './js/entitlement.js',
   './js/onboarding.js',
+  './js/installBanner.js',
   './js/storage.js',
   './js/studio/studioManager.js',
   './js/studio/mathObjectFactory.js',
@@ -50,6 +57,8 @@ const ASSETS = [
   './manifest.json',
   './assets/icon.svg',
   './assets/logo.svg',
+  './assets/icon-192.png',
+  './assets/icon-512.png',
   './assets/waseem.jpg',
   './vendor/jspdf.umd.min.js',
   './vendor/jsxgraphcore.js',

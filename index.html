@@ -5,7 +5,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="MathBoard" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#1f2733" />
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
@@ -39,10 +40,11 @@
   })();
 </script>
 <link rel="icon" href="./assets/logo.svg" type="image/svg+xml" />
-<link rel="apple-touch-icon" href="./assets/logo.svg" />
+<link rel="apple-touch-icon" href="./assets/icon-192.png" sizes="192x192" />
+<link rel="apple-touch-icon" href="./assets/icon-512.png" sizes="512x512" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=101" />
+<link rel="stylesheet" href="./css/app.css?v=104" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -91,6 +93,13 @@
     </div>
   </header>
   <input id="lib-search" class="lib-search" type="search" placeholder="Search lessons and text…" autocomplete="off" />
+  <div id="install-banner" class="install-banner hidden" role="region" aria-label="Install MathBoard">
+    <p id="install-banner-msg" class="install-banner-msg">Add MathBoard to your Home Screen for full-screen offline use.</p>
+    <div class="install-banner-actions">
+      <button type="button" id="install-accept" class="primary hidden">Install</button>
+      <button type="button" id="install-dismiss" class="ghost">Not now</button>
+    </div>
+  </div>
   <input id="pdf-file-lib" class="file-offscreen" type="file" accept="application/pdf,.pdf" />
   <input id="json-file-lib" class="file-offscreen" type="file" accept=".json,.mathboard.json,application/json" />
   <div id="rag-search" class="rag-search hidden"></div>
@@ -99,7 +108,7 @@
     <span id="sync-status" class="sync-status" title="Offline · saved on this device">● Local</span>
     · <button type="button" id="sync-settings-foot" class="sync-foot-link">Cloud sync</button>
     · Paginated notebook whiteboard · works offline · add to Home Screen on iPad
-    · <span id="mb-version" class="mb-version">v101</span>
+    · <span id="mb-version" class="mb-version">v104</span>
     · © 2026 Waseem Akhlaque
   </p>
 </section>
@@ -268,7 +277,12 @@
           <span id="page-label" class="page-label">1 / 1</span>
           <button id="next" title="Next page">›</button>
         </div>
-        <label class="ctl-label" for="paper">Grid</label>
+        <label class="ctl-label">Layout</label>
+        <div class="paper-toggle" role="group" aria-label="Page layout">
+          <button type="button" id="paper-lined" class="paper-toggle-btn" title="Ruled lines">Lines</button>
+          <button type="button" id="paper-graph" class="paper-toggle-btn" title="Graph grid">Grid</button>
+        </div>
+        <label class="ctl-label" for="paper">More grids</label>
         <select id="paper" title="Grid / paper for this page">
           <option value="plain">None (blank)</option>
           <option value="graph">Graph</option>
@@ -290,6 +304,7 @@
       <div class="group present-hide" data-tabs="page">
         <button id="insert-pdf">Insert PDF</button>
         <button id="insert-img">Insert image</button>
+        <button type="button" id="snip-sim" class="hidden" title="Snip diagram → interactive sim">⚡ Sim</button>
         <button id="export-png">PNG</button>
         <button id="delete-selection" class="geo-warn hidden" title="Delete selected ink or objects">Delete selection</button>
         <button id="clear-page" class="geo-warn" title="Clear everything on this page (undoable)">Clear page</button>
@@ -1160,5 +1175,5 @@
 </div>
 
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=101"></script>
+<script type="module" src="./js/app.js?v=104"></script>
 </html>

@@ -21,6 +21,7 @@ import {
   startCheckout, initEntitlement, FREE_COURSE_PREVIEW,
 } from './entitlement.js';
 import { initOnboarding } from './onboarding.js';
+import { setupInstallBanner } from './installBanner.js';
 import {
   setupGeo, setGeoTool, syncGeoLayer, loadGeoPage, teardownGeo, clearGeoPage,
   restoreGeoItems, drawGeoSvgToCanvas, geoToolActive, flushGeo, cancelGeoDraft,
@@ -58,6 +59,7 @@ import {
   setupScene, tick as sceneTick, sceneTime, sceneNormalized, onPageChange as scenePageChange,
   objAlpha, objPopScale, objDrawProgress, strokeReveal, hasTargetTracks,
   recordStroke, recordObject, ensureScene, reset as sceneReset, nextStep as sceneNextStep,
+  prevStep as scenePrevStep, getClock,
 } from './scene.js';
 import {
   loadTaxonomy, renderCourseLibrary, isCatalogued, notebookCatalog,
@@ -76,6 +78,36 @@ const pgH = () => pageH(page());
 const gridCx = () => pgW() / 2;
 const gridCy = () => pgH() / 2;
 const PAPERS = ['plain', 'squared', 'graph', 'dotted', 'lined', 'cornell', 'argand', 'vectorgrid', 'axes'];
+const DEFAULT_PAPER_KEY = 'mb-default-paper';
+
+function getDefaultPaper() {
+  try {
+    const v = localStorage.getItem(DEFAULT_PAPER_KEY);
+    return PAPERS.includes(v) ? v : 'graph';
+  } catch { return 'graph'; }
+}
+function setDefaultPaper(v) {
+  if (!PAPERS.includes(v)) return;
+  try { localStorage.setItem(DEFAULT_PAPER_KEY, v); } catch (_) { /* quota */ }
+}
+function setPaperLayout(paper) {
+  if (!page() || pageIsPdf(page()) || !PAPERS.includes(paper)) return;
+  page().paper = paper;
+  setDefaultPaper(paper);
+  const sel = $('#paper'); if (sel) sel.value = paper;
+  syncPaperToggleUI(paper);
+  thumbCache.delete(page().id);
+  persist();
+  mark();
+}
+function syncPaperToggleUI(paper = page()?.paper) {
+  const lined = $('#paper-lined');
+  const graph = $('#paper-graph');
+  if (!lined || !graph) return;
+  const p = paper || getDefaultPaper();
+  lined.classList.toggle('active', p === 'lined');
+  graph.classList.toggle('active', p === 'graph');
+}
 const COLORS = ['#1b1b1b', '#2566c8', '#d23b3b', '#1f9d57', '#e0892a', '#8a4fd0'];
 const PEN_WIDTHS = { fine: 4, marker: 10, calligraphy: 6 };
 const UNDO_CAP = 60;
@@ -157,7 +189,7 @@ function toPage(cssX, cssY) {
   return { x: (cssX - S.offsetX) / S.scale, y: (cssY - S.offsetY) / S.scale };
 }
 
-function newPage(paper = 'graph', format) {
+function newPage(paper = getDefaultPaper(), format) {
   // Inherit the current page's format only when a notebook is actually open;
   // page() throws when S.notebook is null (e.g. creating the very first lesson).
   const inheritFormat = S.notebook?.sections?.length ? page()?.format : null;
@@ -3751,6 +3783,24 @@ function updatePresentTitle() {
   if (el && S.notebook) el.textContent = S.notebook.title;
 }
 
+function presentNavNext() {
+  const steps = page()?.scene?.steps;
+  if (steps?.length) {
+    const { stepIndex } = getClock();
+    if (stepIndex < steps.length - 1) { sceneNextStep(); return; }
+  }
+  goToPage(S.pageIndex + 1, { align: 'top' });
+}
+
+function presentNavPrev() {
+  const steps = page()?.scene?.steps;
+  if (steps?.length) {
+    const { stepIndex } = getClock();
+    if (stepIndex > 0) { scenePrevStep(); return; }
+  }
+  goToPage(S.pageIndex - 1, { align: 'bottom' });
+}
+
 function updatePresentHud() {
   const pgEl = $('#present-page-label');
   const secEl = $('#present-section-label');
@@ -3840,7 +3890,8 @@ function updatePageLabel() {
   }
   $('#page-label').textContent = `${S.pageIndex + 1} / ${pages().length}`;
   updatePresentHud();
-  const sel = $('#paper'); if (sel) sel.value = pg.paper;
+  const sel = $('#paper'); if (sel) sel.value = pg.paper || getDefaultPaper();
+  syncPaperToggleUI(pg.paper);
   const fmt = $('#page-format'); if (fmt) fmt.value = pg.format === 'wide' ? 'wide' : 'a4';
   const rb = $('#resultant'); if (rb) rb.classList.toggle('brand-toggle-active', !!pg.showResultant);
   const pb = $('#parallelogram'); if (pb) pb.classList.toggle('brand-toggle-active', !!pg.showParallelogram);
@@ -3991,8 +4042,8 @@ function bindEditor() {
   $('#redo').onclick = doRedo;
   $('#fit').onclick = fitPage;
   $('#present-toggle').onclick = () => setPresentMode(!$('#editor').classList.contains('present-mode'));
-  $('#present-prev')?.addEventListener('click', () => $('#prev')?.click());
-  $('#present-next')?.addEventListener('click', () => $('#next')?.click());
+  $('#present-prev')?.addEventListener('click', () => presentNavPrev());
+  $('#present-next')?.addEventListener('click', () => presentNavNext());
   $('#present-add-page')?.addEventListener('click', () => {
     const paper = pageIsPdf(page()) ? 'plain' : (page().paper || 'graph');
     addPagesAfterCurrent(newPage(paper, page().format));
@@ -4019,7 +4070,9 @@ function bindEditor() {
   };
   $('#addpage').onclick = () => addPagesAfterCurrent(newPage($('#paper').value));
   $('#section-add')?.addEventListener('click', addSection);
-  $('#paper').onchange = (e) => { page().paper = e.target.value; thumbCache.delete(page().id); persist(); mark(); };
+  $('#paper').onchange = (e) => setPaperLayout(e.target.value);
+  $('#paper-lined')?.addEventListener('click', () => setPaperLayout('lined'));
+  $('#paper-graph')?.addEventListener('click', () => setPaperLayout('graph'));
   $('#page-format')?.addEventListener('change', (e) => {
     page().format = e.target.value === 'wide' ? 'wide' : 'a4';
     thumbCache.delete(page().id);
@@ -4090,17 +4143,18 @@ function bindEditor() {
     else if (e.key === 'Escape' && geoToolActive()) { cancelGeoDraft(); mark(); }
     else if (e.key === 'Escape' && $('#editor')?.classList.contains('present-mode')) { e.preventDefault(); setPresentMode(false); }
     else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setPresentMode(!$('#editor').classList.contains('present-mode')); }
-    else if ($('#editor')?.classList.contains('present-mode') && (e.key === 'ArrowLeft' || e.key === 'PageUp')) { e.preventDefault(); $('#prev')?.click(); }
+    else if ($('#editor')?.classList.contains('present-mode') && (e.key === 'ArrowLeft' || e.key === 'PageUp')) {
+      e.preventDefault();
+      presentNavPrev();
+    }
     else if ($('#editor')?.classList.contains('present-mode') && (e.key === 'PageDown' || e.key === ' ')) {
       // presenter clickers send PageUp/PageDown; space = next, like slide apps
       e.preventDefault();
-      if (page()?.scene?.steps?.length) $('#scene-next')?.click();
-      else $('#next')?.click();
+      presentNavNext();
     }
     else if ($('#editor')?.classList.contains('present-mode') && e.key === 'ArrowRight') {
       e.preventDefault();
-      if (page()?.scene?.steps?.length) $('#scene-next')?.click();
-      else $('#next')?.click();
+      presentNavNext();
     }
     else if ((e.key === 'Delete' || e.key === 'Backspace') && hasDeletableSelection()) { e.preventDefault(); deleteSelection(); }
   });
@@ -5078,6 +5132,8 @@ function setupProductUI() {
   }
 
   initOnboarding();
+  setupInstallBanner();
+  syncPaperToggleUI(getDefaultPaper());
 }
 
 function setupPanelMenu() {

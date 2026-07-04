@@ -777,6 +777,52 @@ button.ghost:hover {
 .tool-rail .ctl-label { flex: 1 1 100%; }
 .tool-rail select { flex: 1 1 100%; }
 
+.paper-toggle {
+  display: flex;
+  flex: 1 1 100%;
+  gap: 4px;
+}
+.paper-toggle-btn {
+  flex: 1;
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.paper-toggle-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.install-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 16px 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--accent-border, rgba(59, 130, 246, 0.35));
+  background: var(--accent-soft, rgba(59, 130, 246, 0.1));
+  font-size: 14px;
+  line-height: 1.45;
+}
+.install-banner.hidden { display: none; }
+.install-banner-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+.install-banner-actions button {
+  white-space: nowrap;
+}
+
 .rail-pagenav {
   display: flex;
   align-items: center;
@@ -1221,6 +1267,10 @@ button.ghost:hover {
   display: inline-flex;
 }
 
+#editor.present-mode .present-hud {
+  display: block;
+}
+
 #editor.present-mode .canvas-wrap {
   background: radial-gradient(ellipse at 50% 40%, #1e293b 0%, #0b1120 55%, #020617 100%);
 }
@@ -1360,11 +1410,17 @@ button.ghost:hover {
   transition: opacity 0.3s ease-in;
 }
 #editor.present-mode:not(.present-idle-active) .toolbar,
-#editor.present-mode:not(.present-idle-active) .present-hud,
 #editor.present-mode:not(.present-idle-active) .present-rail-toggle {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.4s ease-out 0.1s;
+}
+#editor.present-mode:not(.present-idle-active) .present-hud {
+  opacity: 0.45;
+  transition: opacity 0.4s ease-out 0.1s;
+}
+#editor.present-mode:not(.present-idle-active) .present-hud-inner {
+  pointer-events: auto;
 }
 #editor.present-mode:not(.present-idle-active) .brand {
   opacity: 0.5;
@@ -2552,17 +2608,29 @@ mb-suvat-anim, mb-vector-lines-anim { display: block; }
 .mb-anim-controls button { width: 36px; height: 30px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); cursor: pointer; }
 .mb-anim-controls input[type="range"] { flex: 1; }
 .mb-anim-caption { min-height: 20px; margin-top: 8px; font-size: 13px; color: var(--text-2); }
-mb-incline-lab, mb-pulley-lab, mb-suvat-lab { display: block; }
+mb-incline-lab, mb-pulley-lab, mb-suvat-lab, mb-forces-particle-lab, mb-projectile-lab, mb-quadratic-lab, mb-tangent-lab { display: block; }
 .mb-lab-readout { margin-top: 8px; padding: 6px 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; color: var(--text); background: var(--surface-2); border-radius: var(--radius-sm); min-height: 20px; }
 .mb-drag-handle { cursor: grab; touch-action: none; }
 .mb-drag-handle.is-dragging { cursor: grabbing; }
 .mb-lab-picker { display: flex; flex-direction: column; gap: 10px; padding: 12px 4px; }
+.mb-lab-picker-heading { font-size: 11px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 6px; }
+.mb-lab-picker-row { display: flex; flex-direction: column; gap: 8px; }
 .mb-lab-chip { padding: 12px 16px; font-size: 14px; text-align: left; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); color: var(--text); cursor: pointer; }
 .mb-lab-chip:hover { background: var(--accent-light); }
 .mb-lab-massrow { display: flex; gap: 6px; align-items: center; justify-content: center; margin-top: 6px; }
 .mb-lab-massrow button { width: 28px; height: 26px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); cursor: pointer; }
 .mb-lab-masslbl { font-size: 13px; color: var(--text-2); min-width: 84px; text-align: center; }
 .rag-labs-btn { padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); color: var(--text); font-size: 13px; cursor: pointer; }
+
+/* ---------- Snip-to-Sim overlay + picker ---------- */
+.snip-overlay { position: absolute; inset: 0; z-index: 40; cursor: crosshair; touch-action: none; background: rgba(15, 23, 42, 0.08); }
+.snip-rect { position: absolute; border: 2px dashed var(--accent, #4a7dff); background: var(--accent-light, rgba(74,125,255,.12)); box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.25); pointer-events: none; }
+.snip-rect.hidden { display: none; }
+.sim-picker { display: flex; flex-direction: column; gap: 12px; padding: 8px 4px 4px; max-height: min(72vh, 640px); overflow-y: auto; }
+.sim-picker-hint { margin: 0; font-size: 13px; }
+.sim-thumb { display: block; max-width: 100%; max-height: 180px; width: auto; margin: 0 auto; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff; object-fit: contain; }
+.sim-picker-grid { display: flex; flex-direction: column; gap: 8px; }
+.sim-chip-suggested { border-color: var(--accent, #4a7dff); background: var(--accent-light); }
 
 /* ---------- Mechanics Panel ---------- */
 .panel-mech {
