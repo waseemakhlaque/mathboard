@@ -493,7 +493,9 @@ const THUMB_W = 56, THUMB_H = 79;
 function makePageThumbUrl(pg) {
   let url = thumbCache.get(pg.id);
   if (url) return url;
-  const { w: TW, h: TH } = thumbDims(pg);
+  // 280px wide: library covers render at ~270 CSS px on 2x screens — the
+  // default 56px base made them blurry on iPad
+  const { w: TW, h: TH } = thumbDims(pg, 280);
   const oc = document.createElement('canvas');
   oc.width = TW; oc.height = TH;
   const c = oc.getContext('2d');

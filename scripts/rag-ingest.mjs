@@ -18,7 +18,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 
 const DEFAULT_CORPUS = "/Users/waseemakhlaque/Documents/BSS/AS & A level Mathematics/Past Papers' Folder";
-const DEFAULT_API = 'https://mathboard.waseemakhlaque85.workers.dev';
+const DEFAULT_API = 'https://mathboard.waseemonline.workers.dev';
 const PROGRESS_FILE = path.join(__dirname, '.rag-ingest-progress.json');
 
 const FILE_RE = /^9709_([smw])(\d{2})_(qp|ms)_([1345])(\d)?\.pdf$/;

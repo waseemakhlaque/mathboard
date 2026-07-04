@@ -318,6 +318,10 @@ button.ghost:hover {
   overflow-y: auto;
   flex: 1;
   align-content: start;
+  /* iPad Safari computes stretched grid-row heights too short when the card
+     contains an aspect-ratio thumb — the body (with Delete/Rename) fell past
+     the card's overflow:hidden edge. Size each card to its own content. */
+  align-items: start;
 }
 
 .nb-card {
@@ -328,6 +332,8 @@ button.ghost:hover {
   transition: all var(--duration-normal) var(--ease);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
 }
 
 .nb-card:hover {
@@ -338,6 +344,7 @@ button.ghost:hover {
 
 .nb-thumb {
   aspect-ratio: 1 / 1.414;
+  flex: none;
   background: var(--surface-3);
   border-bottom: 1px solid var(--border-light);
   display: flex;
@@ -373,6 +380,7 @@ button.ghost:hover {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex: none;
 }
 
 .nb-title {
