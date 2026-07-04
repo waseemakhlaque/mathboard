@@ -66,6 +66,7 @@ import {
   taxonomyCourses, taxonomyTopics, taxonomyExercises, expandCoursePath,
 } from './courseLibrary.js';
 import { setupRagSearch, openLabPicker } from './ragSearch.js';
+import { setupAnnotatedSim, onAnnotSimPageChange } from './annotatedSim.js';
 import { pageW, pageH, thumbDims, A4_W, A4_H } from './pageLayout.js';
 import { getAllNotebooks, getNotebook, storageReady } from './storage.js';
 import getStroke from '../vendor/perfect-freehand.mjs';
@@ -137,6 +138,7 @@ const S = {
   polar: false,             // complex numbers shown in polar (r∠θ) vs Cartesian (a+bi)
   sketchy: false,           // hand-drawn shapes via rough.js
   editingId: null,          // id of text object currently being edited (hidden on canvas)
+  annotSimLocked: false,    // true while docked sim is active — canvas ink read-only
   actionBefore: null,       // page snapshot taken at action start (for undo)
   undo: [], redo: [],
   lassoPath: null,          // points (page units) of in-progress lasso
@@ -2310,6 +2312,8 @@ function onDown(e) {
     setGestureRef();
     if (S.touch.size >= 2) { abortGesture(); return; }  // 2+ fingers = pan/zoom only; cancel any tool action
   }
+  // Annotate-to-Animate: ink read-only while docked sim is live (two-finger pan still OK above)
+  if (S.annotSimLocked) { mark(); return; }
   if (!isDrawPointer(e) && !(e.pointerType === 'touch' && touchToolCanInteract())) { mark(); return; }
   const p = toPage(...cssArr(e));
 
@@ -3607,6 +3611,7 @@ function goToPage(i, opts = {}) {
     S.offsetY = opts.align === 'bottom' ? b.minY : b.maxY;
   } else fitPage();
   if (typeof S.collabPageChange === 'function') S.collabPageChange();
+  onAnnotSimPageChange();
   scenePageChange();
   updatePageLabel();
   mark();
@@ -3685,6 +3690,7 @@ function goToSection(i) {
   clearSelection();
   setGeoTool(null); setInstTool(null);
   loadGeoPage(page());
+  onAnnotSimPageChange();
   updatePageLabel();
   renderSectionStrip();
   mark();
@@ -5584,6 +5590,21 @@ function init() {
   setupRationalsPanel();
   makeDraggable($('#rationals'), $('#rationals-head'));
   setupText();
+  setupAnnotatedSim({
+    getPage: () => page(),
+    getObjs: () => objs(),
+    getNotebook: () => S.notebook,
+    getSectionText: () => sections()[S.sectionIndex]?.title || '',
+    getNotebookTitle: () => S.notebook?.title || '',
+    strokeBBox,
+    textBox,
+    mark,
+    persist,
+    beginAction,
+    commitAction,
+    uid,
+    onLockedChange: (locked) => { S.annotSimLocked = locked; },
+  });
   setupPanelMenu();
   setupRail();
   setupDemo();

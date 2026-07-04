@@ -1,0 +1,160 @@
+/* annotatedSim.css — docked sim panel for Annotate-to-Animate */
+
+.editor-main.annot-sim-open .stage {
+  min-width: 0;
+}
+
+.annotated-sim-panel {
+  --annot-sim-w: 340px;
+  flex: none;
+  width: var(--annot-sim-w);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  z-index: 50;
+  min-height: 0;
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.06);
+}
+
+.annotated-sim-panel.hidden { display: none; }
+
+.annotated-sim-panel.is-fullscreen {
+  width: 100vw;
+  height: 100vh;
+  border: none;
+  z-index: 400;
+}
+
+.annot-sim-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  min-height: 44px;
+}
+
+.annot-sim-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.annot-sim-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.annot-sim-actions button {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.annot-sim-actions button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-light);
+}
+
+.annot-sim-resize {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: ew-resize;
+  z-index: 2;
+  touch-action: none;
+}
+
+.annotated-sim-panel { position: relative; }
+
+.annot-sim-host {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 10px;
+  min-height: 200px;
+}
+
+.annot-sim-host mb-incline-lab,
+.annot-sim-host mb-pulley-lab,
+.annot-sim-host mb-suvat-lab,
+.annot-sim-host mb-forces-particle-lab,
+.annot-sim-host mb-projectile-lab,
+.annot-sim-host mb-quadratic-lab,
+.annot-sim-host mb-tangent-lab,
+.annot-sim-host mb-connected-lab,
+.annot-sim-host mb-momentum-lab,
+.annot-sim-host mb-energy-lab,
+.annot-sim-host mb-motion-graph-lab {
+  display: block;
+}
+
+.annot-sim-readout {
+  flex-shrink: 0;
+  margin: 0 10px 10px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  min-height: 36px;
+}
+
+.annotated-sim-readout-sync {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-light);
+}
+
+.annot-sim-picker { padding: 8px 4px; }
+
+.annotated-sim-panel.sim-active ~ .stage #board {
+  cursor: default;
+}
+
+/* Narrow / iPad: panel below canvas */
+@media (max-width: 900px) {
+  .editor-main.annot-sim-open {
+    flex-direction: column;
+  }
+
+  .annotated-sim-panel {
+    width: 100%;
+    height: min(42vh, 420px);
+    border-left: none;
+    border-top: 1px solid var(--border);
+    order: 3;
+  }
+
+  .annotated-sim-panel.expanded {
+    height: min(58vh, 560px);
+  }
+
+  .annot-sim-resize {
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: auto;
+    width: 100%;
+    height: 10px;
+    cursor: ns-resize;
+  }
+}

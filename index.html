@@ -44,7 +44,8 @@
 <link rel="apple-touch-icon" href="./assets/icon-512.png" sizes="512x512" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=105" />
+<link rel="stylesheet" href="./css/app.css?v=106" />
+<link rel="stylesheet" href="./css/annotatedSim.css?v=106" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -108,7 +109,7 @@
     <span id="sync-status" class="sync-status" title="Offline · saved on this device">● Local</span>
     · <button type="button" id="sync-settings-foot" class="sync-foot-link">Cloud sync</button>
     · Paginated notebook whiteboard · works offline · add to Home Screen on iPad
-    · <span id="mb-version" class="mb-version">v105</span>
+    · <span id="mb-version" class="mb-version">v106</span>
     · © 2026 Waseem Akhlaque
   </p>
 </section>
@@ -305,6 +306,7 @@
         <button id="insert-pdf">Insert PDF</button>
         <button id="insert-img">Insert image</button>
         <button type="button" id="snip-sim" class="hidden" title="Snip diagram → interactive sim">⚡ Sim</button>
+        <button type="button" id="annotate-sim" title="Launch sim synced with page annotations">⚙️ Sim</button>
         <button id="export-png">PNG</button>
         <button id="delete-selection" class="geo-warn hidden" title="Delete selected ink or objects">Delete selection</button>
         <button id="clear-page" class="geo-warn" title="Clear everything on this page (undoable)">Clear page</button>
@@ -365,6 +367,20 @@
         <div id="page-thumbs" class="page-thumbs"></div>
         <button type="button" id="strip-add" class="strip-add" title="Add page after current">+</button>
       </div>
+    </div>
+
+    <div id="annotated-sim-panel" class="annotated-sim-panel hidden" aria-label="Interactive simulator">
+      <div class="annot-sim-resize" aria-hidden="true"></div>
+      <div class="annot-sim-head">
+        <span class="annot-sim-title">Simulator</span>
+        <div class="annot-sim-actions">
+          <button type="button" id="annot-sim-expand" title="Expand panel">⤢</button>
+          <button type="button" id="annot-sim-fullscreen" title="Fullscreen">⛶</button>
+          <button type="button" id="annot-sim-close" title="Close simulator">×</button>
+        </div>
+      </div>
+      <div id="annotated-sim-host" class="annot-sim-host"></div>
+      <div id="annot-sim-readout" class="annot-sim-readout annotated-sim-readout-sync"></div>
     </div>
   </div>
 
@@ -1181,5 +1197,5 @@
 </div>
 
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=104"></script>
+<script type="module" src="./js/app.js?v=106"></script>
 </html>
