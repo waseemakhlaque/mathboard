@@ -9,6 +9,10 @@ import './forcesParticleLab.js';
 import './projectileLab.js';
 import './quadraticLab.js';
 import './tangentLab.js';
+import './motionGraphLab.js';
+import './connectedLab.js';
+import './momentumLab.js';
+import './energyLab.js';
 import './vectorLinesAnim.js';
 
 /** @typedef {{ type:'number', min:number, max:number, default:number, unit:string, label:string }} ParamSpec */
@@ -32,7 +36,7 @@ export const SIM_REGISTRY = /** @type {SimEntry[]} */ ([
     title: 'Multi-stage v–t graph',
     icon: '📈',
     group: 'M1',
-    built: false,
+    built: true,
     topics: ['Kinematics'],
     paramSchema: {},
   },
@@ -84,7 +88,7 @@ export const SIM_REGISTRY = /** @type {SimEntry[]} */ ([
     title: 'Connected particles — tow bar / lift',
     icon: '🔗',
     group: 'M1',
-    built: false,
+    built: true,
     topics: ["Newton's laws"],
     paramSchema: {},
   },
@@ -93,7 +97,7 @@ export const SIM_REGISTRY = /** @type {SimEntry[]} */ ([
     title: 'Collisions & momentum',
     icon: '💥',
     group: 'M1',
-    built: false,
+    built: true,
     topics: ['Momentum'],
     paramSchema: {},
   },
@@ -102,7 +106,7 @@ export const SIM_REGISTRY = /** @type {SimEntry[]} */ ([
     title: 'Work, KE, PE & power',
     icon: '⚡',
     group: 'M1',
-    built: false,
+    built: true,
     topics: ['Work, energy & power'],
     paramSchema: {},
   },
