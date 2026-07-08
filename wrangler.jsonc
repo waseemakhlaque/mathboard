@@ -11,4 +11,24 @@
   "compatibility_flags": [
     "nodejs_compat"
   ]
+  // Cloudflare Workers — MathBoard PWA: static assets + /api/rag/* Worker.
+  // Static routes never invoke the Worker (run_worker_first limits it to /api/*).
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mathboard",
+  "compatibility_date": "2026-06-27",
+  "main": "worker/index.js",
+  "assets": {
+    // Serve the whole repo root. `.assetsignore` keeps internal source
+    // (docs, supabase/, collab-server/, worker/, .git, node_modules) out of
+    // the upload, and `_headers` applies the cache-control rules.
+    "directory": ".",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "run_worker_first": ["/api/*"]
+  },
+  "ai": { "binding": "AI", "remote": true },
+  "vectorize": [{ "binding": "VECTORIZE", "index_name": "mathboard-rag", "remote": true }],
+  "observability": {
+    "enabled": true
+  }
 }

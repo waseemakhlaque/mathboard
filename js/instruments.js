@@ -1,12 +1,16 @@
-// instruments.js — ruler, protractor, compass (canvas overlays, page units)
+// instruments.js — draggable ruler / protractor / compass (OpenBoard-style)
 
 let hooks = {};
 let instTool = null;
 let pend = [];
+let selInst = null;
+let instMove = null;
 
 export function setupInstruments(h) { hooks = h; }
 
 export function instToolActive() { return !!instTool; }
+export function selectedInstrument() { return selInst; }
+export function clearInstSelection() { selInst = null; instMove = null; }
 
 export function setInstTool(tool) {
   pend = [];
@@ -18,6 +22,7 @@ export function setInstTool(tool) {
     hooks.setGeoTool?.(null);
     hooks.setMechPlacing?.(null);
     hooks.setCplxPlacing?.(null);
+    clearInstSelection();
   }
 }
 
@@ -27,6 +32,88 @@ function snap(p) { return hooks.snapPt ? hooks.snapPt(p) : p; }
 function unit() { return hooks.unit || 50; }
 
 function ensure(pg) { if (!pg.instruments) pg.instruments = []; }
+
+/** Snap ink to nearest point on a ruler edge (within tol page units). */
+export function snapToRuler(p, tol = 12) {
+  const pg = page();
+  if (!pg?.instruments?.length) return p;
+  let best = null, bestD = tol * tol;
+  for (const it of pg.instruments) {
+    if (it.kind !== 'ruler') continue;
+    const q = projSeg(p, it.a, it.b);
+    const d = dist2(p, q);
+    if (d < bestD) { bestD = d; best = q; }
+  }
+  return best || p;
+}
+
+function dist2(a, b) { const dx = a.x - b.x, dy = a.y - b.y; return dx * dx + dy * dy; }
+function projSeg(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1e-6) return { ...a };
+  let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return { x: a.x + t * dx, y: a.y + t * dy };
+}
+
+function instBBox(it) {
+  if (it.kind === 'ruler') {
+    const x0 = Math.min(it.a.x, it.b.x) - 20, y0 = Math.min(it.a.y, it.b.y) - 20;
+    return { x: x0, y: y0, w: Math.abs(it.b.x - it.a.x) + 40, h: Math.abs(it.b.y - it.a.y) + 40 };
+  }
+  if (it.kind === 'protractor') {
+    return { x: it.vertex.x - 50, y: it.vertex.y - 50, w: 100, h: 100 };
+  }
+  if (it.kind === 'compass') {
+    return { x: it.center.x - it.r - 10, y: it.center.y - it.r - 10, w: 2 * it.r + 20, h: 2 * it.r + 20 };
+  }
+  return { x: 0, y: 0, w: 0, h: 0 };
+}
+
+export function hitInstrument(p, tol) {
+  const pg = page();
+  if (!pg?.instruments?.length) return null;
+  const t = tol || 14;
+  for (let i = pg.instruments.length - 1; i >= 0; i--) {
+    const it = pg.instruments[i];
+    const b = instBBox(it);
+    if (p.x >= b.x - t && p.x <= b.x + b.w + t && p.y >= b.y - t && p.y <= b.y + b.h + t) return it;
+  }
+  return null;
+}
+
+export function beginInstMove(p) {
+  const hit = hitInstrument(p);
+  if (!hit) { selInst = null; return false; }
+  selInst = hit;
+  instMove = { lastX: p.x, lastY: p.y };
+  hooks.beginAction?.();
+  return true;
+}
+
+export function moveInst(p) {
+  if (!selInst || !instMove) return false;
+  const dx = p.x - instMove.lastX, dy = p.y - instMove.lastY;
+  if (selInst.kind === 'ruler') {
+    selInst.a.x += dx; selInst.a.y += dy;
+    selInst.b.x += dx; selInst.b.y += dy;
+  } else if (selInst.kind === 'protractor') {
+    selInst.vertex.x += dx; selInst.vertex.y += dy;
+    selInst.arm1.x += dx; selInst.arm1.y += dy;
+    selInst.arm2.x += dx; selInst.arm2.y += dy;
+  } else if (selInst.kind === 'compass') {
+    selInst.center.x += dx; selInst.center.y += dy;
+  }
+  instMove.lastX = p.x; instMove.lastY = p.y;
+  hooks.mark?.();
+  return true;
+}
+
+export function endInstMove() {
+  if (selInst && instMove) hooks.commitAction?.();
+  instMove = null;
+}
 
 export function handleInstClick(p) {
   if (!instTool) return false;
@@ -79,9 +166,9 @@ function angleDeg(a, v, b) {
 
 export function drawInstruments(c, pg) {
   for (const it of pg.instruments || []) {
-    if (it.kind === 'ruler') drawRuler(c, it);
-    else if (it.kind === 'protractor') drawProtractor(c, it);
-    else if (it.kind === 'compass') drawCompass(c, it);
+    if (it.kind === 'ruler') drawRuler(c, it, it === selInst);
+    else if (it.kind === 'protractor') drawProtractor(c, it, it === selInst);
+    else if (it.kind === 'compass') drawCompass(c, it, it === selInst);
   }
   if (instTool && pend.length) drawPreview(c);
 }
@@ -101,10 +188,10 @@ function drawPreview(c) {
   c.setLineDash([]); c.restore();
 }
 
-function drawRuler(c, it) {
+function drawRuler(c, it, sel) {
   const len = Math.hypot(it.b.x - it.a.x, it.b.y - it.a.y);
   const units = len / unit();
-  c.strokeStyle = it.color || '#2566c8'; c.lineWidth = 3; c.lineCap = 'round';
+  c.strokeStyle = sel ? '#d23b3b' : (it.color || '#2566c8'); c.lineWidth = sel ? 4 : 3; c.lineCap = 'round';
   c.beginPath(); c.moveTo(it.a.x, it.a.y); c.lineTo(it.b.x, it.b.y); c.stroke();
   for (let t = 0; t <= 1; t += 0.1) {
     const x = it.a.x + (it.b.x - it.a.x) * t, y = it.a.y + (it.b.y - it.a.y) * t;
@@ -116,10 +203,10 @@ function drawRuler(c, it) {
   c.fillText(`${units.toFixed(2)} u`, mx + 6, my - 8);
 }
 
-function drawProtractor(c, it) {
+function drawProtractor(c, it, sel) {
   const { vertex: v, arm1: a1, arm2: a2, deg } = it;
   const r = 36;
-  c.strokeStyle = it.color || '#e0892a'; c.lineWidth = 2.5;
+  c.strokeStyle = sel ? '#d23b3b' : (it.color || '#e0892a'); c.lineWidth = sel ? 3.5 : 2.5;
   c.beginPath(); c.moveTo(v.x, v.y); c.lineTo(a1.x, a1.y); c.stroke();
   c.beginPath(); c.moveTo(v.x, v.y); c.lineTo(a2.x, a2.y); c.stroke();
   const start = Math.atan2(a1.y - v.y, a1.x - v.x);
@@ -129,8 +216,8 @@ function drawProtractor(c, it) {
   c.fillText(`${deg}°`, v.x + r + 6, v.y - 4);
 }
 
-function drawCompass(c, it) {
-  c.strokeStyle = it.color || '#1f9d57'; c.lineWidth = 2.5;
+function drawCompass(c, it, sel) {
+  c.strokeStyle = sel ? '#d23b3b' : (it.color || '#1f9d57'); c.lineWidth = sel ? 3.5 : 2.5;
   c.beginPath(); c.arc(it.center.x, it.center.y, it.r, 0, Math.PI * 2); c.stroke();
   c.beginPath(); c.moveTo(it.center.x, it.center.y);
   c.lineTo(it.center.x + it.r, it.center.y); c.stroke();

@@ -1,0 +1,28 @@
+# Keep non-runtime files out of a `wrangler deploy` upload.
+# Only the static app (index.html, js/, css/, vendor/, assets/, sw.js,
+# manifest.json, config.js, _headers) needs to ship to users.
+.git
+.github
+.claude
+.cursor
+.wrangler
+node_modules
+collab-server
+worker
+.claude-state
+supabase
+scripts
+docs
+*.md
+.DS_Store
+.env
+.env.example
+# Vendor dev / test noise — not needed at runtime
+vendor/lib0/.github
+vendor/lib0/coverage
+vendor/lib0/.vscode
+vendor/lib0/**/*.test.*
+vendor/lib0/**/*.map
+vendor/yjs/tests
+vendor/yjs/**/*.map
+vendor/**/.github

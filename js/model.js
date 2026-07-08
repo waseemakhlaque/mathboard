@@ -11,14 +11,35 @@ export function normalizePage(p) {
   if (!p || typeof p !== 'object') return { id: genId(), paper: 'graph', strokes: [], objects: [] };
   if (!p.id) p.id = genId();
   if (!p.paper) p.paper = 'graph';
+  if (p.format !== 'wide') p.format = 'a4';
   if (!Array.isArray(p.strokes)) p.strokes = [];
   if (!Array.isArray(p.objects)) p.objects = [];
   if (!Array.isArray(p.functions)) p.functions = [];
   if (!Array.isArray(p.geoItems)) p.geoItems = [];
+  if (!Array.isArray(p.geoConstructs)) p.geoConstructs = [];
   if (!Array.isArray(p.mechItems)) p.mechItems = [];
   if (!Array.isArray(p.cplxLoci)) p.cplxLoci = [];
+  if (!Array.isArray(p.calcItems)) p.calcItems = [];
   if (!Array.isArray(p.instruments)) p.instruments = [];
   if (typeof p.geoLabelN !== 'number') p.geoLabelN = 0;
+  // Legacy incline diagrams lived in mechItems — promote to selectable page objects.
+  if (Array.isArray(p.mechItems)) {
+    for (const m of p.mechItems) {
+      if (m.kind !== 'incline') continue;
+      p.objects.push({
+        id: m.id || genId(),
+        kind: 'incline',
+        at: m.at || { x: 200, y: 400 },
+        base: m.len || m.base || 280,
+        angleDeg: m.angleDeg ?? 30,
+        mass: m.mass ?? 2,
+        mu: m.mu ?? 0,
+        showComponents: m.showComponents !== false,
+        anim: false,
+      });
+    }
+    p.mechItems = p.mechItems.filter((m) => m.kind !== 'incline');
+  }
   return p;
 }
 
@@ -58,7 +79,8 @@ export function allPages(nb) {
 /** Infer lesson vs past-paper notebook kind. */
 export function notebookKind(nb) {
   if (nb.kind === 'paper' || nb.kind === 'lesson') return nb.kind;
-  return allPages(nb).some((p) => p.background?.type === 'image') ? 'paper' : 'lesson';
+  return allPages(nb).some((p) => p.background?.type === 'image' || p.background?.type === 'pdf-page' || p.background?.blobId)
+    ? 'paper' : 'lesson';
 }
 
 /** Normalize full notebook for storage, export, or sync. */

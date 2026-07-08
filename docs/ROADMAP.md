@@ -151,74 +151,74 @@ mathboard/
 
 ## 5. Phased roadmap
 
-### Phase 1 — Pen + paginated notebook whiteboard  ← **v1, your priority**
+### Phase 1 — Pen + paginated notebook whiteboard  ← **v1, your priority** ✅
 *Goal: the best GoodNotes-style notebook you've used, with rock-solid pencil.*
-- [ ] Project scaffold, layered canvases, render loop
-- [ ] Pointer-event input with **palm rejection** (ignore `pointerType:"touch"` while a pencil is
+- [x] Project scaffold, layered canvases, render loop
+- [x] Pointer-event input with **palm rejection** (ignore `pointerType:"touch"` while a pencil is
       active; prefer `pointerType:"pen"`)
-- [ ] **Pen** with perfect-freehand (pressure → width), **highlighter** (alpha), **eraser**
+- [x] **Pen** with pressure → width, **highlighter** (alpha), **eraser**
       (stroke-hit removal), **lasso** select/move
-- [ ] **Paginated notebook model**: fixed A4 pages with **paper templates** (plain / squared /
+- [x] **Paginated notebook model**: fixed A4 pages with **paper templates** (plain / squared /
       graph / Cornell / Argand / vector grid); add page, flip/scroll pages, page thumbnails
-- [ ] Pinch-zoom *into* a page; two-finger pan; pencil always draws (never pans)
-- [ ] Colour palette + width picker; **undo / redo**
-- [ ] **Notebook library** view (create/rename/open lessons); save to IndexedDB
-- [ ] **PWA install** + offline; export notebook → multi-page **PDF** / page → PNG
-- [ ] Test on iPad over local network (`vite`/`python -m http.server` + your Mac's LAN IP)
+- [x] Pinch-zoom *into* a page; two-finger pan; pencil always draws (never pans)
+- [x] Colour palette + width picker; **undo / redo**
+- [x] **Notebook library** view (create/rename/open lessons); save to IndexedDB
+- [x] **PWA install** + offline; export notebook → multi-page **PDF** / page → PNG
+- [x] Test on iPad over local network (`python -m http.server` + your Mac's LAN IP)
 
 **Definition of done:** you can pick up the iPad, create a "Vectors — Lesson 3" notebook, write
 across graph-paper pages with the Pencil palm-down, switch colours, lasso-move, undo, add pages,
 and export the lesson as a PDF — with no lag and no accidental panning.
 
-### Phase 2 — PDF / image import
-- [ ] Drag-drop or file-pick a PDF/screenshot of an exam question → becomes a page background
-- [ ] PDF.js renders page; multi-page import; fit-to-width
-- [ ] Annotate freely over it; export annotated pages → PDF/PNG
+### Phase 2 — PDF / image import ✅
+- [x] Drag-drop or file-pick a PDF/screenshot of an exam question → becomes a page background
+- [x] PDF.js renders page; multi-page import; fit-to-width
+- [x] Annotate freely over it; export annotated pages → PDF/PNG
 - [ ] Paste image from clipboard (⌘V) — fast for "copied questions"
 
-### Phase 3 — Vectors module
-- [ ] **Vector tool**: drag to draw arrow; live |v| and direction
-- [ ] Tip-to-tail **addition** + **resultant**; **scalar multiply** by drag
-- [ ] **Components** (i/j or column vector) display + toggle
-- [ ] **Dot / cross** product readout between two selected vectors
-- [ ] Snap-to-grid + snap-to-integer toggle; angle readout
+### Phase 3 — Vectors module ✅
+- [x] **Vector tool**: drag to draw arrow; live |v| and direction
+- [x] Tip-to-tail **addition** + **resultant**; **scalar multiply** by drag
+- [x] **Components** (i/j or column vector) display + toggle
+- [x] **Dot / cross** product readout between two selected vectors
+- [x] Snap-to-grid + snap-to-integer toggle; angle readout
 
-### Phase 4 — Complex / Argand module
-- [ ] **Plot z** = a+bi; modulus line, **arg** arc with degrees/radians toggle
-- [ ] **Conjugate**, **negation**, **multiply by w** (show rotation + scaling visually)
-- [ ] **Loci**: |z−a|=r circles, |z−a|=|z−b| perpendicular bisector, arg(z−a)=θ half-lines
-- [ ] Polar ↔ Cartesian toggle; KaTeX labels
+### Phase 4 — Complex / Argand module ✅
+- [x] **Plot z** = a+bi; modulus line, **arg** arc with degrees/radians toggle
+- [x] **Conjugate**, **negation**, **multiply by w** (show rotation + scaling visually)
+- [x] **Loci**: |z−a|=r circles, |z−a|=|z−b| perpendicular bisector, arg(z−a)=θ half-lines
+- [x] Polar ↔ Cartesian toggle; KaTeX labels
 
-### Phase 5 — Geometry module
-- [ ] Points / lines / segments / circles / polygons; drag to edit
-- [ ] Measure **angle** and **length**; parallel/perpendicular helpers
-- [ ] Constructions (midpoint, bisector, intersection); transformations (translate/rotate/
-      reflect/enlarge)
+### Phase 5 — Geometry module ✅ (transformations still stretch)
+- [x] Points / lines / segments / circles / polygons; drag to edit
+- [x] Measure **angle** and **length**; parallel/perpendicular helpers
+- [x] Constructions (midpoint, bisector, intersection); transformations (translate/rotate/
+      reflect/enlarge) — midpoint/bisectors done; full shape transforms still to add
 
-### Phase 6 — Trigonometry module
-- [ ] Interactive **unit circle** (angle → sin/cos/tan readout)
-- [ ] Graph **sin/cos/tan** with amplitude/period/phase sliders
+### Phase 6 — Trigonometry module ✅
+- [x] Interactive **unit circle** (angle → sin/cos/tan readout)
+- [x] Graph **sin/cos/tan** with amplitude/period/phase sliders
 - [ ] **Triangle solver** (SSS/SAS/ASA, sine & cosine rule)
 
-### Phase 7 — Statistics module
-- [ ] Data **table** entry; **histogram / box plot / scatter**
-- [ ] **Regression** line + r; mean/median/sd readouts
-- [ ] **Normal distribution** curve with shaded probability
+### Phase 7 — Statistics module ✅
+- [x] Data **table** entry; **histogram / box plot / scatter**
+- [x] **Regression** line + r; mean/median/sd readouts
+- [x] **Normal distribution** curve with shaded probability
 
-### Phase 8 — Mechanics module
-- [ ] **Force diagrams** + resultant / equilibrium
-- [ ] **Projectile** motion (launch angle/speed → trajectory)
-- [ ] **Inclined plane**, friction; **kinematics** graphs (s-t, v-t, a-t)
+### Phase 8 — Mechanics module ✅ (editability stretch)
+- [x] **Force diagrams** + resultant / equilibrium
+- [x] **Projectile** motion (launch angle/speed → trajectory)
+- [x] **Inclined plane**, friction; **kinematics** graphs (s-t, v-t, a-t)
 
-### Phase 9 — fx-991-equivalent calculator
-- [ ] Dockable scientific calculator with **natural display** (MathLive) + fx-991-style keypad
-- [ ] Modes: standard, **complex (CMPLX)**, **matrix/vector**, **equation solver**, numeric
+### Phase 9 — fx-991-equivalent calculator ✅
+- [x] Dockable scientific calculator with **natural display** (MathLive) + fx-991-style keypad
+- [x] Modes: standard, **complex (CMPLX)**, **matrix/vector**, **equation solver**, numeric
       **∫ and d/dx**, **statistics/regression**, **base-N**, DMS, deg/rad/grad
-- [ ] History tape; insert result onto the current page
+- [x] History tape; insert result onto the current page
 
-### Phase 10 — Polish & sharing
-- [ ] Lesson notebook templates; quick screen-record helper notes for YouTube
-- [ ] Optional **stroke-replay / animate** mode for explainer videos (open question §8)
+### Phase 10 — Polish & sharing 🟡
+- [x] Lesson notebook templates; quick screen-record helper notes for YouTube
+- [x] Stroke-replay / animate mode for YouTube explainers (live demo bar)
 - [ ] Optional cloud sync (Supabase/Firebase) for boards across devices
 
 ---
@@ -261,7 +261,7 @@ or iPad screen-record for YouTube.
 
 ## 9. Immediate next action
 
-Build **Phase 1**: scaffold `mathboard/` and get pen + **paginated notebook** whiteboard + PWA
-working on the iPad (notebook library, paper templates, lasso, undo, PDF export). Every later
-module — vectors → complex → geometry → trig → stats → mechanics → calculator — plugs onto this
-foundation, one at a time.
+Phases 1–9 of the original notebook roadmap are **complete**. Continue with
+[`ROADMAP-V2.md`](./ROADMAP-V2.md) for the next priorities: large-media handling, draggable
+instruments, live AR studio, and the online teaching portal (cloud sync → realtime → live A/V).
+Deploy the static site via GitHub Pages (`.github/workflows/pages.yml`) or Vercel.

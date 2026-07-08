@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "note": "Course taxonomy for the Course Library. Topics/exercises are the empty shelves; actual animated examples are notebooks tagged with nb.catalog = { course, topic, exercise }. Edit freely — unknown courses/topics from tagged notebooks still appear.",
+  "courses": [
+    {
+      "name": "Pure Mathematics 3",
+      "code": "P3",
+      "topics": [
+        { "name": "Algebra", "exercises": ["Modulus & inequalities", "Polynomial division", "Partial fractions", "Binomial expansion"] },
+        { "name": "Logarithmic & exponential functions", "exercises": ["Laws of logarithms", "Solving equations", "Reducing to linear form"] },
+        { "name": "Trigonometry", "exercises": ["Compound & double angles", "R cos/sin form", "Identities & equations"] },
+        { "name": "Differentiation", "exercises": ["Product & quotient rule", "Chain rule", "Implicit differentiation", "Parametric differentiation"] },
+        { "name": "Integration", "exercises": ["Standard integrals", "By substitution", "By parts", "Partial fractions", "Trapezium rule"] },
+        { "name": "Numerical solution of equations", "exercises": ["Locating roots", "Iterative formulae"] },
+        { "name": "Vectors", "exercises": ["Lines in 3D", "Scalar product & angles", "Intersection of lines", "Planes"] },
+        { "name": "Differential equations", "exercises": ["Forming equations", "Separating variables"] },
+        { "name": "Complex numbers", "exercises": ["Arithmetic & conjugates", "Argand diagram", "Modulus-argument form", "Loci"] }
+      ]
+    },
+    {
+      "name": "Mechanics",
+      "code": "M",
+      "topics": [
+        { "name": "Forces & equilibrium", "exercises": ["Resolving forces", "Equilibrium of a particle", "Friction"] },
+        { "name": "Kinematics", "exercises": ["Constant acceleration (suvat)", "Velocity-time graphs", "Variable acceleration (calculus)"] },
+        { "name": "Newton's laws", "exercises": ["F = ma on a particle", "Connected particles", "Pulleys"] },
+        { "name": "Motion on a slope", "exercises": ["Smooth inclines", "Rough inclines with friction"] },
+        { "name": "Momentum", "exercises": ["Impulse", "Collisions"] },
+        { "name": "Work, energy & power", "exercises": ["Work done", "Kinetic & potential energy", "Power"] },
+        { "name": "Projectiles", "exercises": ["Horizontal projection", "Projection at an angle"] }
+      ]
+    },
+    {
+      "name": "Statistics",
+      "code": "S",
+      "topics": [
+        { "name": "Representation of data", "exercises": ["Histograms", "Cumulative frequency", "Box-and-whisker plots"] },
+        { "name": "Measures of location & spread", "exercises": ["Mean, median, mode", "Variance & standard deviation", "Coding"] },
+        { "name": "Permutations & combinations", "exercises": ["Arrangements", "Selections"] },
+        { "name": "Probability", "exercises": ["Addition & multiplication rules", "Conditional probability", "Tree diagrams"] },
+        { "name": "Discrete random variables", "exercises": ["Probability distributions", "Expectation & variance"] },
+        { "name": "The binomial & geometric distributions", "exercises": ["Binomial distribution", "Geometric distribution"] },
+        { "name": "The normal distribution", "exercises": ["Standardising", "Finding probabilities", "Normal approximation to binomial"] }
+      ]
+    },
+    {
+      "name": "O Level — Transformation",
+      "code": "OT",
+      "topics": [
+        { "name": "Translation", "exercises": ["Translation by a vector", "Describing translations"] },
+        { "name": "Reflection", "exercises": ["Reflection in axes", "Reflection in y = x and y = -x", "Describing reflections"] },
+        { "name": "Rotation", "exercises": ["Rotation about the origin", "Rotation about a point", "Describing rotations"] },
+        { "name": "Enlargement", "exercises": ["Positive scale factor", "Fractional & negative scale factor", "Finding centre & scale factor"] },
+        { "name": "Combined transformations", "exercises": ["Successive transformations", "Single equivalent transformation"] },
+        { "name": "Matrices & transformations", "exercises": ["Transformation matrices", "Finding the matrix"] }
+      ]
+    }
+  ]
+}

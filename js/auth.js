@@ -1,0 +1,125 @@
+// auth.js — Supabase email/password sign-in for cloud sync (no supabase-js bundle)
+
+const TOKEN_KEY = 'mb-access-token';
+const REFRESH_KEY = 'mb-refresh-token';
+const USER_KEY = 'mb-auth-user';
+
+function cfg() {
+  return window.MB_CONFIG || {};
+}
+
+export function getSupabaseUrl() {
+  return (cfg().supabaseUrl || '').trim().replace(/\/$/, '');
+}
+
+export function getSupabaseAnonKey() {
+  return (cfg().supabaseAnonKey || '').trim();
+}
+
+export function defaultSyncApiUrl() {
+  const custom = (cfg().syncApiUrl || '').trim().replace(/\/$/, '');
+  if (custom) return custom;
+  const base = getSupabaseUrl();
+  return base ? `${base}/functions/v1/mathboard` : '';
+}
+
+export function getAccessToken() {
+  try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; }
+}
+
+export function getAuthUser() {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+export function isSignedIn() {
+  return !!getAccessToken();
+}
+
+export function clearSession() {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
+    localStorage.removeItem(USER_KEY);
+  } catch { /* ok */ }
+}
+
+function saveSession(payload) {
+  if (payload.access_token) localStorage.setItem(TOKEN_KEY, payload.access_token);
+  if (payload.refresh_token) localStorage.setItem(REFRESH_KEY, payload.refresh_token);
+  if (payload.user) localStorage.setItem(USER_KEY, JSON.stringify(payload.user));
+}
+
+function tokenExpiresAt(token) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload.exp ? payload.exp * 1000 : 0;
+  } catch { return 0; }
+}
+
+/** Refresh JWT if near expiry; returns false when session is gone. */
+export async function ensureValidToken() {
+  const token = getAccessToken();
+  if (!token) return false;
+  const exp = tokenExpiresAt(token);
+  if (exp && Date.now() < exp - 60_000) return true;
+  return refreshAccessToken();
+}
+
+export async function refreshAccessToken() {
+  let refresh = '';
+  try { refresh = localStorage.getItem(REFRESH_KEY) || ''; } catch { /* ok */ }
+  if (!refresh) { clearSession(); return false; }
+  const url = getSupabaseUrl();
+  const key = getSupabaseAnonKey();
+  if (!url || !key) return false;
+  const res = await fetch(`${url}/auth/v1/token?grant_type=refresh_token`, {
+    method: 'POST',
+    headers: { apikey: key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: refresh }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { clearSession(); return false; }
+  saveSession(data);
+  return true;
+}
+
+/** Headers for Supabase REST / Edge Function calls. */
+export function authHeaders(extra = {}) {
+  const h = { ...extra };
+  const key = getSupabaseAnonKey();
+  const token = getAccessToken();
+  if (key) h.apikey = key;
+  if (token) h.Authorization = `Bearer ${token}`;
+  return h;
+}
+
+export async function signInWithPassword(email, password) {
+  const url = getSupabaseUrl();
+  const key = getSupabaseAnonKey();
+  if (!url || !key) throw new Error('Set supabaseUrl and supabaseAnonKey in config.js first.');
+  const res = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: { apikey: key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error_description || data.msg || data.message || 'Sign-in failed.');
+  saveSession(data);
+  return data;
+}
+
+export async function signOut() {
+  const url = getSupabaseUrl();
+  const key = getSupabaseAnonKey();
+  const token = getAccessToken();
+  if (url && key && token) {
+    await fetch(`${url}/auth/v1/logout`, {
+      method: 'POST',
+      headers: { apikey: key, Authorization: `Bearer ${token}` },
+    }).catch(() => {});
+  }
+  clearSession();
+}
