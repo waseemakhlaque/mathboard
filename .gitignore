@@ -2,6 +2,13 @@
 *.log
 Thumbs.db
 .claude/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
 config.local.js
 content/sources/
 collab-server/node_modules/
