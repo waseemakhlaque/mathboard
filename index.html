@@ -44,8 +44,8 @@
 <link rel="apple-touch-icon" href="./assets/icon-512.png" sizes="512x512" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=106" />
-<link rel="stylesheet" href="./css/annotatedSim.css?v=106" />
+<link rel="stylesheet" href="./css/app.css?v=107" />
+<link rel="stylesheet" href="./css/annotatedSim.css?v=107" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -467,6 +467,11 @@
       <div id="calc-history" class="calc-history"></div>
       <math-field id="calc-expr" class="calc-expr" virtual-keyboard-mode="manual"></math-field>
       <div id="calc-result" class="calc-result">0</div>
+    </div>
+
+    <div class="calc-kbd-bar">
+      <button type="button" id="calc-kbd-toggle" class="calc-kbd-btn">⌨ Keyboard</button>
+      <button type="button" id="calc-done" class="calc-kbd-btn primary">Done (=)</button>
     </div>
 
     <div class="calc-ctl">
@@ -1197,5 +1202,5 @@
 </div>
 
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=106"></script>
+<script type="module" src="./js/app.js?v=107"></script>
 </html>

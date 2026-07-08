@@ -403,8 +403,14 @@ function resizeCanvas() {
   const r = cv.getBoundingClientRect();
   if (r.width < 2 || r.height < 2) return;   // ignore transient zero-size during layout
   dpr = window.devicePixelRatio || 1;
-  cv.width = Math.round(r.width * dpr);
-  cv.height = Math.round(r.height * dpr);
+  const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
+  // Assigning canvas width/height always wipes the bitmap and refitting resets
+  // the user's zoom — skip no-op calls. The iPad on-screen keyboard fires
+  // visualViewport resize/scroll without changing the canvas layout box, and
+  // refitting mid-edit misaligned the open text editor.
+  if (w === cv.width && h === cv.height) return;
+  cv.width = w;
+  cv.height = h;
   // keep the page fitted & centred so it can never drift off-screen on resize
   if (S.notebook && !$('#editor').classList.contains('hidden')) fitPage();
   else mark();
@@ -675,19 +681,20 @@ function drawTemplate(c, paper, pw = A4_W, ph = A4_H) {
   }
 }
 
-// perfect-freehand options per tool — size ≈ max ink diameter in page units
+// perfect-freehand options per tool — size ≈ max ink diameter in page units.
+// Higher smoothing/streamline ≈ GoodNotes-class curves (less jitter, rounder joins).
 function strokeOpts(s) {
   const w = s.width || 4;
   if (s.tool === 'highlighter') {
-    return { size: w * 2.2, thinning: 0, smoothing: 0.5, streamline: 0.5, simulatePressure: false };
+    return { size: w * 2.2, thinning: 0, smoothing: 0.55, streamline: 0.52, simulatePressure: false };
   }
   if (s.penType === 'marker') {
-    return { size: w * 2.2, thinning: 0.12, smoothing: 0.5, streamline: 0.5, simulatePressure: true };
+    return { size: w * 2.2, thinning: 0.12, smoothing: 0.62, streamline: 0.58, simulatePressure: true };
   }
   if (s.penType === 'calligraphy') {
-    return { size: w * 2.4, thinning: 0.72, smoothing: 0.55, streamline: 0.45, simulatePressure: true };
+    return { size: w * 2.4, thinning: 0.72, smoothing: 0.65, streamline: 0.52, simulatePressure: true };
   }
-  return { size: w * 1.85, thinning: 0.58, smoothing: 0.55, streamline: 0.5, simulatePressure: true };
+  return { size: w * 1.9, thinning: 0.52, smoothing: 0.65, streamline: 0.6, simulatePressure: true };
 }
 
 function sliceStrokePoints(pts, progress) {
@@ -783,34 +790,42 @@ function drawStroke(c, s, progress = 1) {
   c.globalAlpha = 1;
 }
 
-// Lightweight live ink while the Pencil is down — avoids perfect-freehand every
-// frame. inkPredicted holds Safari's predicted Pencil samples: drawn as a short
-// tail so the ink hugs the pen tip, but never committed to the stroke.
+// Live ink while the Pencil is down — same perfect-freehand outline as committed
+// strokes so the preview doesn't "pop" on pen-up. inkPredicted holds Safari's
+// predicted samples as an ephemeral tail (never committed).
 let inkPredicted = [];
 function drawStrokePreview(c, s) {
   const pts = s?.points;
   if (!pts || !pts.length) return;
-  const w = s.width || 4;
+  const hl = s.tool === 'highlighter';
   c.save();
-  c.strokeStyle = s.color;
-  c.lineWidth = s.tool === 'highlighter' ? w * 2.2 : w * 1.6;
-  c.lineCap = 'round';
-  c.lineJoin = 'round';
-  c.globalAlpha = s.tool === 'highlighter' ? 0.3 : 1;
-  if (pts.length === 1 && !inkPredicted.length) {
-    // ink appears the instant the pen touches, before any movement
-    c.fillStyle = s.color;
+  c.fillStyle = s.color;
+  c.globalAlpha = hl ? 0.3 : 1;
+  const tailP = pts[pts.length - 1]?.p ?? 0.5;
+  const input = pts.map((pt) => [pt.x, pt.y, pt.p ?? 0.5]);
+  for (const q of inkPredicted) input.push([q.x, q.y, tailP]);
+  if (input.length === 1) {
+    const r = Math.max(strokeOpts(s).size / 2, 0.6);
     c.beginPath();
-    c.arc(pts[0].x, pts[0].y, c.lineWidth / 2, 0, Math.PI * 2);
+    c.arc(input[0][0], input[0][1], r, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+    return;
+  }
+  const outline = getStroke(input, { ...strokeOpts(s), last: !inkPredicted.length });
+  if (outline.length < 2) {
+    const r = Math.max(strokeOpts(s).size / 2, 0.6);
+    c.beginPath();
+    c.arc(input[0][0], input[0][1], r, 0, Math.PI * 2);
     c.fill();
     c.restore();
     return;
   }
   c.beginPath();
-  c.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i < pts.length; i++) c.lineTo(pts[i].x, pts[i].y);
-  for (const q of inkPredicted) c.lineTo(q.x, q.y);
-  c.stroke();
+  c.moveTo(outline[0][0], outline[0][1]);
+  for (let i = 1; i < outline.length; i++) c.lineTo(outline[i][0], outline[i][1]);
+  c.closePath();
+  c.fill();
   c.restore();
 }
 
@@ -2456,6 +2471,11 @@ function predictedPagePoints(e) {
   });
 }
 
+// Where pointerrawupdate is supported, the paired pointermove re-delivers the
+// same samples through getCoalescedEvents — ink/erase must consume exactly one
+// of the two streams or every point lands twice in the stroke.
+const HAS_RAW_UPDATE = 'onpointerrawupdate' in window;
+
 // Ink points are appended synchronously in the pointermove handler — deferring
 // to rAF both lost coalesced 240 Hz samples (events overwrote each other) and
 // added a frame of latency before render() picked the points up.
@@ -2489,7 +2509,7 @@ function onMove(e) {
   }
   if (S.objResize) { applyHandle(S.selObj, S.objResize, toPage(...cssArr(e))); mark(); return; }
   if (S.mechResize && selectedMechItem()) {
-    applyMechHandle(selectedMechItem(), S.mechResize, p);
+    applyMechHandle(selectedMechItem(), S.mechResize, toPage(...cssArr(e)));
     mark(); return;
   }
   if (S.mechMove && selectedMechItem()) {
@@ -2538,6 +2558,7 @@ function onMove(e) {
     return;
   }
   if (S.drawing) {
+    if (HAS_RAW_UPDATE && e.type === 'pointermove') return;   // rawupdate already appended these samples
     processDrawMove(e);
     return;
   }
@@ -2713,6 +2734,10 @@ function commitTextEditor() {
   if (!ta.value.trim()) { const i = objs().indexOf(textTarget); if (i >= 0) objs().splice(i, 1); }
   S.editingId = null; textTarget = null;
   ta.classList.add('hidden');
+  // Release focus explicitly — a hidden-but-focused textarea keeps the iPad
+  // system keyboard on screen. Re-entry via the blur listener is safe:
+  // textTarget is already null. (No-op when the commit came from blur itself.)
+  ta.blur();
   commitAction(); persist(); mark();
 }
 function setupText() {
@@ -2777,10 +2802,49 @@ function showMathKeyboard() {
   } catch (_) {
     try { eqField?.executeCommand?.('showVirtualKeyboard'); } catch (e2) { /* non-fatal */ }
   }
+  scheduleCalcKeyboardSync();
 }
 
 function hideMathKeyboard() {
   try { mathVirtualKeyboard()?.hide?.({ animate: true }); } catch (_) {}
+  scheduleCalcKeyboardSync();
+}
+
+// Lift the calculator above the MathLive keyboard so = / Done stay reachable on iPad.
+let calcKbdSyncT = 0;
+function scheduleCalcKeyboardSync() {
+  clearTimeout(calcKbdSyncT);
+  requestAnimationFrame(syncCalcAboveKeyboard);
+  calcKbdSyncT = setTimeout(syncCalcAboveKeyboard, 120);
+  setTimeout(syncCalcAboveKeyboard, 380);
+}
+function syncCalcAboveKeyboard() {
+  const calc = $('#calc');
+  if (!calc || calc.classList.contains('hidden')) return;
+  const kbd = document.querySelector('.ML__keyboard.is-visible, .MLK__keyboard.is-visible');
+  if (kbd) {
+    const kh = kbd.getBoundingClientRect().height;
+    calc.classList.add('calc-kbd-open');
+    calc.style.bottom = `${Math.ceil(kh) + 10}px`;
+    calc.style.top = 'auto';
+    return;
+  }
+  calc.classList.remove('calc-kbd-open');
+  if (!calc.dataset.dragged) applyCalcDefaultPosition();
+}
+function applyCalcDefaultPosition() {
+  const calc = $('#calc');
+  if (!calc || calc.dataset.dragged) return;
+  const present = $('#editor')?.classList.contains('present-mode');
+  calc.style.left = 'auto';
+  calc.style.right = present ? 'max(12px, env(safe-area-inset-right))' : '20px';
+  if (present) {
+    calc.style.top = 'max(72px, env(safe-area-inset-top))';
+    calc.style.bottom = 'auto';
+  } else {
+    calc.style.top = 'auto';
+    calc.style.bottom = '20px';
+  }
 }
 
 function configureMathLive() {
@@ -3592,6 +3656,12 @@ async function clearPage() {
 
 function goToPage(i, opts = {}) {
   if (!S.notebook || i < 0 || i >= pages().length || i === S.pageIndex) return;
+  // Commit open text/equation editors BEFORE the page index changes: their
+  // targets live on the current page, and committing later would splice objs()
+  // of the new page — leaving ghost empties behind and the eq dock (plus the
+  // MathLive keyboard) floating over a page it doesn't belong to.
+  commitTextEditor();
+  commitEquationEditor();
   flushGeo();
   const isPresent = $('#editor')?.classList.contains('present-mode');
   // Present mode keeps the teacher's zoom & horizontal position across page
@@ -3886,6 +3956,8 @@ function setPresentMode(on) {
   }
   updatePresentTitle();
   updatePresentHud();
+  applyCalcDefaultPosition();
+  scheduleCalcKeyboardSync();
   requestAnimationFrame(resizeCanvas);
 }
 
@@ -3921,6 +3993,11 @@ function setTab(name) {
   });
 }
 function setTool(t) {
+  // The equation dock never commits on blur (iPad virtual-keyboard taps would
+  // close it), so switching tools must commit it explicitly — while it is open
+  // every onDown returns early and the pen appears dead.
+  commitEquationEditor();
+  commitTextEditor();
   setGeoTool(null);
   setInstTool(null);
   setMechPlacing(null);
@@ -4128,7 +4205,13 @@ function bindEditor() {
   $('#geo-clear').onclick = async () => {
     if (await mbConfirm('Clear all geometry on this page?', { okText: 'Clear', danger: true, title: 'Clear geometry' })) clearGeoPage();
   };
-  $('#back').onclick = () => { S.playing = false; setPresentMode(false); setGeoTool(null); setInstTool(null); teardownGeo(); show('library'); renderLibrary(); };
+  $('#back').onclick = () => {
+    // Close editors first: #eq-dock is position:fixed and the MathLive virtual
+    // keyboard lives on <body>, so both would stay visible over the library.
+    commitTextEditor();
+    commitEquationEditor();
+    S.playing = false; setPresentMode(false); setGeoTool(null); setInstTool(null); teardownGeo(); show('library'); renderLibrary();
+  };
 
   $('#nb-name').onchange = (e) => { S.notebook.title = e.target.value.trim() || 'Untitled lesson'; persist(); };
 
@@ -4171,8 +4254,10 @@ function bindEditor() {
 function bindCanvas() {
   cv.addEventListener('pointerdown', onDown);
   cv.addEventListener('pointermove', onMove);
-  // P0: Use pointerrawupdate for iPad Apple Pencil if available (higher frequency, lower latency)
-  if ('onpointerrawupdate' in window) {
+  // P0: Use pointerrawupdate for iPad Apple Pencil if available (higher frequency,
+  // lower latency). When active, onMove ignores pointermove for ink so the same
+  // samples are never appended twice (see HAS_RAW_UPDATE).
+  if (HAS_RAW_UPDATE) {
     cv.addEventListener('pointerrawupdate', onMove, { passive: true });
   }
   cv.addEventListener('pointerup', onUp);
@@ -4723,12 +4808,29 @@ function setupCalculator() {
   $('#calc-toggle').onclick = () => {
     const open = $('#calc').classList.toggle('hidden') === false;
     if (open) {
+      applyCalcDefaultPosition();
       const mf = calcExprEl();
       mf?.focus();
       setTimeout(() => showMathKeyboard(), 80);
     } else hideMathKeyboard();
   };
-  $('#calc-close').onclick = () => $('#calc').classList.add('hidden');
+  $('#calc-close').onclick = () => {
+    hideMathKeyboard();
+    $('#calc').classList.add('hidden');
+    $('#calc').classList.remove('calc-kbd-open');
+  };
+  $('#calc-done')?.addEventListener('click', () => {
+    calcEvaluate();
+    hideMathKeyboard();
+    calcExprEl()?.blur?.();
+  });
+  $('#calc-kbd-toggle')?.addEventListener('click', () => {
+    const mf = calcExprEl();
+    mf?.focus();
+    const vk = mathVirtualKeyboard();
+    if (vk?.visible) hideMathKeyboard();
+    else showMathKeyboard();
+  });
   $('#calc-mode').onclick = () => setCalcDeg(!calcDeg);
   const mf = calcExprEl();
   if (mf) {
@@ -4754,12 +4856,14 @@ function setupCalculator() {
   document.querySelectorAll('[data-mx]').forEach((b) => b.onclick = () => calcMatrixOp(b.dataset.mx));
   document.querySelectorAll('[data-vx]').forEach((b) => b.onclick = () => calcVectorOp(b.dataset.vx));
   makeDraggable($('#calc'), $('#calc-head'));
+  window.addEventListener('resize', scheduleCalcKeyboardSync);
 }
 function makeDraggable(panel, handle) {
   let sx, sy, ox, oy, dragging = false;
   handle.addEventListener('pointerdown', (e) => {
     if (e.target.closest('.calc-x')) return;
     dragging = true;
+    if (panel.id === 'calc') panel.dataset.dragged = '1';
     const r = panel.getBoundingClientRect();
     panel.style.left = r.left + 'px'; panel.style.top = r.top + 'px';
     panel.style.right = 'auto'; panel.style.bottom = 'auto';

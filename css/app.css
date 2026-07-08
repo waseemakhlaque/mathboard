@@ -1916,9 +1916,53 @@ select:focus {
   border-color: var(--accent);
 }
 
-/* MathLive virtual keyboard above equation dock */
+/* MathLive virtual keyboard above equation dock + calculator */
 .ML__keyboard, .MLK__backdrop {
   z-index: 10050 !important;
+}
+
+/* Calculator keyboard bar — Done / toggle stay reachable when MathLive keyboard is open */
+.calc-kbd-bar {
+  display: flex;
+  gap: 8px;
+  padding: 6px 12px 8px;
+  background: #23262b;
+  border-top: 1px solid #3a4048;
+}
+
+.calc-kbd-btn {
+  flex: 1;
+  min-height: 44px;
+  font: 600 14px sans-serif;
+  border-radius: var(--radius-sm);
+  border: 1px solid #4a515c;
+  background: #3a4048;
+  color: #eef1f5;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.calc-kbd-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.calc-kbd-btn:active { filter: brightness(0.92); }
+
+/* Present mode: park calculator high so the math keyboard can't bury it */
+#editor.present-mode #calc:not([data-dragged]) {
+  top: max(72px, env(safe-area-inset-top));
+  bottom: auto;
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 10040;
+}
+
+#calc.calc-kbd-open {
+  z-index: 10040;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 math-field.eq-editor-field::part(virtual-keyboard-toggle) {
