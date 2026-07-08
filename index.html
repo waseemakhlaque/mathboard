@@ -44,8 +44,8 @@
 <link rel="apple-touch-icon" href="./assets/icon-512.png" sizes="512x512" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=107" />
-<link rel="stylesheet" href="./css/annotatedSim.css?v=107" />
+<link rel="stylesheet" href="./css/app.css?v=108" />
+<link rel="stylesheet" href="./css/annotatedSim.css?v=108" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -1201,6 +1201,12 @@
   </div>
 </div>
 
+<!-- Fixed above MathLive keyboard — always reachable when calculator is open on iPad -->
+<div id="calc-vk-dock" class="calc-vk-dock hidden" aria-label="Calculator actions">
+  <button type="button" id="calc-vk-done" class="calc-vk-btn primary">Done — calculate (=)</button>
+  <button type="button" id="calc-vk-hide" class="calc-vk-btn">Hide keyboard</button>
+</div>
+
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=107"></script>
+<script type="module" src="./js/app.js?v=108"></script>
 </html>

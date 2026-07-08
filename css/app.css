@@ -1921,6 +1921,60 @@ select:focus {
   z-index: 10050 !important;
 }
 
+/* Fixed action bar — pinned directly above MathLive keyboard (iPad calculator fix) */
+.calc-vk-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 10051;
+  display: flex;
+  gap: 10px;
+  padding: 10px max(env(safe-area-inset-right), 12px) 10px max(env(safe-area-inset-left), 12px);
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 2px solid var(--accent);
+  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.35);
+}
+
+.calc-vk-dock.hidden { display: none !important; }
+
+.calc-vk-btn {
+  flex: 1;
+  min-height: 52px;
+  font: 700 15px sans-serif;
+  border-radius: var(--radius-sm);
+  border: 1px solid #4a515c;
+  background: #3a4048;
+  color: #eef1f5;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.calc-vk-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.calc-vk-btn:active { filter: brightness(0.9); }
+
+/* Compact calculator while math keyboard is open — hide faceplate, show screen only */
+#calc.calc-vk-active .calc-ctl,
+#calc.calc-vk-active .calc-keys,
+#calc.calc-vk-active .calc-funcs,
+#calc.calc-vk-active .calc-mode-menu,
+#calc.calc-vk-active .calc-sub {
+  display: none !important;
+}
+
+#calc.calc-vk-active {
+  z-index: 10040;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.55);
+}
+
 /* Calculator keyboard bar — Done / toggle stay reachable when MathLive keyboard is open */
 .calc-kbd-bar {
   display: flex;

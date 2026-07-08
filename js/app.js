@@ -2793,6 +2793,17 @@ function eqDockOpen() { return !$('#eq-dock')?.classList.contains('hidden'); }
 
 function mathVirtualKeyboard() { return window.mathVirtualKeyboard; }
 
+const coarsePointer = () => window.matchMedia?.('(pointer: coarse)')?.matches ?? false;
+
+function mathKeyboardEl() {
+  const vk = mathVirtualKeyboard();
+  const el = document.querySelector('body > .ML__keyboard') || document.querySelector('.ML__keyboard');
+  if (!el) return null;
+  if (vk?.visible || el.classList.contains('is-visible')) return el;
+  const h = el.getBoundingClientRect().height;
+  return h > 48 ? el : null;
+}
+
 function showMathKeyboard() {
   const vk = mathVirtualKeyboard();
   if (!vk) return;
@@ -2810,32 +2821,58 @@ function hideMathKeyboard() {
   scheduleCalcKeyboardSync();
 }
 
-// Lift the calculator above the MathLive keyboard so = / Done stay reachable on iPad.
+// Lift calculator + pin a fixed Done bar directly above the MathLive keyboard.
 let calcKbdSyncT = 0;
+let calcKbdPoll = 0;
 function scheduleCalcKeyboardSync() {
   clearTimeout(calcKbdSyncT);
   requestAnimationFrame(syncCalcAboveKeyboard);
-  calcKbdSyncT = setTimeout(syncCalcAboveKeyboard, 120);
-  setTimeout(syncCalcAboveKeyboard, 380);
+  calcKbdSyncT = setTimeout(syncCalcAboveKeyboard, 80);
+  setTimeout(syncCalcAboveKeyboard, 200);
+  setTimeout(syncCalcAboveKeyboard, 450);
+  setTimeout(syncCalcAboveKeyboard, 700);
+}
+function startCalcKbdPoll() {
+  stopCalcKbdPoll();
+  calcKbdPoll = setInterval(syncCalcAboveKeyboard, 250);
+}
+function stopCalcKbdPoll() {
+  clearInterval(calcKbdPoll);
+  calcKbdPoll = 0;
 }
 function syncCalcAboveKeyboard() {
   const calc = $('#calc');
-  if (!calc || calc.classList.contains('hidden')) return;
-  const kbd = document.querySelector('.ML__keyboard.is-visible, .MLK__keyboard.is-visible');
-  if (kbd) {
-    const kh = kbd.getBoundingClientRect().height;
-    calc.classList.add('calc-kbd-open');
-    calc.style.bottom = `${Math.ceil(kh) + 10}px`;
-    calc.style.top = 'auto';
+  const dock = $('#calc-vk-dock');
+  const calcOpen = calc && !calc.classList.contains('hidden');
+  const kbd = mathKeyboardEl();
+  if (calcOpen && kbd) {
+    const kr = kbd.getBoundingClientRect();
+    const kbdTop = kr.top;
+    const dockH = dock?.offsetHeight || 64;
+    calc.classList.add('calc-vk-active', 'calc-kbd-open');
+    calc.style.position = 'fixed';
+    calc.style.left = 'auto';
+    calc.style.right = 'max(8px, env(safe-area-inset-right))';
+    calc.style.top = 'max(56px, env(safe-area-inset-top))';
+    calc.style.bottom = 'auto';
+    const maxH = Math.max(160, kbdTop - dockH - 20 - parseFloat(getComputedStyle(calc).top || 56));
+    calc.style.maxHeight = `${maxH}px`;
+    if (dock) {
+      dock.classList.remove('hidden');
+      dock.style.bottom = `${Math.ceil(window.innerHeight - kbdTop)}px`;
+    }
     return;
   }
-  calc.classList.remove('calc-kbd-open');
-  if (!calc.dataset.dragged) applyCalcDefaultPosition();
+  calc?.classList.remove('calc-vk-active', 'calc-kbd-open');
+  calc?.style.removeProperty('max-height');
+  dock?.classList.add('hidden');
+  if (calc && !calc.dataset.dragged) applyCalcDefaultPosition();
 }
 function applyCalcDefaultPosition() {
   const calc = $('#calc');
   if (!calc || calc.dataset.dragged) return;
   const present = $('#editor')?.classList.contains('present-mode');
+  calc.style.position = 'fixed';
   calc.style.left = 'auto';
   calc.style.right = present ? 'max(12px, env(safe-area-inset-right))' : '20px';
   if (present) {
@@ -2845,6 +2882,11 @@ function applyCalcDefaultPosition() {
     calc.style.top = 'auto';
     calc.style.bottom = '20px';
   }
+}
+function calcVkDone() {
+  calcEvaluate();
+  hideMathKeyboard();
+  calcExprEl()?.blur?.();
 }
 
 function configureMathLive() {
@@ -4809,18 +4851,29 @@ function setupCalculator() {
     const open = $('#calc').classList.toggle('hidden') === false;
     if (open) {
       applyCalcDefaultPosition();
+      startCalcKbdPoll();
       const mf = calcExprEl();
-      mf?.focus();
-      setTimeout(() => showMathKeyboard(), 80);
-    } else hideMathKeyboard();
+      // iPad: don't auto-open the math keyboard — faceplate keys work; tap expr or ⌨ to open.
+      if (!coarsePointer()) {
+        mf?.focus();
+        setTimeout(() => showMathKeyboard(), 80);
+      }
+    } else {
+      hideMathKeyboard();
+      stopCalcKbdPoll();
+      $('#calc-vk-dock')?.classList.add('hidden');
+    }
   };
   $('#calc-close').onclick = () => {
     hideMathKeyboard();
+    stopCalcKbdPoll();
+    $('#calc-vk-dock')?.classList.add('hidden');
     $('#calc').classList.add('hidden');
-    $('#calc').classList.remove('calc-kbd-open');
+    $('#calc').classList.remove('calc-kbd-open', 'calc-vk-active');
   };
-  $('#calc-done')?.addEventListener('click', () => {
-    calcEvaluate();
+  $('#calc-done')?.addEventListener('click', calcVkDone);
+  $('#calc-vk-done')?.addEventListener('click', calcVkDone);
+  $('#calc-vk-hide')?.addEventListener('click', () => {
     hideMathKeyboard();
     calcExprEl()?.blur?.();
   });
@@ -4835,7 +4888,10 @@ function setupCalculator() {
   const mf = calcExprEl();
   if (mf) {
     try { mf.smartMode = false; mf.smartFence = false; mf.mathVirtualKeyboardPolicy = 'manual'; } catch (_) {}
-    mf.addEventListener('focusin', () => showMathKeyboard());
+    mf.addEventListener('focusin', () => {
+      showMathKeyboard();
+      startCalcKbdPoll();
+    });
   }
   mf?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); calcEvaluate(); } });
   document.querySelectorAll('[data-cmode]').forEach((b) => b.onclick = () => setCalcMode(b.dataset.cmode));
