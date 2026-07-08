@@ -115,6 +115,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
+const APP_VERSION = 109;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -2817,7 +2818,20 @@ function showMathKeyboard() {
 }
 
 function hideMathKeyboard() {
+  // MathLive silently ignores hide() while a math-field still has focus, which
+  // left the keyboard (and the calculator's compact vk mode) stuck open — blur first.
+  const ae = document.activeElement;
+  if (ae?.tagName === 'MATH-FIELD') { try { ae.blur(); } catch (_) {} }
   try { mathVirtualKeyboard()?.hide?.({ animate: true }); } catch (_) {}
+  setTimeout(() => {
+    const vk = mathVirtualKeyboard();
+    if (vk?.visible) {
+      const ae2 = document.activeElement;
+      if (ae2?.tagName === 'MATH-FIELD') { try { ae2.blur(); } catch (_) {} }
+      try { vk.hide({ animate: false }); } catch (_) {}
+    }
+    scheduleCalcKeyboardSync();
+  }, 250);
   scheduleCalcKeyboardSync();
 }
 
@@ -4312,9 +4326,14 @@ function bindCanvas() {
     const hit = [...objs()].reverse().find((o) => o.kind === 'text' && pointInText(o, p));
     if (hit) { beginAction(); openTextEditor(hit); }
   });
-  // P1: Present-mode idle — any interaction resets the auto-hide timer
+  // P1: Present-mode idle — any interaction resets the auto-hide timer.
+  // Toolbar/rail get their own listeners so menus don't fade out mid-use.
   cv.addEventListener('pointermove', resetPresentIdle);
   cv.addEventListener('pointerdown', resetPresentIdle);
+  document.querySelector('#editor .toolbar')?.addEventListener('pointermove', resetPresentIdle);
+  document.querySelector('#editor .toolbar')?.addEventListener('pointerdown', resetPresentIdle);
+  $('#tool-rail')?.addEventListener('pointermove', resetPresentIdle);
+  $('#tool-rail')?.addEventListener('pointerdown', resetPresentIdle);
   document.addEventListener('keydown', resetPresentIdle);
   window.addEventListener('resize', resizeCanvas);
   window.visualViewport?.addEventListener('resize', () => resizeCanvas());
@@ -4878,11 +4897,14 @@ function setupCalculator() {
     calcExprEl()?.blur?.();
   });
   $('#calc-kbd-toggle')?.addEventListener('click', () => {
-    const mf = calcExprEl();
-    mf?.focus();
+    // Only focus when opening — focusing before hide makes MathLive ignore hide().
     const vk = mathVirtualKeyboard();
-    if (vk?.visible) hideMathKeyboard();
-    else showMathKeyboard();
+    if (vk?.visible) {
+      hideMathKeyboard();
+    } else {
+      calcExprEl()?.focus();
+      showMathKeyboard();
+    }
   });
   $('#calc-mode').onclick = () => setCalcDeg(!calcDeg);
   const mf = calcExprEl();
@@ -5802,9 +5824,9 @@ function init() {
   // Service worker (offline PWA). Disabled on localhost to avoid stale-cache
   // surprises during development; enabled when served from a real host/LAN IP.
   const devHost = ['localhost', '127.0.0.1'].includes(location.hostname);
-  if ('serviceWorker' in navigator && !devHost) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
-  }
+  setupServiceWorker(devHost);
+  const verEl = $('#mb-version');
+  if (verEl) verEl.textContent = `v${APP_VERSION}`;
   } catch (e) {
     showBootError('MathBoard failed to start: ' + e.message + ' — try a hard refresh (Cmd+Shift+R).');
     console.error(e);
@@ -5812,3 +5834,25 @@ function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// Register SW with a versioned URL so iPad Safari actually fetches new sw.js.
+function setupServiceWorker(devHost) {
+  if (!('serviceWorker' in navigator) || devHost) return;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading) return;
+    reloading = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register(`./sw.js?v=${APP_VERSION}`).then((reg) => {
+    reg.update();
+    reg.addEventListener('updatefound', () => {
+      const nw = reg.installing;
+      if (!nw) return;
+      nw.addEventListener('statechange', () => {
+        if (nw.state === 'installed' && navigator.serviceWorker.controller) nw.postMessage({ type: 'SKIP_WAITING' });
+      });
+    });
+    if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+  }).catch(() => {});
+}

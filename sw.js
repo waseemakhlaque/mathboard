@@ -1,7 +1,7 @@
 // sw.js — offline support.
 // Same-origin app files: network-first (always get the latest, fall back to cache offline).
 // Cross-origin CDN (jsPDF): cache-first (immutable, fine to pin).
-const CACHE = 'mathboard-v108';
+const CACHE = 'mathboard-v109';
 // NOTE: js/collab/* is intentionally NOT precached — collaboration is loaded only via dynamic
 // import() when collabAvailable() is true, so the offline solo app never fetches it.
 const ASSETS = [
@@ -114,6 +114,10 @@ const ASSETS = [
   './vendor/fonts/KaTeX_Size4-Regular.woff2',
   './vendor/fonts/KaTeX_Typewriter-Regular.woff2',
 ];
+
+self.addEventListener('message', (e) => {
+  if (e.data?.type === 'SKIP_WAITING') self.skipWaiting();
+});
 
 self.addEventListener('install', (e) => {
   // Promise.allSettled: one bad URL must not abort the whole SW (Cloudflare rejects './').
