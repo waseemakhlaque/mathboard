@@ -80,7 +80,7 @@ the vision prompt, so the LLM can only ever answer inside the schema.
    with `input_schema` = registry → forced tool_choice → returns the tool_use JSON verbatim.
    `ANTHROPIC_API_KEY` is a Worker secret (`npx wrangler secret put ANTHROPIC_API_KEY`);
    never ships to the client. Rate-limit: 10/min/IP via a simple in-memory token map.
-   Pro-gate in the UI (reuse `hasPro()` from js/entitlement.js).
+   Access is login-gated (signed-in + active_until); no client paywall.
 4. **Mount/edit UI** — extend `js/ragSearch.js` dialog: params side-panel generated from
    `paramSchema` (number inputs + sliders), Apply re-renders the lab live; "Pin to page"
    serializes `{tag, params}` into the notebook page (new `pg.sims: []` array) so the sim
@@ -95,7 +95,7 @@ Resolver ladder, tried in order:
 2. **Tesseract.js** (vendored, browser-side, offline): OCR the crop → pre-fill numbers in
    the manual picker. Runs when the Worker call fails/offline.
 3. **Manual picker** — always available, archetype chips + typed params.
-Optional paid upgrade later: swap stage 1 to Anthropic claude-haiku via env flag.
+Optional later: swap stage 1 to Anthropic claude-haiku via env flag.
 
 Free building blocks to lean on:
 - **JSXGraph** (already in vendor/) — build the P1/P3 graph-type labs on it.

@@ -25,7 +25,7 @@ append 2 lines to `.claude-state`: (1) exact files modified, (2) next atomic tas
 - Every frontend change: bump `CACHE` in `sw.js` (currently mathboard-v10x), add new js
   files to its ASSETS precache list, and bump `?v=` cache-busters + `#mb-version` in
   `index.html`.
-- Reuse: `svgEl` helper (js/anim/mbAnim.js), `hasPro()` (js/entitlement.js), the
+- Reuse: `svgEl` helper (js/anim/mbAnim.js), login gate (`js/entitlement.js`), the
   `#anim-dialog` / `#anim-host` modal (index.html + js/ragSearch.js mountTool()),
   `esc()` string-escaping pattern, CSS tokens (--radius-md, --accent-light, --surface-2).
 
@@ -84,9 +84,9 @@ append 2 lines to `.claude-state`: (1) exact files modified, (2) next atomic tas
      value. hint: <topic>. Reply with ONLY minified JSON
      {archetype, params, labels, confidence}". Parse defensively (strip fences, JSON.parse
      in try/catch; on parse failure retry once with 'Reply with only JSON').
-   - Optional paid upgrade: if `env.ANTHROPIC_API_KEY` is set, use the Anthropic Messages
-     API (`claude-haiku-4-5`, tool_choice-forced `emit_sim` tool with the same schema)
-     instead — better accuracy, ~$0.002/snip. Selected purely by presence of the secret.
+   - Optional higher-accuracy path: if `env.ANTHROPIC_API_KEY` is set, use the Anthropic
+     Messages API (`claude-haiku-4-5`, tool_choice-forced `emit_sim` tool with the same
+     schema) instead. Selected purely by presence of the secret.
    - On any upstream error return `{archetype:null, confidence:0}` (client falls back to
      picker) — never 500.
    - Client-side free fallback: vendor `tesseract.js` (vendor/tesseract/) and, when
@@ -95,7 +95,7 @@ append 2 lines to `.claude-state`: (1) exact files modified, (2) next atomic tas
 9. `js/snipSim.js` `resolveSim()`: POST the crop; if `confidence >= 0.7` mount the
    archetype immediately with returned params (clamped to schema min/max); else open the
    picker with the returned params pre-filled on the suggested chip (highlighted first).
-   Gate behind `hasPro()` → `onLocked()` paywall otherwise.
+   Access is login-gated (signed-in + active_until); do not add a client paywall.
 10. Verify with wrangler dev + a real snip of: a pulley diagram (M1 ch5), an incline
     (M1 ch4), a quadratic sketch (P1 ch1). Assert returned archetype tags match.
 

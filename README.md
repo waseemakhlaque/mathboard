@@ -1,6 +1,6 @@
 # MathBoard
 
-**A free, pencil-first notebook whiteboard for teaching A-level mathematics** — built for
+**A pencil-first notebook whiteboard for teaching A-level mathematics** — built for
 vectors, complex numbers, and live class / YouTube demonstrations.
 
 ![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)
@@ -8,10 +8,12 @@ vectors, complex numbers, and live class / YouTube demonstrations.
 ![No build step](https://img.shields.io/badge/build-none-lightgrey)
 
 > Created by **Waseem Akhlaque**, A-Level Mathematics Teacher — © 2026. All rights reserved.
-> Free to download, install, and use; modification and redistribution are not permitted.
+> Access is login-based (signed-in account with an active entitlement). There is no
+> freemium tier, upgrade screen, or in-app checkout.
 
 MathBoard is a single static web app (HTML/CSS/JS, no build step). It runs in any modern browser on
-Mac, Windows, iPad, or Android, installs to the home screen as an app, and works fully offline.
+Mac, Windows, iPad, or Android, installs to the home screen as an app, and works offline for
+drawing once loaded (past papers and RAG search need network + sign-in).
 
 ---
 

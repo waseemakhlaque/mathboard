@@ -17,3 +17,12 @@ scripts/node_modules/
 .claude-state
 scripts/.rag-ingest-progress.json
 .wrangler/
+
+# Gated content corpus — deployed as Worker assets, never committed (copyright + size)
+content/papers/
+content/books/
+content/extras/
+content/papers.json
+qa-screenshots/node_modules/
+qa-screenshots/package-lock.json
+qa-screenshots/package.json
