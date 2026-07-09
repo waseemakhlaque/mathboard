@@ -1,18 +1,6 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "mathboard",
-  "compatibility_date": "2026-06-27",
-  "observability": {
-    "enabled": true
-  },
-  "assets": {
-    "directory": "."
-  },
-  "compatibility_flags": [
-    "nodejs_compat"
-  ]
-  // Cloudflare Workers — MathBoard PWA: static assets + /api/rag/* Worker.
-  // Static routes never invoke the Worker (run_worker_first limits it to /api/*).
+  // Cloudflare Workers — MathBoard PWA: static assets + gated /api/* + /content/* Worker.
+  // Static routes never invoke the Worker (run_worker_first limits it).
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "mathboard",
   "compatibility_date": "2026-06-27",

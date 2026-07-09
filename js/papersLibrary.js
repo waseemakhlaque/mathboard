@@ -206,7 +206,6 @@ export function setupPapersLibrary(opts = {}) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.id = 'papers-open';
-  btn.className = 'lib-act-paper';
   btn.title = 'Cambridge 9709 past papers and books';
   btn.textContent = 'Past papers';
   btn.addEventListener('click', openDialog);
