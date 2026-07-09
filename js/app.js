@@ -17,9 +17,11 @@ import {
 } from './auth.js';
 import { initTheme } from './theme.js';
 import {
-  hasPro, canCreateLesson, canUseCloudSync, canOpenCourseExample,
-  startCheckout, initEntitlement, FREE_COURSE_PREVIEW,
+  canCreateLesson, initEntitlement,
 } from './entitlement.js';
+import { ensureAccess } from './gate.js';
+import { setupAdminPanel } from './adminPanel.js';
+import { setupPapersLibrary, openPaperFile } from './papersLibrary.js';
 import { initOnboarding } from './onboarding.js';
 import { setupInstallBanner } from './installBanner.js';
 import {
@@ -115,7 +117,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 109;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 112;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -3479,7 +3481,7 @@ async function renderCourseTab(list) {
     ragSearchReady = true;
     setupRagSearch($('#rag-search'), {
       onOpenShelf: (course, topic) => expandCoursePath(list, course, topic),
-      onLocked: () => showPaywall('course'),
+      onOpenPaper: (file) => openPaperFile(file),
     });
   }
   list.innerHTML = '<div class="lib-skeleton"><div class="skel-card"></div><div class="skel-card"></div><div class="skel-card"></div></div>';
@@ -3490,10 +3492,6 @@ async function renderCourseTab(list) {
     taxonomy: tax,
     search: libSearch,
     thumb: (nb) => `<div class="example-thumb">${notebookCardThumb(nb)}</div>`,
-    hasPro,
-    previewLimit: FREE_COURSE_PREVIEW,
-    canOpen: (i) => canOpenCourseExample(i),
-    onLocked: () => showPaywall('course'),
     onOpen: (id) => openNotebook(id, { present: true, play: true }),
   });
 }
@@ -3680,7 +3678,7 @@ async function createNotebook() {
   const all = await getAllNotebooks();
   const lessonCount = all.filter((nb) => notebookKind(nb) === 'lesson').length;
   if (!canCreateLesson(lessonCount)) {
-    showPaywall('lessons');
+    mbToast('Could not create lesson.');
     return;
   }
   const t = await askNewLessonName();
@@ -5257,56 +5255,14 @@ function addComplexPoint(re, im, tag, omega) {
   mark();
 }
 
-function updateProBadge() {
-  const pro = hasPro();
-  document.querySelectorAll('#upgrade-btn, #upgrade-btn-editor').forEach((el) => {
-    if (!el) return;
-    if (el.id === 'upgrade-btn') {
-      el.textContent = pro ? 'Pro ✓' : 'Upgrade';
-      el.classList.toggle('is-pro', pro);
-      el.title = pro ? 'MathBoard Pro — thank you!' : 'Upgrade to MathBoard Pro';
-    } else {
-      el.textContent = pro ? 'Pro active' : 'Upgrade to Pro';
-    }
-  });
-}
-
-function showPaywall(reason = '') {
-  const dlg = $('#paywall-dialog');
-  if (!dlg) return;
-  dlg.classList.remove('hidden');
-  dlg.dataset.reason = reason;
-}
-
-function hidePaywall() {
-  $('#paywall-dialog')?.classList.add('hidden');
-}
-
 function setupProductUI() {
   initEntitlement();
   initTheme();
-  updateProBadge();
 
   const about = $('#about-dialog');
   $('#about-btn')?.addEventListener('click', () => about?.classList.remove('hidden'));
   $('#about-close')?.addEventListener('click', () => about?.classList.add('hidden'));
   about?.addEventListener('click', (e) => { if (e.target === about) about.classList.add('hidden'); });
-
-  document.querySelectorAll('#upgrade-btn, #upgrade-btn-editor').forEach((el) => {
-    el.addEventListener('click', () => showPaywall());
-  });
-  $('#paywall-close')?.addEventListener('click', hidePaywall);
-  $('#paywall-dialog')?.addEventListener('click', (e) => { if (e.target === $('#paywall-dialog')) hidePaywall(); });
-  $('#paywall-upgrade')?.addEventListener('click', async () => {
-    try {
-      await startCheckout();
-    } catch (e) {
-      mbToast(e.message || 'Checkout unavailable');
-    }
-  });
-  $('#paywall-manage')?.addEventListener('click', () => {
-    mbToast('Subscription management — connect Stripe Customer Portal in billing-worker (TODO).');
-  });
 
   // Editor "More" overflow menu
   const moreBtn = $('#tbar-more');
@@ -5318,7 +5274,6 @@ function setupProductUI() {
     $('#sync-settings-editor-more')?.addEventListener('click', () => { moreDrop.classList.add('hidden'); $('#sync-settings-editor')?.click(); });
     $('#export-json-more')?.addEventListener('click', () => { moreDrop.classList.add('hidden'); $('#export-json')?.click(); });
     $('#export-pdf-more')?.addEventListener('click', () => { moreDrop.classList.add('hidden'); $('#export-pdf')?.click(); });
-    $('#upgrade-btn-editor')?.addEventListener('click', () => { moreDrop.classList.add('hidden'); });
   }
 
   initOnboarding();
@@ -5367,10 +5322,6 @@ function setupSyncSettings() {
   }
 
   function openSyncDialog() {
-    if (!canUseCloudSync()) {
-      showPaywall('sync');
-      return;
-    }
     urlIn.value = getSyncBaseUrl() || defaultSyncApiUrl();
     refreshSyncAuthUI();
     dlg.classList.remove('hidden');
@@ -5687,7 +5638,10 @@ function bindLibrary() {
   }
 }
 
-function init() {
+async function init() {
+  // Access gate: sign-in / access-ended screens render instead of the app.
+  // Server-side enforcement lives in the Worker; this decides the UI only.
+  if (!(await ensureAccess())) return;
   bindLibrary();
   try {
   cv = $('#board');
@@ -5820,6 +5774,10 @@ function init() {
       showBootError('Local storage blocked — lessons cannot save. Turn off Safari Private Browsing or allow site data.');
     }
   });
+
+  // Post-gate UI: teacher's admin panel + the gated papers/books browser.
+  setupAdminPanel();
+  setupPapersLibrary({ importPdf: importPdfAsNotebook });
 
   // Service worker (offline PWA). Disabled on localhost to avoid stale-cache
   // surprises during development; enabled when served from a real host/LAN IP.

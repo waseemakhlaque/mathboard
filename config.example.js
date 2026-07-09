@@ -1,5 +1,5 @@
 // Copy to config.local.js (git-ignored) and fill in after ./scripts/deploy-supabase.sh
-// Supabase Free tier — no payment required for personal / classroom sync.
+// App access is login-based (signed-in + profiles.active_until). No billing keys.
 window.MB_CONFIG = {
   ...window.MB_CONFIG,
   supabaseUrl: 'https://YOUR_PROJECT_REF.supabase.co',

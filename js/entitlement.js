@@ -1,104 +1,86 @@
-// entitlement.js — lightweight plan / paywall layer (no card data in client)
+// entitlement.js — access model: signed in + (admin OR active_until in the future).
+// Freemium / Stripe checkout removed. The Worker enforces this server-side for
+// content and APIs; this module mirrors it client-side so gate.js can decide
+// which screen to show. Feature gates below stay "always true" — an inactive
+// user never gets past the gate, so per-feature limits are pointless.
 
-const PLAN_KEY = 'mb-plan';
-const PRO_UNTIL_KEY = 'mb-pro-until';
+import {
+  isSignedIn, getAuthUser, getSupabaseUrl, getSupabaseAnonKey, authHeaders, ensureValidToken,
+} from './auth.js';
 
-/** Free tier limits — adjust gates via hasPro() only. */
-export const FREE_LESSON_LIMIT = 5;
-export const FREE_COURSE_PREVIEW = 3;
+const PROFILE_CACHE_KEY = 'mb-profile';   // { profile, at } — offline grace
+const OFFLINE_GRACE_MS = 7 * 864e5;       // offline iPad keeps working up to a week
+const REFRESH_MS = 60_000;
 
-let plan = 'free';
-let proUntil = 0;
+let profile = null;
+let fetchedAt = 0;
 
-function readPlan() {
+export function getProfile() { return profile; }
+
+export function isAdmin() { return profile?.role === 'admin'; }
+
+export function isActive() {
+  if (!isSignedIn() || !profile) return false;
+  if (profile.role === 'admin') return true;
+  return !!(profile.active_until && Date.parse(profile.active_until) > Date.now());
+}
+
+function readCache() {
+  try { return JSON.parse(localStorage.getItem(PROFILE_CACHE_KEY) || 'null'); } catch { return null; }
+}
+
+function writeCache() {
+  try { localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ profile, at: fetchedAt })); } catch { /* ok */ }
+}
+
+export function clearProfile() {
+  profile = null;
+  fetchedAt = 0;
+  try { localStorage.removeItem(PROFILE_CACHE_KEY); } catch { /* ok */ }
+}
+
+/** Load the caller's profiles row (RLS: own row only). Cached in memory + localStorage. */
+export async function fetchProfile({ force = false } = {}) {
+  if (!isSignedIn()) { profile = null; return null; }
+  if (profile && !force && Date.now() - fetchedAt < REFRESH_MS) return profile;
+  const base = getSupabaseUrl();
+  const uid = getAuthUser()?.id;
+  if (!base || !uid || !getSupabaseAnonKey()) return profile;
   try {
-    plan = localStorage.getItem(PLAN_KEY) || 'free';
-    proUntil = Number(localStorage.getItem(PRO_UNTIL_KEY) || 0);
-  } catch { plan = 'free'; proUntil = 0; }
-  // Dev / QA: ?pro=1 activates Pro locally (never use in production marketing).
-  if (new URLSearchParams(location.search).get('pro') === '1') plan = 'pro';
-  if (proUntil && Date.now() > proUntil) {
-    plan = 'free';
-    try {
-      localStorage.setItem(PLAN_KEY, 'free');
-      localStorage.removeItem(PRO_UNTIL_KEY);
-    } catch { /* ok */ }
+    await ensureValidToken();
+    const res = await fetch(
+      `${base}/rest/v1/profiles?select=role,full_name,phone,active_until&user_id=eq.${encodeURIComponent(uid)}`,
+      { headers: authHeaders() },
+    );
+    if (!res.ok) throw new Error(`profiles HTTP ${res.status}`);
+    const rows = await res.json();
+    // Signed in but never registered by the teacher → role 'none', no access.
+    profile = rows[0] || { role: 'none', full_name: '', phone: '', active_until: null };
+    fetchedAt = Date.now();
+    writeCache();
+  } catch {
+    const cached = readCache();
+    if (cached?.profile && Date.now() - (cached.at || 0) < OFFLINE_GRACE_MS) {
+      profile = cached.profile;
+      fetchedAt = cached.at;
+    }
   }
+  return profile;
 }
 
-/** Single gate — move feature checks here. */
-export function hasPro() {
-  readPlan();
-  return plan === 'pro';
-}
+// ---- legacy feature gates (kept for call-site compatibility; always true) ----
 
-export function getPlan() {
-  readPlan();
-  return plan;
-}
+/** @deprecated the gate blocks inactive users before these matter. */
+export function hasPro() { return true; }
 
-export function setPlan(next) {
-  plan = next === 'pro' ? 'pro' : 'free';
-  try { localStorage.setItem(PLAN_KEY, plan); } catch { /* ok */ }
-}
+export function getPlan() { return 'full'; }
 
-/** Called after successful hosted checkout redirect (?checkout=success). */
-export function activatePro(untilMs = 0) {
-  setPlan('pro');
-  if (untilMs > Date.now()) {
-    proUntil = untilMs;
-    try { localStorage.setItem(PRO_UNTIL_KEY, String(untilMs)); } catch { /* ok */ }
-  }
-}
+export function canCreateLesson() { return true; }
 
-export function canCreateLesson(notebookCount) {
-  return hasPro() || notebookCount < FREE_LESSON_LIMIT;
-}
+export function canUseCloudSync() { return true; }
 
-export function canUseCloudSync() {
-  return hasPro();
-}
-
-export function canOpenCourseExample(indexInExercise) {
-  return hasPro() || indexInExercise < FREE_COURSE_PREVIEW;
-}
-
-/** Billing API base — public URL only; secrets live in billing-worker env. */
-export function billingApiUrl() {
-  const cfg = window.MB_CONFIG || {};
-  return (cfg.billingApiUrl || '').trim().replace(/\/$/, '');
-}
-
-/** Redirect to hosted Stripe Checkout (Worker creates session server-side). */
-export async function startCheckout() {
-  const base = billingApiUrl();
-  if (!base) {
-    throw new Error('Billing is not configured yet. Set billingApiUrl in config.js when the Worker is deployed.');
-  }
-  const res = await fetch(`${base}/checkout`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ returnUrl: location.origin + location.pathname }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Could not start checkout.');
-  if (data.url) location.href = data.url;
-  else throw new Error('Checkout URL missing from server response.');
-}
-
-export function handleCheckoutReturn() {
-  const p = new URLSearchParams(location.search);
-  if (p.get('checkout') === 'success') {
-    activatePro(Date.now() + 365 * 864e5);
-    p.delete('checkout');
-    const qs = p.toString();
-    history.replaceState(null, '', location.pathname + (qs ? `?${qs}` : '') + location.hash);
-    return true;
-  }
-  return false;
-}
+export function canOpenCourseExample() { return true; }
 
 export function initEntitlement() {
-  readPlan();
-  handleCheckoutReturn();
+  /* profile is loaded by gate.js (ensureAccess) before the app boots */
 }

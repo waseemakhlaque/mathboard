@@ -2,11 +2,10 @@
 // Retrieval-only: POST /api/rag/query → snippet cards from the ingested 9709
 // corpus, deep-linking into Course Library shelves and animated tools.
 
-import { hasPro } from './entitlement.js';
 import { animForTopic, LABS, defaultParams, simByTag } from './anim/ragRoutes.js';
+import { authHeaders } from './auth.js';
 
-const FREE_RAG_RESULTS = 3;
-const PRO_RAG_RESULTS = 10;
+const RAG_RESULTS = 10;
 const COURSES = ['Pure Mathematics 3', 'Mechanics', 'Statistics', 'Pure Mathematics 1'];
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -171,8 +170,8 @@ export function setupRagSearch(host, hooks = {}) {
     try {
       const res = await fetch('/api/rag/query', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q, topK: PRO_RAG_RESULTS, filter: course ? { course } : undefined }),
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ q, topK: RAG_RESULTS, filter: course ? { course } : undefined }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       data = await res.json();
@@ -184,35 +183,35 @@ export function setupRagSearch(host, hooks = {}) {
   });
 }
 
+// "9709 s19 QP 12 Q3" → "9709_s19_qp_12.pdf" (matches content/papers/ keys).
+function paperFileFromRef(ref) {
+  const m = String(ref || '').match(/^9709 ([smw])(\d{2}) (QP|MS) (\d{1,2})/);
+  return m ? `9709_${m[1]}${m[2]}_${m[3].toLowerCase()}_${m[4]}.pdf` : null;
+}
+
 function renderResults(container, all, hooks) {
   container.innerHTML = '';
   if (!all.length) {
     container.innerHTML = '<p class="muted rag-msg">No matches in the ingested papers.</p>';
     return;
   }
-  const limit = hasPro() ? PRO_RAG_RESULTS : FREE_RAG_RESULTS;
-  for (const r of all.slice(0, limit)) {
+  for (const r of all.slice(0, RAG_RESULTS)) {
     const card = document.createElement('div');
     card.className = 'rag-card';
     const canShelf = r.course && r.topic && r.course !== 'Pure Mathematics 1';
     const canAnim = !!animForTopic(r.topic);
+    const paperFile = r.kind === 'book' ? null : paperFileFromRef(r.ref);
     card.innerHTML = `
       <header>${esc(r.ref || r.id)}${r.topic ? ` · ${esc(r.topic)}` : ''}</header>
       <p>${esc((r.text || '').slice(0, 220))}…</p>
       <div class="rag-card-actions">
+        ${paperFile ? '<button type="button" class="rag-paper">📄 Open paper</button>' : ''}
         ${canShelf ? '<button type="button" class="rag-shelf">Open shelf</button>' : ''}
         ${canAnim ? '<button type="button" class="rag-anim">▶ Animate</button>' : ''}
       </div>`;
+    card.querySelector('.rag-paper')?.addEventListener('click', () => hooks.onOpenPaper?.(paperFile));
     card.querySelector('.rag-shelf')?.addEventListener('click', () => hooks.onOpenShelf?.(r.course, r.topic, r.exercise));
     card.querySelector('.rag-anim')?.addEventListener('click', () => openAnimDialog(r.topic));
     container.appendChild(card);
-  }
-  if (!hasPro() && all.length > FREE_RAG_RESULTS) {
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.className = 'rag-locked-row';
-    row.textContent = `🔒 ${all.length - FREE_RAG_RESULTS} more results — upgrade to Pro`;
-    row.addEventListener('click', () => hooks.onLocked?.());
-    container.appendChild(row);
   }
 }

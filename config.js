@@ -6,8 +6,6 @@ window.MB_CONFIG = {
   supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qaXVoZGN4ZGxsdXJpemZmdmlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0OTg0NDAsImV4cCI6MjA5ODA3NDQ0MH0.YFdbJRYeaEXf25GdMvzTzJHx_Vl8R9EERAmdIyG3whQ',
   syncApiUrl: '',  // optional; defaults to supabaseUrl + /functions/v1/mathboard
   collabServerUrl: 'wss://mathboard-collab.waseemakhlaque85.workers.dev',
-  // Hosted Stripe Checkout Worker URL (public). Secrets stay in billing-worker env.
-  billingApiUrl: '',
   // Usage analytics (Cloudflare Web Analytics). Paste the beacon TOKEN from
   // Cloudflare dashboard → Analytics & Logs → Web Analytics → Add a site.
   // Leave '' to disable (no tracking). Privacy-friendly, no personal data.

@@ -44,8 +44,8 @@
 <link rel="apple-touch-icon" href="./assets/icon-512.png" sizes="512x512" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=109" />
-<link rel="stylesheet" href="./css/annotatedSim.css?v=109" />
+<link rel="stylesheet" href="./css/app.css?v=112" />
+<link rel="stylesheet" href="./css/annotatedSim.css?v=112" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -83,7 +83,6 @@
     <div class="lib-actions">
       <div class="lib-util">
         <button type="button" id="theme-toggle" class="icon-btn ghost" data-theme-toggle title="Theme" aria-label="Theme">◐</button>
-        <button type="button" id="upgrade-btn" class="pro-badge" title="Upgrade to MathBoard Pro">Upgrade</button>
         <button type="button" id="help-tour" class="ghost" title="Interactive tour">Tour</button>
         <button type="button" id="about-btn" class="ghost" title="About &amp; legal">About</button>
       </div>
@@ -109,7 +108,7 @@
     <span id="sync-status" class="sync-status" title="Offline · saved on this device">● Local</span>
     · <button type="button" id="sync-settings-foot" class="sync-foot-link">Cloud sync</button>
     · Paginated notebook whiteboard · works offline · add to Home Screen on iPad
-    · <span id="mb-version" class="mb-version">v109</span>
+    · <span id="mb-version" class="mb-version">v112</span>
     · © 2026 Waseem Akhlaque
   </p>
 </section>
@@ -157,7 +156,6 @@
             <button type="button" id="export-json-more" role="menuitem">Backup JSON</button>
             <button type="button" id="export-pdf-more" role="menuitem">Export PDF</button>
             <button type="button" id="theme-toggle-editor" data-theme-toggle role="menuitem">Theme</button>
-            <button type="button" id="upgrade-btn-editor" role="menuitem">Upgrade to Pro</button>
           </div>
         </div>
       </div>
@@ -1136,29 +1134,6 @@
   </div>
 </div>
 
-<!-- Upgrade / paywall -->
-<div id="paywall-dialog" class="sync-dialog paywall-dialog hidden" role="dialog" aria-labelledby="paywall-title" aria-modal="true">
-  <div class="sync-box">
-    <div class="paywall-hero">
-      <h2 id="paywall-title">MathBoard Pro</h2>
-      <p class="muted">Unlock the full teaching toolkit</p>
-      <div class="paywall-price">£9.99 <span>/ month</span></div>
-    </div>
-    <ul class="paywall-features">
-      <li>Unlimited lessons &amp; past papers</li>
-      <li>Full Course Library — every animated example</li>
-      <li>Cloud sync across devices (opt-in)</li>
-      <li>Video export &amp; priority updates</li>
-    </ul>
-    <div class="sync-btns">
-      <button type="button" id="paywall-upgrade" class="primary">Upgrade — secure checkout</button>
-      <button type="button" id="paywall-manage" class="ghost">Manage subscription</button>
-      <button type="button" id="paywall-close" class="ghost">Not now</button>
-    </div>
-    <p class="paywall-note">Payments are processed by Stripe — card details never touch MathBoard. Your lessons stay on-device unless you opt into cloud sync.</p>
-  </div>
-</div>
-
 <!-- About / Legal -->
 <div id="about-dialog" class="sync-dialog about-dialog hidden" role="dialog" aria-labelledby="about-title" aria-modal="true">
   <div class="sync-box">
@@ -1168,8 +1143,8 @@
       <p>Copyright © 2026 Waseem Akhlaque. All rights reserved. Proprietary software — see LICENSE in the repository.</p>
       <h4>Privacy</h4>
       <p>Lessons are stored locally in your browser (IndexedDB). Cloud sync is optional and requires sign-in. No lesson content is uploaded unless you explicitly sync. Optional anonymous usage analytics via Cloudflare Web Analytics when online.</p>
-      <h4>Data</h4>
-      <p>MathBoard does not collect payment card numbers. Subscriptions are handled by a hosted checkout provider.</p>
+      <h4>Access</h4>
+      <p>Full access requires a signed-in account with an active entitlement. Lessons stay on-device unless you opt into cloud sync.</p>
     </div>
     <div class="sync-btns">
       <button type="button" id="about-close" class="primary">Close</button>
@@ -1208,5 +1183,5 @@
 </div>
 
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=109"></script>
+<script type="module" src="./js/app.js?v=112"></script>
 </html>

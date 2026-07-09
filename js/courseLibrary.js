@@ -162,10 +162,10 @@ function isRecent(nb) {
 
 /**
  * Render the course tree into `container`.
- * opts: { notebooks, taxonomy, onOpen(id), onLocked?, thumb(nb)->html, search, hasPro, canOpen(i) }
+ * opts: { notebooks, taxonomy, onOpen(id), thumb(nb)->html, search }
  */
 export function renderCourseLibrary(container, opts = {}) {
-  const { notebooks = [], taxonomy, onOpen, onLocked, thumb, search = '', hasPro = () => true, canOpen = () => true } = opts;
+  const { notebooks = [], taxonomy, onOpen, thumb, search = '' } = opts;
   const tree = buildCourseTree(notebooks, taxonomy);
   const q = search.trim().toLowerCase();
   container.innerHTML = '';
@@ -179,15 +179,6 @@ export function renderCourseLibrary(container, opts = {}) {
       <p class="muted">Open a lesson → Scene bar → <b>Add to Course Library</b>.</p>
     </div>`;
     return;
-  }
-
-  if (!hasPro()) {
-    const banner = document.createElement('p');
-    banner.className = 'muted course-preview-banner';
-    banner.style.cssText = 'padding:8px 12px;margin:0 0 12px;background:var(--accent-light);border-radius:var(--radius-md);font-size:13px;';
-    banner.innerHTML = `Free preview — first ${opts.previewLimit ?? 3} examples per exercise. <button type="button" class="sync-foot-link" data-upgrade>Upgrade to Pro</button> for the full catalog.`;
-    banner.querySelector('[data-upgrade]')?.addEventListener('click', () => onLocked?.());
-    container.appendChild(banner);
   }
 
   let courseIdx = 0;
@@ -240,24 +231,20 @@ export function renderCourseLibrary(container, opts = {}) {
         if (exMatches.length === 0) {
           grid.innerHTML = `<div class="example-empty muted">No examples yet</div>`;
         } else {
-          exMatches.forEach(({ nb }, idx) => {
-            const locked = !canOpen(idx);
+          exMatches.forEach(({ nb }) => {
             const card = document.createElement('button');
             card.type = 'button';
-            card.className = 'example-card' + (locked ? ' is-locked' : '');
-            card.title = locked ? 'Pro — unlock full Course Library' : `Play “${(nb.title || 'Untitled').replace(/"/g, '\u201d')}”`;
+            card.className = 'example-card';
+            card.title = `Play “${(nb.title || 'Untitled').replace(/"/g, '\u201d')}”`;
             const thumbHtml = thumb ? thumb(nb) : '<div class="example-thumb"></div>';
             const newBadge = isRecent(nb) ? '<span class="badge-new">New</span>' : '';
             const doneBadge = nb.viewed ? '<span class="badge-done" title="Viewed">✓</span>' : '';
             card.innerHTML = `${thumbHtml}${newBadge}${doneBadge}
               <div class="example-meta">
                 <div class="example-title">${esc(nb.title)}</div>
-                <div class="example-play">${locked ? '🔒 Pro preview' : '▶ Play animated solution'}</div>
+                <div class="example-play">▶ Play animated solution</div>
               </div>`;
-            card.addEventListener('click', () => {
-              if (locked) onLocked?.();
-              else onOpen?.(nb.id);
-            });
+            card.addEventListener('click', () => onOpen?.(nb.id));
             grid.appendChild(card);
           });
         }

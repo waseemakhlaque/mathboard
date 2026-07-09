@@ -1,7 +1,7 @@
 // sw.js — offline support.
 // Same-origin app files: network-first (always get the latest, fall back to cache offline).
 // Cross-origin CDN (jsPDF): cache-first (immutable, fine to pin).
-const CACHE = 'mathboard-v109';
+const CACHE = 'mathboard-v112';
 // NOTE: js/collab/* is intentionally NOT precached — collaboration is loaded only via dynamic
 // import() when collabAvailable() is true, so the offline solo app never fetches it.
 const ASSETS = [
@@ -55,6 +55,9 @@ const ASSETS = [
   './js/auth.js',
   './js/theme.js',
   './js/entitlement.js',
+  './js/gate.js',
+  './js/adminPanel.js',
+  './js/papersLibrary.js',
   './js/onboarding.js',
   './js/installBanner.js',
   './js/storage.js',
@@ -140,6 +143,9 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.pathname.startsWith('/api/')) return; // RAG API: network-only, never cached
+  // Gated corpus (papers/books): session-checked at the Worker, PDFs stay out of
+  // the SW cache. catalog.json is public app data and keeps its offline copy.
+  if (url.pathname.startsWith('/content/') && url.pathname !== '/content/catalog.json') return;
   const sameOrigin = url.origin === self.location.origin;
 
   if (sameOrigin) {

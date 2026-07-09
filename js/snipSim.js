@@ -3,7 +3,7 @@
 
 import { LABS, defaultParams } from './anim/ragRoutes.js';
 import { mountAnimTool } from './ragSearch.js';
-import { hasPro, showPaywall } from './entitlement.js';
+import { authHeaders } from './auth.js';
 
 const MIN_SNIP_PX = 12;
 const MAX_SIDE = 1024;
@@ -110,15 +110,10 @@ export function openSimPicker(dataURL, prefill) {
 
 /** Phase 3: POST crop to /api/sim/resolve with vision + confidence. */
 export async function resolveSim(dataURL, hint) {
-  if (!hasPro?.()) {
-    showPaywall?.('snip-sim');
-    return;
-  }
-
   try {
     const res = await fetch('/api/sim/resolve', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ image: dataURL, hint }),
     });
     const data = await res.json();
