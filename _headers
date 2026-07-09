@@ -15,7 +15,7 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
-  X-Copyright: (c) 2026 Waseem Akhlaque. All rights reserved. Proprietary — see LICENSE.
+  X-Copyright: (c) 2026 Waseem Akhlaque. All rights reserved. Proprietary - see LICENSE.
 
 # Service worker must NEVER be cached, so updates roll out immediately.
 /sw.js

@@ -24,7 +24,15 @@
     "directory": ".",
     "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
-    "run_worker_first": ["/api/*"]
+    // /content/* (past papers, books) is served through the Worker so every
+    // request is checked for a valid Supabase session — never publicly.
+    "run_worker_first": ["/api/*", "/content/*"]
+  },
+  "vars": {
+    // Public identifiers only (the anon key ships in config.js anyway).
+    // Optional fast-path secret: npx wrangler secret put SUPABASE_JWT_SECRET
+    "SUPABASE_URL": "https://mjiuhdcxdllurizffvik.supabase.co",
+    "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qaXVoZGN4ZGxsdXJpemZmdmlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0OTg0NDAsImV4cCI6MjA5ODA3NDQ0MH0.YFdbJRYeaEXf25GdMvzTzJHx_Vl8R9EERAmdIyG3whQ"
   },
   "ai": { "binding": "AI", "remote": true },
   "vectorize": [{ "binding": "VECTORIZE", "index_name": "mathboard-rag", "remote": true }],

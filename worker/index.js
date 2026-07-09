@@ -52,15 +52,92 @@ async function handleUpsert(env, request, body) {
   return json({ ok: true, upserted: rows.length });
 }
 
-// Rate limiter: simple in-memory IP → count + timestamp.
+// Rate limiter: simple in-memory IP+bucket → count + timestamp.
 const rateLimits = new Map();
-function checkRateLimit(ip) {
+function checkRateLimit(ip, bucket = 'default', max = 10) {
+  const key = `${bucket}:${ip}`;
   const now = Date.now();
-  const entry = rateLimits.get(ip) || { count: 0, reset: now + 60000 };
-  if (now > entry.reset) return rateLimits.set(ip, { count: 1, reset: now + 60000 }), true;
-  if (entry.count >= 10) return false;
+  const entry = rateLimits.get(key) || { count: 0, reset: now + 60000 };
+  if (now > entry.reset) return rateLimits.set(key, { count: 1, reset: now + 60000 }), true;
+  if (entry.count >= max) return false;
   entry.count++;
   return true;
+}
+
+// ---- Supabase session verification -------------------------------------------
+// Accepts the JWT from Authorization: Bearer or ?token= (new-tab PDF links).
+// Fast path: HMAC-SHA256 verify with SUPABASE_JWT_SECRET (wrangler secret).
+// Fallback: GET /auth/v1/user once per token, cached in-memory until expiry.
+const sessionCache = new Map(); // token -> verified-until (ms)
+
+function b64urlToBytes(s) {
+  const pad = s.length % 4 ? '='.repeat(4 - (s.length % 4)) : '';
+  const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/') + pad);
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+
+function jwtPayload(token) {
+  try {
+    return JSON.parse(new TextDecoder().decode(b64urlToBytes(token.split('.')[1])));
+  } catch { return null; }
+}
+
+async function hmacVerify(secret, token) {
+  const [head, body, sig] = token.split('.');
+  if (!head || !body || !sig) return false;
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify'],
+  );
+  return crypto.subtle.verify('HMAC', key, b64urlToBytes(sig), new TextEncoder().encode(`${head}.${body}`));
+}
+
+async function verifySession(env, request, url) {
+  let token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+  if (!token) token = url.searchParams.get('token') || '';
+  if (!token || token.split('.').length !== 3) return false;
+
+  const payload = jwtPayload(token);
+  const expMs = (payload?.exp || 0) * 1000;
+  if (!expMs || expMs < Date.now()) return false;
+  if (payload.role !== 'authenticated') return false; // anon key is NOT a session
+
+  const cached = sessionCache.get(token);
+  if (cached && cached > Date.now()) return true;
+
+  let ok = false;
+  if (env.SUPABASE_JWT_SECRET) {
+    ok = await hmacVerify(env.SUPABASE_JWT_SECRET, token);
+  } else if (env.SUPABASE_URL && env.SUPABASE_ANON_KEY) {
+    const res = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+    });
+    ok = res.ok;
+  }
+  if (ok) {
+    if (sessionCache.size > 500) sessionCache.clear();
+    sessionCache.set(token, Math.min(expMs, Date.now() + 10 * 60000));
+  }
+  return ok;
+}
+
+// Gated static content (past papers / books) — copyrighted, session required.
+async function handleContent(env, request, url) {
+  if (request.method !== 'GET') return json({ error: 'GET only' }, 405);
+  // The Course Library taxonomy is app data, not copyrighted content.
+  if (url.pathname === '/content/catalog.json') return env.ASSETS.fetch(request);
+
+  const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+  if (!checkRateLimit(ip, 'content', 120)) return json({ error: 'rate limited' }, 429);
+  if (!(await verifySession(env, request, url))) return json({ error: 'sign in required' }, 401);
+
+  // Strip the token before hitting the asset layer.
+  const assetUrl = new URL(url.origin + url.pathname);
+  const res = await env.ASSETS.fetch(new Request(assetUrl, { method: 'GET' }));
+  if (!res.ok) return res;
+  const h = new Headers(res.headers);
+  h.set('Cache-Control', 'private, max-age=3600');
+  h.set('X-Robots-Tag', 'noindex, nofollow');
+  return new Response(res.body, { status: res.status, headers: h });
 }
 
 async function handleSimResolve(env, request, body) {
@@ -125,15 +202,21 @@ Reply with ONLY minified JSON: {"archetype":"mb-tag-name","params":{key:value,..
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname.startsWith('/content/')) return handleContent(env, request, url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     if (url.pathname === '/api/rag/health') return json({ ok: true });
     if (url.pathname === '/api/rag/query' && request.method === 'POST') {
+      // Corpus chunks contain copyrighted paper text — session required.
+      const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+      if (!checkRateLimit(ip, 'query', 30)) return json({ error: 'rate limited' }, 429);
+      if (!(await verifySession(env, request, url))) return json({ error: 'sign in required' }, 401);
       return handleQuery(env, await request.json());
     }
     if (url.pathname === '/api/rag/upsert' && request.method === 'POST') {
       return handleUpsert(env, request, await request.json());
     }
     if (url.pathname === '/api/sim/resolve' && request.method === 'POST') {
+      if (!(await verifySession(env, request, url))) return json({ error: 'sign in required' }, 401);
       return handleSimResolve(env, request, await request.json().catch(() => ({})));
     }
     return json({ error: 'not found' }, 404);
