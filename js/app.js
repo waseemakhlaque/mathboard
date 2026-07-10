@@ -2800,11 +2800,13 @@ const coarsePointer = () => window.matchMedia?.('(pointer: coarse)')?.matches ??
 
 function mathKeyboardEl() {
   const vk = mathVirtualKeyboard();
-  const el = document.querySelector('body > .ML__keyboard') || document.querySelector('.ML__keyboard');
-  if (!el) return null;
-  if (vk?.visible || el.classList.contains('is-visible')) return el;
-  const h = el.getBoundingClientRect().height;
-  return h > 48 ? el : null;
+  const container = document.querySelector('body > .ML__keyboard') || document.querySelector('.ML__keyboard');
+  if (!container) return null;
+  if (!(vk?.visible || container.classList.contains('is-visible'))) return null;
+  // The .ML__keyboard container is a full-viewport fixed layer (top 0, height
+  // 100%); the visible keys live in .MLK__backdrop. Measuring the container
+  // put the Done/Hide dock at the top of the screen and squashed the calc.
+  return container.querySelector('.MLK__backdrop') || container;
 }
 
 function showMathKeyboard() {
@@ -2863,7 +2865,9 @@ function syncCalcAboveKeyboard() {
   const kbd = mathKeyboardEl();
   if (calcOpen && kbd) {
     const kr = kbd.getBoundingClientRect();
-    const kbdTop = kr.top;
+    // Clamp: never let the dock ride above the status bar or below the screen
+    // (the plate animates in from the bottom, so early reads can be odd).
+    const kbdTop = Math.max(120, Math.min(kr.top, window.innerHeight));
     const dockH = dock?.offsetHeight || 64;
     calc.classList.add('calc-vk-active', 'calc-kbd-open');
     calc.style.position = 'fixed';
