@@ -5,6 +5,16 @@
   "name": "mathboard",
   "compatibility_date": "2026-06-27",
   "main": "worker/index.js",
+  // Production domain — Cloudflare creates DNS + SSL for these automatically.
+  // workers_dev keeps the old mathboard.waseemakhlaque85.workers.dev URL alive:
+  // notebooks live in per-origin IndexedDB, so anyone who used the old URL must
+  // export their lessons there and import them on waseemonline.com before this
+  // is flipped to false.
+  "workers_dev": true,
+  "routes": [
+    { "pattern": "waseemonline.com", "custom_domain": true },
+    { "pattern": "www.waseemonline.com", "custom_domain": true }
+  ],
   "assets": {
     // Serve the whole repo root. `.assetsignore` keeps internal source
     // (docs, supabase/, collab-server/, worker/, .git, node_modules) out of

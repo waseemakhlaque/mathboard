@@ -3,9 +3,12 @@
   "name": "mathboard-collab",
   "main": "src/index.js",
   "compatibility_date": "2026-06-27",
+  "routes": [{ "pattern": "collab.waseemonline.com", "custom_domain": true }],
   "durable_objects": {
     "bindings": [{ "name": "YJS_ROOM", "class_name": "YjsRoom" }]
   },
-  "migrations": [{ "tag": "v1", "new_classes": ["YjsRoom"] }],
+  // SQLite-backed DO (Cloudflare no longer allows new KV-backed namespaces;
+  // same ctx.storage API, and SQLite-backed classes also work on the Free plan).
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["YjsRoom"] }],
   "observability": { "enabled": true }
 }
