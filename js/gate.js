@@ -3,7 +3,10 @@
 // Real enforcement is server-side (Worker JWT checks + Supabase RLS);
 // this module only decides which screen the visitor sees.
 
-import { isSignedIn, signInWithPassword, signOut, getAuthUser, getSupabaseUrl } from './auth.js';
+import {
+  isSignedIn, signInWithPassword, signOut, getAuthUser, getSupabaseUrl,
+  requestPasswordReset, updatePassword, consumeAuthRedirect,
+} from './auth.js';
 import { fetchProfile, isActive, getProfile, clearProfile } from './entitlement.js';
 
 const cfg = () => window.MB_CONFIG || {};
@@ -28,6 +31,10 @@ const STYLE = `
 #mb-gate button.gate-ghost { margin-top: 10px; padding: 8px; font-size: 13px; color: #475569;
   background: none; border: 0; cursor: pointer; text-decoration: underline; }
 #mb-gate .gate-err { color: #d23b3b; font-size: 13px; min-height: 18px; margin-top: 10px; }
+#mb-gate .gate-notice { background: #fef3c7; color: #92400e; border-radius: 8px; padding: 10px 12px;
+  font-size: 13px; margin-bottom: 8px; text-align: left; line-height: 1.4; }
+#mb-gate .gate-ok { background: #dcfce7; color: #166534; border-radius: 8px; padding: 10px 12px;
+  font-size: 13px; margin-top: 12px; text-align: left; line-height: 1.4; }
 #mb-gate .gate-contact { background: #f1f5f9; border-radius: 10px; padding: 12px; font-size: 14px;
   margin-top: 16px; line-height: 1.5; }
 `;
@@ -68,9 +75,10 @@ function teacherContact() {
   return `<div class="gate-contact">Contact ${c.brandTeacher || 'your teacher'} to activate your account.${phone}</div>`;
 }
 
-function renderSignIn() {
+function renderSignIn(notice = '') {
   const el = mount(`
     ${brandHeader()}
+    ${notice ? `<div class="gate-notice">${notice}</div>` : ''}
     <form id="gate-form">
       <label for="gate-email">Email</label>
       <input id="gate-email" type="email" autocomplete="username" required />
@@ -78,6 +86,7 @@ function renderSignIn() {
       <input id="gate-password" type="password" autocomplete="current-password" required />
       <div class="gate-err" id="gate-err" role="alert"></div>
       <button type="submit" class="gate-primary" id="gate-submit">Sign in</button>
+      <button type="button" class="gate-ghost" id="gate-forgot">Forgot password?</button>
     </form>`);
   const form = el.querySelector('#gate-form');
   const errEl = el.querySelector('#gate-err');
@@ -100,7 +109,78 @@ function renderSignIn() {
       btn.textContent = 'Sign in';
     }
   });
+  el.querySelector('#gate-forgot').addEventListener('click', () => renderForgotPassword());
   setTimeout(() => el.querySelector('#gate-email')?.focus(), 50);
+}
+
+function renderForgotPassword() {
+  const el = mount(`
+    ${brandHeader()}
+    <form id="gate-form">
+      <p class="gate-sub" style="margin-top:0">Enter your email and we'll send you a link to set a new password.</p>
+      <label for="gate-email">Email</label>
+      <input id="gate-email" type="email" autocomplete="username" required />
+      <div class="gate-err" id="gate-err" role="alert"></div>
+      <button type="submit" class="gate-primary" id="gate-submit">Send reset link</button>
+      <button type="button" class="gate-ghost" id="gate-back">Back to sign in</button>
+    </form>`);
+  const form = el.querySelector('#gate-form');
+  const errEl = el.querySelector('#gate-err');
+  const btn = el.querySelector('#gate-submit');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errEl.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    try {
+      await requestPasswordReset(el.querySelector('#gate-email').value.trim());
+      form.innerHTML = `<div class="gate-ok">Reset link sent. Open the email on <b>this device</b> and
+        click the link right away — it expires quickly and only works once.</div>
+        <button type="button" class="gate-ghost" id="gate-back">Back to sign in</button>`;
+      form.querySelector('#gate-back').addEventListener('click', () => renderSignIn());
+    } catch (err) {
+      errEl.textContent = err.message || 'Could not send reset email.';
+      btn.disabled = false;
+      btn.textContent = 'Send reset link';
+    }
+  });
+  el.querySelector('#gate-back')?.addEventListener('click', () => renderSignIn());
+  setTimeout(() => el.querySelector('#gate-email')?.focus(), 50);
+}
+
+function renderSetPassword() {
+  const el = mount(`
+    ${brandHeader()}
+    <form id="gate-form">
+      <p class="gate-sub" style="margin-top:0">Choose a new password for your account.</p>
+      <label for="gate-pass1">New password</label>
+      <input id="gate-pass1" type="password" autocomplete="new-password" minlength="6" required />
+      <label for="gate-pass2">Confirm new password</label>
+      <input id="gate-pass2" type="password" autocomplete="new-password" minlength="6" required />
+      <div class="gate-err" id="gate-err" role="alert"></div>
+      <button type="submit" class="gate-primary" id="gate-submit">Set new password</button>
+    </form>`);
+  const form = el.querySelector('#gate-form');
+  const errEl = el.querySelector('#gate-err');
+  const btn = el.querySelector('#gate-submit');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errEl.textContent = '';
+    const p1 = el.querySelector('#gate-pass1').value;
+    const p2 = el.querySelector('#gate-pass2').value;
+    if (p1 !== p2) { errEl.textContent = 'Passwords do not match.'; return; }
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    try {
+      await updatePassword(p1);
+      location.reload(); // clean boot with the new session
+    } catch (err) {
+      errEl.textContent = err.message || 'Could not update password.';
+      btn.disabled = false;
+      btn.textContent = 'Set new password';
+    }
+  });
+  setTimeout(() => el.querySelector('#gate-pass1')?.focus(), 50);
 }
 
 function renderNoAccess() {
@@ -135,6 +215,16 @@ export async function ensureAccess() {
     // Local dev without config: let the developer in, loudly.
     console.warn('gate: supabaseUrl missing — access gate disabled.');
     return true;
+  }
+  const redirect = consumeAuthRedirect();
+  if (redirect?.kind === 'error' && !isSignedIn()) {
+    renderSignIn('That link has expired or was already used. Sign in below, or tap '
+      + '"Forgot password?" to get a fresh link — then open it right away.');
+    return false;
+  }
+  if (redirect?.kind === 'recovery') {
+    renderSetPassword();
+    return false;
   }
   if (!isSignedIn()) {
     renderSignIn();

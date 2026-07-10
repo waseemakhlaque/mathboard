@@ -111,6 +111,67 @@ export async function signInWithPassword(email, password) {
   return data;
 }
 
+/** Send a password-reset email. The link returns to this page. */
+export async function requestPasswordReset(email) {
+  const url = getSupabaseUrl();
+  const key = getSupabaseAnonKey();
+  if (!url || !key) throw new Error('Set supabaseUrl and supabaseAnonKey in config.js first.');
+  const redirectTo = encodeURIComponent(location.origin + location.pathname);
+  const res = await fetch(`${url}/auth/v1/recover?redirect_to=${redirectTo}`, {
+    method: 'POST',
+    headers: { apikey: key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error_description || data.msg || data.message || 'Could not send reset email.');
+  }
+}
+
+/** Set a new password for the currently signed-in session. */
+export async function updatePassword(newPassword) {
+  const url = getSupabaseUrl();
+  const key = getSupabaseAnonKey();
+  const token = getAccessToken();
+  if (!token) throw new Error('Reset session expired. Request a new link.');
+  const res = await fetch(`${url}/auth/v1/user`, {
+    method: 'PUT',
+    headers: { apikey: key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: newPassword }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error_description || data.msg || data.message || 'Could not update password.');
+  try { localStorage.setItem(USER_KEY, JSON.stringify(data)); } catch { /* ok */ }
+  return data;
+}
+
+/**
+ * Handle a Supabase auth redirect in the URL hash (recovery links, errors).
+ * Consumes the hash so reloads don't re-trigger. Returns:
+ *   null                              — no auth params in the URL
+ *   { kind: 'error', description }   — expired/invalid link
+ *   { kind: 'recovery' }             — valid recovery session (tokens saved)
+ *   { kind: 'signin' }               — other token redirect (tokens saved)
+ */
+export function consumeAuthRedirect() {
+  const hash = (location.hash || '').replace(/^#\/?/, '');
+  if (!hash) return null;
+  const params = new URLSearchParams(hash);
+  const error = params.get('error');
+  const accessToken = params.get('access_token');
+  if (!error && !accessToken) return null;
+  history.replaceState(null, '', location.pathname + location.search);
+  if (error) {
+    const desc = (params.get('error_description') || '').replace(/\+/g, ' ');
+    return { kind: 'error', code: params.get('error_code') || error, description: desc };
+  }
+  saveSession({
+    access_token: accessToken,
+    refresh_token: params.get('refresh_token') || '',
+  });
+  return { kind: params.get('type') === 'recovery' ? 'recovery' : 'signin' };
+}
+
 export async function signOut() {
   const url = getSupabaseUrl();
   const key = getSupabaseAnonKey();
