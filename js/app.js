@@ -2839,6 +2839,22 @@ function hideMathKeyboard() {
   scheduleCalcKeyboardSync();
 }
 
+// iPad: focusing a math-field makes iOS pan the page toward its hidden input;
+// every fixed layer (MathLive keyboard, docks, calc) then draws lower than its
+// touch targets and taps land one key row off. The editor never scrolls, so
+// pin the page back whenever the math keyboard is up.
+function pinViewportForMathKeyboard() {
+  if (!mathKeyboardEl()) return;
+  if (window.scrollY || document.documentElement.scrollTop || document.body.scrollTop) {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }
+}
+window.visualViewport?.addEventListener('scroll', pinViewportForMathKeyboard);
+window.visualViewport?.addEventListener('resize', pinViewportForMathKeyboard);
+window.addEventListener('scroll', pinViewportForMathKeyboard, { passive: true });
+
 // Lift calculator + pin a fixed Done bar directly above the MathLive keyboard.
 let calcKbdSyncT = 0;
 let calcKbdPoll = 0;
@@ -2859,6 +2875,7 @@ function stopCalcKbdPoll() {
   calcKbdPoll = 0;
 }
 function syncCalcAboveKeyboard() {
+  pinViewportForMathKeyboard();
   const calc = $('#calc');
   const dock = $('#calc-vk-dock');
   const calcOpen = calc && !calc.classList.contains('hidden');
@@ -2965,7 +2982,7 @@ function setupEqEditor() {
   $('#eq-done')?.addEventListener('click', commitEquationEditor);
   $('#eq-cancel')?.addEventListener('click', cancelEquationEditor);
   $('#eq-kbd-toggle')?.addEventListener('click', () => {
-    eqField?.focus();
+    eqField?.focus({ preventScroll: true });
     const vk = mathVirtualKeyboard();
     if (vk?.visible) vk.hide({ animate: true });
     else showMathKeyboard();
@@ -2978,7 +2995,7 @@ function insertEqSnippet(latex) {
     if (typeof eqField.executeCommand === 'function') eqField.executeCommand(['insert', latex]);
     else eqField.value = (eqField.value || '') + latex;
   } catch (_) { eqField.value = (eqField.value || '') + latex; }
-  eqField.focus();
+  eqField.focus({ preventScroll: true });
   showMathKeyboard();
 }
 
@@ -2991,7 +3008,7 @@ function openEquationEditor(o) {
   mark();
   requestAnimationFrame(() => {
     eqField?.setValue?.(o.latex || '');
-    eqField?.focus();
+    eqField?.focus({ preventScroll: true });
     showMathKeyboard();
   });
 }
@@ -4385,7 +4402,7 @@ function calcReset() {
   $('#calc-shift-ind')?.classList.remove('on'); $('#calc-alpha-ind')?.classList.remove('on');
   $('#calc-mode-menu')?.classList.add('hidden');
   showCalcView('keys');
-  calcExprEl()?.focus();
+  calcExprEl()?.focus({ preventScroll: true });
 }
 function toggleModeMenu() { $('#calc-mode-menu')?.classList.toggle('hidden'); }
 function setCalcMode(m) {
@@ -4886,7 +4903,7 @@ function setupCalculator() {
       const mf = calcExprEl();
       // iPad: don't auto-open the math keyboard — faceplate keys work; tap expr or ⌨ to open.
       if (!coarsePointer()) {
-        mf?.focus();
+        mf?.focus({ preventScroll: true });
         setTimeout(() => showMathKeyboard(), 80);
       }
     } else {
@@ -4914,7 +4931,7 @@ function setupCalculator() {
     if (vk?.visible) {
       hideMathKeyboard();
     } else {
-      calcExprEl()?.focus();
+      calcExprEl()?.focus({ preventScroll: true });
       showMathKeyboard();
     }
   });
