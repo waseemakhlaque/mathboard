@@ -2630,14 +2630,22 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 .ct-in {
   width: 100%;
   box-sizing: border-box;
-  background: #11161d;
+  background: var(--surface);
   color: var(--text);
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 8px 10px;
   font-family: 'SF Mono', 'Fira Code', monospace;
   font-size: 14px;
   margin-bottom: 8px;
+}
+
+/* Calculator faceplate is always dark — its inputs keep the dark screen look,
+   with explicit light text so they read in the light theme too. */
+.calc .ct-in {
+  background: #11161d;
+  color: #e8ecf1;
+  border-color: var(--line);
 }
 
 .ct-row3 { display: flex; gap: 8px; }
@@ -2686,7 +2694,7 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 .mx-block { margin-bottom: 10px; }
 .mx-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .mx-row3 { display: flex; gap: 4px; }
-.mx-in { width: 100%; box-sizing: border-box; background: #11161d; color: var(--text); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 7px 9px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 14px; text-align: center; }
+.mx-in { width: 100%; box-sizing: border-box; background: #11161d; color: #e8ecf1; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 7px 9px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 14px; text-align: center; }
 .mx-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 .mx-btns .ck { flex: 1; min-width: 50px; padding: 9px 0; font-size: 13px; }
 .mx-mat { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 14px; white-space: pre; line-height: 1.6; }

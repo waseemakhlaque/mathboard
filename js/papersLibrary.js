@@ -92,7 +92,7 @@ function row(title, badge, dir, file, msgEl, { dim = false, note = '' } = {}) {
 }
 
 function renderPapersTab(body, msgEl) {
-  const m = manifest;
+  const m = { components: {}, papers: [], ...manifest };
   const comps = Object.keys(m.components).filter((c) => m.papers.some((p) => p.c === c));
   const years = [...new Set(m.papers.map((p) => p.y))].sort((a, b) => b - a);
   body.innerHTML = `
@@ -128,10 +128,10 @@ function renderBooksTab(body, msgEl) {
   const m = manifest;
   body.innerHTML = '<div class="pl-list" id="pl-list"></div>';
   const list = body.querySelector('#pl-list');
-  for (const b of m.books) {
+  for (const b of m.books || []) {
     list.appendChild(row(`${b.title}`, `${b.comp} · ${b.mb} MB`, 'books', b.f, msgEl));
   }
-  for (const x of m.extras) {
+  for (const x of m.extras || []) {
     list.appendChild(row(x.title, 'syllabus / formulae', 'extras', x.f, msgEl));
   }
   for (const t of m.tooLarge || []) {
@@ -178,24 +178,28 @@ function ensureDialog() {
   return dlg;
 }
 
-function renderBody(dlg) {
+async function renderBody(dlg) {
   const body = dlg.querySelector('#pl-body');
   const msgEl = dlg.querySelector('#pl-msg');
   msgEl.textContent = '';
-  if (tab === 'papers') renderPapersTab(body, msgEl);
-  else renderBooksTab(body, msgEl);
+  try {
+    // Tab clicks land here too — if the first manifest fetch failed, retry it
+    // instead of dereferencing null (the "m.books" crash).
+    if (!manifest) {
+      body.innerHTML = '<p class="muted">Loading…</p>';
+      await loadManifest();
+    }
+    if (tab === 'papers') renderPapersTab(body, msgEl);
+    else renderBooksTab(body, msgEl);
+  } catch (e) {
+    body.innerHTML = `<p class="pl-msg err">${esc(e.message)}</p>`;
+  }
 }
 
 async function openDialog() {
   const dlg = ensureDialog();
   dlg.classList.remove('hidden');
-  const body = dlg.querySelector('#pl-body');
-  try {
-    await loadManifest();
-    renderBody(dlg);
-  } catch (e) {
-    body.innerHTML = `<p class="pl-msg err">${esc(e.message)}</p>`;
-  }
+  renderBody(dlg);
 }
 
 /** Adds the "Past papers" button to the library header. */
