@@ -3976,10 +3976,18 @@ function resetPresentIdle() {
   }, PRESENT_IDLE_MS);
 }
 
+function syncPresentRailToggle(open) {
+  const t = $('#present-rail-toggle');
+  if (!t) return;
+  t.textContent = open ? '✕' : '✎';
+  t.title = open ? 'Hide drawing tools' : 'Show drawing tools';
+}
+
 function setPresentMode(on) {
   const ed = $('#editor');
   const rail = $('#tool-rail');
   ed.classList.toggle('present-mode', on);
+  syncPresentRailToggle(false); // rail always starts collapsed in present mode
   const btn = $('#present-toggle');
   btn.classList.toggle('brand-toggle-active', on);
   btn.textContent = on ? 'Exit' : 'Present';
@@ -4198,6 +4206,8 @@ function bindEditor() {
     const opening = rail.classList.contains('collapsed');
     rail.classList.toggle('collapsed', !opening);
     $('#editor')?.classList.toggle('present-rail-open', opening);
+    syncPresentRailToggle(opening);
+    resetPresentIdle();
   });
   $('#finger').onchange = (e) => { S.fingerDraw = e.target.checked; };
 

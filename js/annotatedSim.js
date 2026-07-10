@@ -2,6 +2,7 @@
 
 import { LABS, defaultParams, simByTag, detectLabFromSection } from './anim/ragRoutes.js';
 import { AnnotationSyncBridge, readLabState, parseLabelsFromObjects } from './annotationSync.js';
+import { toggleFullscreen, isFullscreen, onFullscreenChange } from './fullscreen.js';
 
 const PANEL_MIN_W = 280;
 const PANEL_MAX_W = 520;
@@ -203,11 +204,10 @@ export function setupAnnotatedSim(h) {
     saveState(currentLabTag, readLabState(activeLab, currentLabTag));
   });
   panelEl.querySelector('#annot-sim-fullscreen')?.addEventListener('click', () => {
-    if (document.fullscreenElement === panelEl) document.exitFullscreen();
-    else panelEl.requestFullscreen?.().catch(() => {});
+    panelEl.classList.toggle('is-fullscreen', toggleFullscreen(panelEl));
   });
-  document.addEventListener('fullscreenchange', () => {
-    panelEl?.classList.toggle('is-fullscreen', document.fullscreenElement === panelEl);
+  onFullscreenChange(() => {
+    panelEl?.classList.toggle('is-fullscreen', isFullscreen(panelEl));
   });
 
   // Resize handle (desktop: width; narrow: height via CSS class)

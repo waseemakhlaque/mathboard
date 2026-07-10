@@ -4,6 +4,7 @@
 
 import { animForTopic, LABS, defaultParams, simByTag } from './anim/ragRoutes.js';
 import { authHeaders } from './auth.js';
+import { toggleFullscreen } from './fullscreen.js';
 
 const RAG_RESULTS = 10;
 const COURSES = ['Pure Mathematics 3', 'Mechanics', 'Statistics', 'Pure Mathematics 1'];
@@ -80,13 +81,9 @@ export function mountAnimTool(tag, title, defaults) {
 
   // Setup dialog buttons
   pinBtn?.classList.add('hidden'); // Phase 4 enables this
-  fullscreenBtn?.addEventListener('click', () => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    } else {
-      dlg.requestFullscreen().catch(() => {});
-    }
-  });
+  // onclick (not addEventListener): this runs on every mount and stacked
+  // listeners would toggle fullscreen on+off in a single click.
+  if (fullscreenBtn) fullscreenBtn.onclick = () => toggleFullscreen(dlg);
 
   dlg.classList.remove('hidden');
   if (el instanceof HTMLElement && typeof el.play === 'function') el.play();

@@ -27,3 +27,4 @@ vendor/yjs/tests
 vendor/yjs/**/*.map
 vendor/**/.github
 qa-screenshots
+config.local.js

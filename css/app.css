@@ -1426,7 +1426,30 @@ button.ghost:hover {
   transform: scale(1.05);
 }
 
-#editor.present-mode.present-rail-open .present-rail-toggle { opacity: 0.4; }
+/* Keep the close toggle visible and tappable while the rail is open —
+   otherwise the idle fade strands the rail with no way to dismiss it.
+   The open rail (z-index 12) would cover the toggle's resting spot, so
+   slide it past the rail's right edge and stack it above. */
+#editor.present-mode.present-rail-open .present-rail-toggle {
+  opacity: 0.9;
+  pointer-events: auto;
+  left: calc(max(env(safe-area-inset-left), 12px) + 210px);
+  z-index: 13;
+}
+
+/* Rail tabs (Draw / Maths / Page) restyled for the dark present chrome. */
+#editor.present-mode .rail-head { border-color: rgba(255, 255, 255, 0.12); }
+#editor.present-mode .rail-head .tab-btn {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+#editor.present-mode .rail-head .tab-btn.active { background: #2566c8; color: #fff; }
+#editor.present-mode .rail-head .rail-icon {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  border-color: rgba(255, 255, 255, 0.12);
+}
 
 /* Legacy present-mode rules (kept for tool sizing) */
 #editor.present-mode .tbar-tools { padding-top: 12px; padding-bottom: 12px; }
@@ -1444,7 +1467,7 @@ button.ghost:hover {
   transition: opacity 0.3s ease-in;
 }
 #editor.present-mode:not(.present-idle-active) .toolbar,
-#editor.present-mode:not(.present-idle-active) .present-rail-toggle {
+#editor.present-mode:not(.present-idle-active):not(.present-rail-open) .present-rail-toggle {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.4s ease-out 0.1s;
@@ -2736,6 +2759,23 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 .rag-card-actions .rag-anim { background: var(--accent-light); }
 .anim-dialog { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(900px, 94vw); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-lg, 0 12px 40px rgba(0,0,0,.35)); z-index: 300; display: flex; flex-direction: column; max-height: 90vh; }
 .anim-dialog:fullscreen { top: 0; left: 0; transform: none; width: 100vw; max-height: 100vh; border-radius: 0; }
+
+/* Fullscreen fallback for browsers without the Fullscreen API (iPad PWA,
+   iPhone Safari) — js/fullscreen.js toggles this class instead. */
+.mb-fs-fallback {
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  transform: none !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  z-index: 100001 !important;
+}
 .anim-dialog .gp-head { display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .anim-main { display: flex; flex: 1; min-height: 0; overflow: hidden; }
 .anim-dialog #anim-host { flex: 1; padding: 12px; overflow: auto; }

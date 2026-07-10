@@ -1,6 +1,7 @@
 // studio/liveStudioView.js — Presentation Window Mode overlay
 
 import { initStudio, addObject, setChroma, clearAnnotations, teardownStudio } from './studioManager.js';
+import { toggleFullscreen, isFullscreen } from '../fullscreen.js';
 
 let open = false;
 let mgr = null;
@@ -22,13 +23,14 @@ export async function openStudio() {
     return;
   }
   const wrap = el.querySelector('.studio-wrap');
-  wrap?.requestFullscreen?.().catch(() => {});
+  if (wrap && !isFullscreen(wrap)) toggleFullscreen(wrap);
 }
 
 export function closeStudio() {
   const el = document.getElementById('studio');
   const btn = document.getElementById('studio-toggle');
-  if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  const wrap = el?.querySelector('.studio-wrap');
+  if (wrap && isFullscreen(wrap)) toggleFullscreen(wrap);
   teardownStudio();
   el?.classList.add('hidden');
   btn?.classList.remove('brand-toggle-active');

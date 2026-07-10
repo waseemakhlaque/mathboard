@@ -108,7 +108,7 @@
     <span id="sync-status" class="sync-status" title="Offline · saved on this device">● Local</span>
     · <button type="button" id="sync-settings-foot" class="sync-foot-link">Cloud sync</button>
     · Paginated notebook whiteboard · works offline · add to Home Screen on iPad
-    · <span id="mb-version" class="mb-version">v113</span>
+    · <span id="mb-version" class="mb-version">v114</span>
     · © 2026 Waseem Akhlaque
   </p>
 </section>
@@ -127,10 +127,10 @@
       <button id="redo" title="Redo (⇧⌘Z)">Redo</button>
       <button id="fit" title="Fit page">Fit</button>
       <button id="present-toggle" title="Present mode (F)">Present</button>
-      <div class="tbar-actions present-hide">
+      <div class="tbar-actions">
         <button id="demo-toggle" title="Live Demo animation bar">Demo</button>
-        <button id="collab-toggle" class="hidden" title="Live collaboration">Collaborate</button>
-        <button id="brand-toggle" title="Show/hide branding overlay">Brand</button>
+        <button id="collab-toggle" class="hidden present-hide" title="Live collaboration">Collaborate</button>
+        <button id="brand-toggle" class="present-hide" title="Show/hide branding overlay">Brand</button>
         <div class="panel-menu-wrap">
           <button type="button" id="panel-menu" title="Panels (P)">Panels ▾</button>
           <div id="panel-drop" class="panel-drop hidden" role="menu">
@@ -148,7 +148,7 @@
             <button type="button" data-panel="#studio" role="menuitem">AR Studio</button>
           </div>
         </div>
-        <div class="tbar-more-wrap panel-menu-wrap">
+        <div class="tbar-more-wrap panel-menu-wrap present-hide">
           <button type="button" id="tbar-more" title="More actions">More ▾</button>
           <div id="tbar-more-drop" class="panel-drop hidden" role="menu">
             <button type="button" id="share-lesson-more" role="menuitem">Share lesson</button>
@@ -185,7 +185,7 @@
   <!-- Classroom body: left tool rail + stage -->
   <div class="editor-main">
     <aside id="tool-rail" class="tool-rail tbar-tools">
-      <div class="rail-head present-hide">
+      <div class="rail-head">
         <button type="button" id="rail-pin" class="rail-icon" title="Pin / unpin toolbar">⇤</button>
         <div class="tabs">
           <button class="tab-btn active" data-tab="draw" title="Drawing tools">Draw</button>
