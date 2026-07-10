@@ -8,6 +8,7 @@
 .wrangler
 node_modules
 collab-server
+collab-worker
 worker
 .claude-state
 supabase
