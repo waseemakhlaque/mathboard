@@ -117,7 +117,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 112;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 118;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -2151,9 +2151,32 @@ function hasDeletableSelection() {
 }
 
 function updateDeleteSelBtn() {
+  const canDelete = hasDeletableSelection();
   const btn = $('#delete-selection');
-  if (!btn) return;
-  btn.classList.toggle('hidden', !hasDeletableSelection());
+  if (btn) btn.classList.toggle('hidden', !canDelete);
+  // Floating pill in the canvas — the rail button only exists on the Page tab
+  // and iPads have no Delete key, so this is the reachable path on touch.
+  const fb = $('#float-delete');
+  if (!fb) return;
+  fb.classList.toggle('hidden', !canDelete);
+  if (!canDelete) return;
+  const wrap = fb.parentElement;
+  const ww = wrap?.clientWidth || 0, wh = wrap?.clientHeight || 0;
+  const bw = fb.offsetWidth || 110, bh = fb.offsetHeight || 44;
+  let b = null;
+  if (S.selection?.strokes?.length || S.selection?.objects?.length) b = S.selection.bbox;
+  else if (S.selObj) b = objBBox(S.selObj);
+  else if (S.selStrokes.length) b = strokeBBox(S.selStrokes);
+  let x = ww / 2 - bw / 2, y = 14;   // fallback: top-centre (mech selections)
+  if (b) {
+    const sx = b.x * S.scale + S.offsetX, sy = b.y * S.scale + S.offsetY;
+    const sw = b.w * S.scale, sh = b.h * S.scale;
+    x = sx + sw / 2 - bw / 2;
+    y = sy - bh - 12;
+    if (y < 8) y = sy + sh + 12;     // selection touches the top edge → below it
+  }
+  fb.style.left = `${Math.max(8, Math.min(ww - bw - 8, x))}px`;
+  fb.style.top = `${Math.max(8, Math.min(wh - bh - 8, y))}px`;
 }
 
 function deleteSelection() {
@@ -2332,7 +2355,10 @@ function onDown(e) {
   }
   // Annotate-to-Animate: ink read-only while docked sim is live (two-finger pan still OK above)
   if (S.annotSimLocked) { mark(); return; }
-  if (!isDrawPointer(e) && !(e.pointerType === 'touch' && touchToolCanInteract())) { mark(); return; }
+  // Armed instruments (ruler/protractor/compass) place via canvas taps, but
+  // isDrawPointer() is false while one is armed — without the extra clause the
+  // early return ate every tap and the tools looked dead on iPad and desktop.
+  if (!isDrawPointer(e) && !(e.pointerType === 'touch' && touchToolCanInteract()) && !instToolActive()) { mark(); return; }
   const p = toPage(...cssArr(e));
 
   if (handleInstClick(p)) return;
@@ -2874,8 +2900,26 @@ function stopCalcKbdPoll() {
   clearInterval(calcKbdPoll);
   calcKbdPoll = 0;
 }
+// The equation dock is pinned to bottom:0 but the MathLive keyboard plate
+// (z-index 10050) slides over it — the math-field was fully covered and you
+// typed blind. Ride the dock on top of the keyboard instead.
+function syncEqDockAboveKeyboard() {
+  const dock = $('#eq-dock');
+  if (!dock) return;
+  const kbd = !dock.classList.contains('hidden') && mathKeyboardEl();
+  if (kbd) {
+    const kr = kbd.getBoundingClientRect();
+    const kbdTop = Math.max(120, Math.min(kr.top, window.innerHeight));
+    dock.style.bottom = `${Math.max(0, Math.ceil(window.innerHeight - kbdTop))}px`;
+    dock.classList.add('eq-kbd-open');
+  } else {
+    dock.style.bottom = '';
+    dock.classList.remove('eq-kbd-open');
+  }
+}
 function syncCalcAboveKeyboard() {
   pinViewportForMathKeyboard();
+  syncEqDockAboveKeyboard();
   const calc = $('#calc');
   const dock = $('#calc-vk-dock');
   const calcOpen = calc && !calc.classList.contains('hidden');
@@ -2979,6 +3023,11 @@ function setupEqEditor() {
   });
   // Do not commit on blur — iPad taps the virtual keyboard and would close the editor.
   eqField.addEventListener('focusin', () => showMathKeyboard());
+  // Track keyboard plate height changes (layer switches, rotation) so the dock
+  // stays glued above it; older MathLive builds without the event fall back to
+  // the interval poll started in openEquationEditor.
+  try { mathVirtualKeyboard()?.addEventListener?.('geometrychange', scheduleCalcKeyboardSync); } catch (_) {}
+  window.addEventListener('orientationchange', scheduleCalcKeyboardSync);
   $('#eq-done')?.addEventListener('click', commitEquationEditor);
   $('#eq-cancel')?.addEventListener('click', cancelEquationEditor);
   $('#eq-kbd-toggle')?.addEventListener('click', () => {
@@ -3004,6 +3053,7 @@ function openEquationEditor(o) {
   eqTarget = o;
   S.editingId = o.id;
   $('#eq-dock')?.classList.remove('hidden');
+  startCalcKbdPoll();
   eqField.value = o.latex || '';
   mark();
   requestAnimationFrame(() => {
@@ -3013,9 +3063,14 @@ function openEquationEditor(o) {
   });
 }
 
+function eqDockClosed() {
+  // The poll is shared with the calculator — keep it if the calc is still open.
+  if ($('#calc')?.classList.contains('hidden') !== false) stopCalcKbdPoll();
+}
 function commitEquationEditor() {
   if (!eqTarget || !eqField) return;
   hideMathKeyboard();
+  eqDockClosed();
   const latex = eqField.value || '';
   eqTarget.latex = latex;
   if (!latex.trim()) {
@@ -3034,6 +3089,7 @@ function commitEquationEditor() {
 function cancelEquationEditor() {
   if (!eqTarget) return;
   hideMathKeyboard();
+  eqDockClosed();
   if (!eqTarget.latex || !eqTarget.latex.trim()) {
     const i = objs().indexOf(eqTarget);
     if (i >= 0) objs().splice(i, 1);
@@ -4278,14 +4334,25 @@ function bindEditor() {
   $('#insert-img').onclick = () => $('#img-file').click();
   $('#clear-page').onclick = clearPage;
   $('#delete-selection')?.addEventListener('click', () => deleteSelection());
+  $('#float-delete')?.addEventListener('click', () => deleteSelection());
   $('#pdf-file').onchange = (e) => { const f = e.target.files[0]; if (f) insertPdfIntoNotebook(f); e.target.value = ''; };
   $('#img-file').onchange = (e) => { const f = e.target.files[0]; if (f) insertImageFile(f); e.target.value = ''; };
   document.querySelectorAll('[data-geo]').forEach((b) => {
     if (!b.dataset.geo) return;
     b.onclick = () => { setInstTool(null); setGeoTool(b.dataset.geo); setTab('maths'); };
   });
+  // Arming an instrument gives no visible feedback until the page is tapped —
+  // say what to tap so the tools don't feel broken on first use.
+  const INST_HINTS = {
+    ruler: 'Ruler: tap the two end points on the page',
+    protractor: 'Protractor: tap the vertex, then one point on each arm',
+    compass: 'Compass: tap the centre, then a point on the rim',
+  };
   document.querySelectorAll('[data-inst]').forEach((b) => {
-    b.onclick = () => { setGeoTool(null); setInstTool(b.dataset.inst); setTab('maths'); };
+    b.onclick = () => {
+      setGeoTool(null); setInstTool(b.dataset.inst); setTab('maths');
+      if (INST_HINTS[b.dataset.inst]) mbToast(INST_HINTS[b.dataset.inst]);
+    };
   });
   $('#geo-clear').onclick = async () => {
     if (await mbConfirm('Clear all geometry on this page?', { okText: 'Clear', danger: true, title: 'Clear geometry' })) clearGeoPage();
@@ -4371,7 +4438,7 @@ function bindCanvas() {
 
 // ---- fx-991-equivalent scientific calculator --------------------------------
 let calcDeg = true, calcAns = 0, mathFrac = null, calcShift = false, calcAlpha = false;
-let calcLastExpr = null, calcResultValue = null, calcDisplayMode = 0; // 0=D 1=frac 2=surd
+let calcLastExpr = null, calcResultValue = null, calcDisplayMode = 0; // 0=D 1=frac 2=mixed 3=surd
 let intgMode = 'integral';
 const calcVars = {};            // STO/RCL/ALPHA variables A–F, X, Y, M
 let stoPending = false, rclAlpha = false, hypPending = false;
@@ -4381,7 +4448,7 @@ const SHIFT_MAP = {
   'hyp': 'abs(', '*': 'permutations(', '/': 'combinations(', 'rcl': 'sto', 'mplus': 'mminus',
   'ran': 'ranint', 'ac': 'off', 'pol': 'rec', 'sum': 'prod',
 };
-const CALC_FMT = ['D', 'F', '√'];
+const CALC_FMT = ['D', 'F', 'ab/c', '√'];
 
 function showCalcView(view) {
   $('#calc-keys').classList.toggle('hidden', view !== 'keys');
@@ -4581,6 +4648,18 @@ function fracHtml(n, d) {
   if (d === 1) return String(n);
   return `<span class="c-frac"><span class="c-num">${n}</span><span class="c-bar"></span><span class="c-den">${d}</span></span>`;
 }
+// fx-991 "a b/c": improper fraction rendered as whole + proper part (7/3 → 2 1/3)
+function mixedHtml(n, d) {
+  if (!d) return String(n);
+  if (d < 0) { n = -n; d = -d; }
+  const g = gcd(n, d); n /= g; d /= g;
+  if (d === 1) return String(n);
+  const sign = n < 0 ? '−' : '';
+  const an = Math.abs(n);
+  const whole = Math.floor(an / d), rem = an % d;
+  if (!whole) return fracHtml(n, d);
+  return `${sign}${whole}&hairsp;${fracHtml(rem, d)}`;
+}
 function surdHtml(k, n) {
   const g = gcd(k, n); k /= g; n /= g;
   let out = '';
@@ -4621,13 +4700,15 @@ function calcFormatValue(val, mode) {
     }
     return rows.join('\n');
   }
-  if (mode === 1) {
+  if (mode === 1 || mode === 2) {
     try {
       const f = mathFrac.fraction(val);
-      if (f && Number.isFinite(f.n) && Number.isFinite(f.d)) return fracHtml(f.s * f.n, f.d);
+      if (f && Number.isFinite(f.n) && Number.isFinite(f.d)) {
+        return mode === 1 ? fracHtml(f.s * f.n, f.d) : mixedHtml(f.s * f.n, f.d);
+      }
     } catch (_) { /* decimal */ }
   }
-  if (mode === 2) {
+  if (mode === 3) {
     if (typeof val === 'number') {
       const s = trySurdDecimal(val);
       if (s) return s;
@@ -4750,9 +4831,11 @@ function calcEvaluate() {
     calcRenderResult();
   } catch (e) { $('#calc-result').textContent = 'Error'; }
 }
-function calcToggleSD() {
+function calcToggleSD(shift) {
   if (calcResultValue == null) return;
-  calcDisplayMode = (calcDisplayMode + 1) % CALC_FMT.length;
+  // SHIFT+S⇔D on the real fx-991 is a b/c ⇔ d/c: jump between mixed and improper.
+  if (shift) calcDisplayMode = calcDisplayMode === 2 ? 1 : 2;
+  else calcDisplayMode = (calcDisplayMode + 1) % CALC_FMT.length;
   calcRenderResult();
 }
 function calcRecall() {
@@ -4799,7 +4882,7 @@ function calcKey(k, el) {
   if (k === 'table') { showCalcView('table'); return; }
   if (k === 'calc') { if (sh) { alert('SOLVE: use the Graph or Calculus tools to solve / find roots.'); return; } calcRecall(); return; }
   if (k === 'eq') { calcEvaluate(); return; }
-  if (k === 'sd') { calcToggleSD(); return; }
+  if (k === 'sd') { calcToggleSD(sh); return; }
   if (k === 'rcl') { if (sh) { stoPending = true; $('#calc-history').textContent = 'STO _'; } else { rclAlpha = true; $('#calc-alpha-ind')?.classList.add('on'); } return; }
   if (k === 'mplus') { const v = Number(calcResultValue) || 0; calcVars.M = (Number(calcVars.M) || 0) + (sh ? -v : v); $('#calc-history').textContent = `M = ${calcVars.M}`; return; }
   let token = (k === 'ans') ? 'Ans' : k;

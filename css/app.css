@@ -1068,17 +1068,20 @@ button.ghost:hover {
 .demo-bar {
   position: fixed;
   left: 50%;
-  bottom: 18px;
+  bottom: max(18px, env(safe-area-inset-bottom));
   transform: translateX(-50%);
   z-index: 25;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;            /* iPad portrait/landscape: wrap instead of running off-screen */
+  justify-content: center;
+  max-width: calc(100vw - 16px);
   gap: 10px;
   padding: 8px 12px;
   background: rgba(31, 39, 51, 0.94);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: var(--radius-full);
+  border-radius: 18px;
   box-shadow: var(--shadow-xl);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -1450,6 +1453,27 @@ button.ghost:hover {
   color: #e2e8f0;
   border-color: rgba(255, 255, 255, 0.12);
 }
+/* The .tabs pill keeps its light background unless overridden — light text
+   on it was unreadable in present mode. */
+#editor.present-mode .rail-head .tabs { background: rgba(255, 255, 255, 0.06); }
+#editor.present-mode .rail-head .tab-btn:hover { background: rgba(255, 255, 255, 0.16); color: #fff; }
+
+/* Dropdown menus (Panels ▾ / More ▾) open on a light surface, but the
+   present-mode .tbar-top button rule paints their items #e2e8f0 — invisible.
+   Match the dropdown plate to the dark chrome instead. */
+#editor.present-mode .panel-drop {
+  background: rgba(15, 23, 42, 0.97);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+#editor.present-mode .panel-drop button {
+  background: transparent;
+  border-color: transparent;
+  color: #e2e8f0;
+}
+#editor.present-mode .panel-drop button:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
 
 /* Legacy present-mode rules (kept for tool sizing) */
 #editor.present-mode .tbar-tools { padding-top: 12px; padding-bottom: 12px; }
@@ -1499,16 +1523,27 @@ button.ghost:hover {
 /* P1: Laser pointer cursor */
 .cur-laser { cursor: none !important; }
 
-/* P2: Delete selection — visible in present mode with iPad-friendly size */
-#editor.present-mode #delete-selection:not(.hidden) {
-  display: inline-flex !important;
-  min-width: 52px;
-  min-height: 44px;
-  padding: 12px 16px;
-  font-size: 15px;
+/* Floating Delete pill — follows the selection so touch users (no Delete key)
+   can always remove what they just selected, in any tab or present mode. */
+.float-delete {
+  position: absolute;
+  z-index: 9;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 10px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  background: #dc2626;
+  border: 1px solid #b91c1c;
+  border-radius: var(--radius-full);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  touch-action: manipulation;
 }
+.float-delete:hover { background: #b91c1c; }
+.float-delete.hidden { display: none; }
 
 /* ---------- Panel Menu ---------- */
 .panel-menu-wrap { position: relative; display: none; }
@@ -1862,6 +1897,12 @@ select:focus {
 }
 
 .eq-dock.hidden { display: none !important; }
+
+/* While the MathLive keyboard (z-index 10050) is up, JS lifts the dock to sit
+   directly above it; collapse the symbol palette so the field stays on screen —
+   the keyboard has its own symbol layers. */
+.eq-dock.eq-kbd-open .eq-symbols,
+.eq-dock.eq-kbd-open .eq-dock-hint { display: none; }
 
 .eq-dock-head {
   display: flex;
