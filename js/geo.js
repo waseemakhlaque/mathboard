@@ -61,6 +61,12 @@ export function teardownGeo() {
   }
   board = null;
   boardPageId = null;
+  // Drop any in-progress construction: its points belong to the freed board,
+  // and feeding them to board.create() on the next board throws
+  // "Can't create line with parent types 'object' and 'object'".
+  pend = [];
+  previewLine = null;
+  geoEditing = false;
   const inner = document.getElementById('geo-inner');
   if (inner) inner.innerHTML = '';
 }
@@ -150,9 +156,16 @@ function finishGeoEdit() {
   hooks.mark?.();
 }
 
+// el.parents entries are id strings in current JSXGraph, but tolerate objects too.
+function parentId(p) { return typeof p === 'string' ? p : p?.id; }
+
 function dumpGeoItems() {
   const pg = page();
   if (!pg || !board) return;
+  // Never write this board's contents into a different page: after structural
+  // page changes the current page can briefly diverge from the mounted board,
+  // and dumping then copied one page's geometry into another.
+  if (boardPageId !== pg.id) return;
   const items = [];
   const seen = new Set();
   for (const el of Object.values(board.objects)) {
@@ -160,6 +173,9 @@ function dumpGeoItems() {
     if (el.isDraggable === false && el.elementClass !== 1) continue;
     const t = el.elType;
     if (t === 'point' && el.X && !seen.has(el.id)) {
+      // Unnamed points are composite internals (e.g. a perpendicular's defining
+      // points) — user-created points always get a letter name.
+      if (!el.name) continue;
       seen.add(el.id);
       items.push({ t: 'point', id: el.id, x: el.X(), y: el.Y(), name: el.name || '' });
     }
@@ -167,22 +183,24 @@ function dumpGeoItems() {
   // lines, circles, etc. — store by parent point ids
   for (const el of Object.values(board.objects)) {
     if (!el || !el.elType || el.mbConstruct) continue;
+    const hidden = el.visProp && el.visProp.visible === false ? true : undefined;
+    const dash = el.visProp && el.visProp.dash ? el.visProp.dash : undefined;
     if (el.elType === 'segment' && el.point1 && el.point2) {
-      items.push({ t: 'segment', p1: el.point1.id, p2: el.point2.id });
+      items.push({ t: 'segment', id: el.id, p1: el.point1.id, p2: el.point2.id, hidden, dash });
     } else if (el.elType === 'line' && el.point1 && el.point2) {
-      items.push({ t: 'line', p1: el.point1.id, p2: el.point2.id });
+      items.push({ t: 'line', id: el.id, p1: el.point1.id, p2: el.point2.id, hidden, dash });
     } else if (el.elType === 'circle' && el.center && el.point2) {
       items.push({ t: 'circle', c: el.center.id, r: el.point2.id });
     } else if (el.elType === 'ellipse' && el.parents?.length >= 3) {
-      items.push({ t: 'ellipse', p1: el.parents[0].id, p2: el.parents[1].id, p3: el.parents[2].id });
+      items.push({ t: 'ellipse', p1: parentId(el.parents[0]), p2: parentId(el.parents[1]), p3: parentId(el.parents[2]) });
     } else if (el.elType === 'polygon' && el.vertices?.length >= 3) {
       items.push({ t: 'polygon', verts: el.vertices.map((v) => v.id) });
     } else if (el.elType === 'angle' && el.point1 && el.point2 && el.point3) {
       items.push({ t: 'angle', p1: el.point1.id, p2: el.point2.id, p3: el.point3.id });
     } else if (el.elType === 'perpendicular' && el.parents?.length >= 2) {
-      items.push({ t: 'perp', line: el.parents[0].id, pt: el.parents[1].id });
+      items.push({ t: 'perp', line: parentId(el.parents[0]), pt: parentId(el.parents[1]) });
     } else if (el.elType === 'parallel' && el.parents?.length >= 2) {
-      items.push({ t: 'parallel', line: el.parents[0].id, pt: el.parents[1].id });
+      items.push({ t: 'parallel', line: parentId(el.parents[0]), pt: parentId(el.parents[1]) });
     }
   }
   pg.geoItems = items;
@@ -197,9 +215,21 @@ function rebuildGeo(pg) {
       map[it.id] = board.create('point', [it.x, it.y], { ...ptAttr, name: it.name || '', id: it.id });
     }
   }
+  const lineAttr = (it) => ({
+    ...geoAttr,
+    ...(it.id ? { id: it.id } : {}),
+    ...(it.hidden ? { visible: false } : {}),
+    ...(it.dash ? { dash: it.dash, strokeOpacity: 0.55 } : {}),
+  });
   for (const it of pg.geoItems) {
-    if (it.t === 'segment' && map[it.p1] && map[it.p2]) board.create('segment', [map[it.p1], map[it.p2]], geoAttr);
-    else if (it.t === 'line' && map[it.p1] && map[it.p2]) board.create('line', [map[it.p1], map[it.p2]], geoAttr);
+    if (it.t === 'segment' && map[it.p1] && map[it.p2]) {
+      const s = board.create('segment', [map[it.p1], map[it.p2]], lineAttr(it));
+      if (it.id) map[it.id] = s;
+    }
+    else if (it.t === 'line' && map[it.p1] && map[it.p2]) {
+      const l = board.create('line', [map[it.p1], map[it.p2]], lineAttr(it));
+      if (it.id) map[it.id] = l;
+    }
     else if (it.t === 'circle' && map[it.c] && map[it.r]) board.create('circle', [map[it.c], map[it.r]], geoAttr);
     else if (it.t === 'ellipse' && map[it.p1] && map[it.p2] && map[it.p3]) board.create('ellipse', [map[it.p1], map[it.p2], map[it.p3]], geoAttr);
     else if (it.t === 'polygon' && it.verts?.length >= 3 && it.verts.every((id) => map[id])) {
@@ -212,11 +242,11 @@ function rebuildGeo(pg) {
     else if (it.t === 'angle' && map[it.p1] && map[it.p2] && map[it.p3]) {
       board.create('angle', [map[it.p1], map[it.p2], map[it.p3]], { ...geoAttr, radius: 1.8, withLabel: true, name: '' });
     } else if (it.t === 'perp') {
-      const line = board.objects[it.line];
+      const line = map[it.line] || board.objects[it.line];
       const pt = map[it.pt];
       if (line && pt) board.create('perpendicular', [line, pt], geoAttr);
     } else if (it.t === 'parallel') {
-      const line = board.objects[it.line];
+      const line = map[it.line] || board.objects[it.line];
       const pt = map[it.pt];
       if (line && pt) board.create('parallel', [line, pt], geoAttr);
     }
@@ -268,7 +298,9 @@ export function loadGeoPage(pg) {
   });
   rebuildGeo(pg);
   board.on('up', () => {
-    if (geoTool) return;
+    // 'move' drags points around — commit those edits like tool-less drags,
+    // otherwise they were silently lost on the next page switch.
+    if (geoTool && geoTool !== 'move') return;
     startGeoEdit();
     dumpGeoItems();
     finishGeoEdit();
@@ -285,9 +317,12 @@ function clickCoords(e) {
 }
 
 function handleGeoClick(e) {
+  const t = geoTool;
+  // Move mode: JSXGraph's own drag handling moves the points; the 'up' handler
+  // commits. Starting an edit here left geoEditing dangling forever.
+  if (t === 'move') return;
   const p = clickCoords(e);
   if (!pend.length) startGeoEdit();
-  const t = geoTool;
   if (t === 'point') {
     mkPoint(p.x, p.y);
     finishGeoEdit();
@@ -369,7 +404,9 @@ function handleGeoClick(e) {
     }
     if (pend.length === 1) {
       pend.push(mkPoint(p.x, p.y));
-      const line = board.create('line', [pend[0], pend[1]], { ...geoAttr, visible: false });
+      // Keep the base line visible (dashed): an invisible line made the tool
+      // look dead after two clicks, and it reappeared solid after a reload.
+      const line = board.create('line', [pend[0], pend[1]], { ...geoAttr, dash: 2, strokeOpacity: 0.55 });
       pend.push(line);
       return;
     }
@@ -418,7 +455,7 @@ function handleGeoClick(e) {
   if (t === 'rotate') {
     if (pend.length < 2) { pend.push(mkPoint(p.x, p.y)); return; }
     const center = pend[0], anglePt = pend[1], target = mkPoint(p.x, p.y);
-    const ang = Math.atan2(anglePt.y - center.Y(), anglePt.x - center.X());
+    const ang = Math.atan2(anglePt.Y() - center.Y(), anglePt.X() - center.X());
     const rot = board.create('rotation', [target, center, ang], { ...ptAttr, name: labelName() });
     rot.mbConstruct = true;
     pend = [];

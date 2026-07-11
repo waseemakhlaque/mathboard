@@ -2049,12 +2049,12 @@ select:focus {
 
 .calc-vk-btn:active { filter: brightness(0.9); }
 
-/* Compact calculator while math keyboard is open — hide faceplate, show screen only */
+/* Compact calculator while math keyboard is open — hide the faceplate keys.
+   Sub views (TABLE / MATRIX / EQN / ∫dx) and the MODE menu stay visible: hiding
+   them locked the user out of those modes whenever the keyboard was up. */
 #calc.calc-vk-active .calc-ctl,
 #calc.calc-vk-active .calc-keys,
-#calc.calc-vk-active .calc-funcs,
-#calc.calc-vk-active .calc-mode-menu,
-#calc.calc-vk-active .calc-sub {
+#calc.calc-vk-active .calc-funcs {
   display: none !important;
 }
 

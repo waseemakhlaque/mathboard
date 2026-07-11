@@ -12,6 +12,25 @@ export function instToolActive() { return !!instTool; }
 export function selectedInstrument() { return selInst; }
 export function clearInstSelection() { selInst = null; instMove = null; }
 
+/** Bounding box of the selected instrument (page units), or null. */
+export function selectedInstBBox() {
+  return selInst ? instBBox(selInst) : null;
+}
+
+/** Delete the currently selected instrument (Select tool + Delete). */
+export function deleteSelectedInstrument() {
+  const pg = page();
+  if (!selInst || !pg?.instruments?.length) return false;
+  const i = pg.instruments.indexOf(selInst);
+  if (i < 0) { clearInstSelection(); return false; }
+  hooks.beginAction?.();
+  pg.instruments.splice(i, 1);
+  clearInstSelection();
+  hooks.commitAction?.();
+  hooks.mark?.();
+  return true;
+}
+
 export function setInstTool(tool) {
   pend = [];
   instTool = tool || null;
@@ -39,7 +58,7 @@ export function snapToRuler(p, tol = 12) {
   if (!pg?.instruments?.length) return p;
   let best = null, bestD = tol * tol;
   for (const it of pg.instruments) {
-    if (it.kind !== 'ruler') continue;
+    if (it.kind !== 'ruler' || !it.a || !it.b) continue;
     const q = projSeg(p, it.a, it.b);
     const d = dist2(p, q);
     if (d < bestD) { bestD = d; best = q; }
@@ -58,14 +77,14 @@ function projSeg(p, a, b) {
 }
 
 function instBBox(it) {
-  if (it.kind === 'ruler') {
+  if (it.kind === 'ruler' && it.a && it.b) {
     const x0 = Math.min(it.a.x, it.b.x) - 20, y0 = Math.min(it.a.y, it.b.y) - 20;
     return { x: x0, y: y0, w: Math.abs(it.b.x - it.a.x) + 40, h: Math.abs(it.b.y - it.a.y) + 40 };
   }
-  if (it.kind === 'protractor') {
+  if (it.kind === 'protractor' && it.vertex) {
     return { x: it.vertex.x - 50, y: it.vertex.y - 50, w: 100, h: 100 };
   }
-  if (it.kind === 'compass') {
+  if (it.kind === 'compass' && it.center) {
     return { x: it.center.x - it.r - 10, y: it.center.y - it.r - 10, w: 2 * it.r + 20, h: 2 * it.r + 20 };
   }
   return { x: 0, y: 0, w: 0, h: 0 };
@@ -166,9 +185,10 @@ function angleDeg(a, v, b) {
 
 export function drawInstruments(c, pg) {
   for (const it of pg.instruments || []) {
-    if (it.kind === 'ruler') drawRuler(c, it, it === selInst);
-    else if (it.kind === 'protractor') drawProtractor(c, it, it === selInst);
-    else if (it.kind === 'compass') drawCompass(c, it, it === selInst);
+    // Skip malformed items (older saves / interrupted edits) instead of crashing the render loop.
+    if (it.kind === 'ruler' && it.a && it.b) drawRuler(c, it, it === selInst);
+    else if (it.kind === 'protractor' && it.vertex && it.arm1 && it.arm2) drawProtractor(c, it, it === selInst);
+    else if (it.kind === 'compass' && it.center && isFinite(it.r)) drawCompass(c, it, it === selInst);
   }
   if (instTool && pend.length) drawPreview(c);
 }

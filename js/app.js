@@ -39,6 +39,7 @@ import {
 import {
   setupInstruments, setInstTool, instToolActive, handleInstClick, drawInstruments,
   snapToRuler, hitInstrument, beginInstMove, moveInst, endInstMove, clearInstSelection,
+  selectedInstrument, selectedInstBBox, deleteSelectedInstrument,
 } from './instruments.js';
 import {
   storeDataUrl, resolveMediaUrl, migrateNotebookMedia, cachedMediaUrl, setCachedUrl,
@@ -117,7 +118,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 119;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 120;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -2147,7 +2148,7 @@ function hitStroke(p) {                    // topmost ink stroke under p (or nul
   return null;
 }
 function hasDeletableSelection() {
-  return !!(S.selObj || S.selStrokes.length || selectedMechItem() || S.selection?.strokes?.length || S.selection?.objects?.length);
+  return !!(S.selObj || S.selStrokes.length || selectedMechItem() || selectedInstrument() || S.selection?.strokes?.length || S.selection?.objects?.length);
 }
 
 function updateDeleteSelBtn() {
@@ -2167,6 +2168,7 @@ function updateDeleteSelBtn() {
   if (S.selection?.strokes?.length || S.selection?.objects?.length) b = S.selection.bbox;
   else if (S.selObj) b = objBBox(S.selObj);
   else if (S.selStrokes.length) b = strokeBBox(S.selStrokes);
+  else if (selectedInstrument()) b = selectedInstBBox();
   let x = ww / 2 - bw / 2, y = 14;   // fallback: top-centre (mech selections)
   if (b) {
     const sx = b.x * S.scale + S.offsetX, sy = b.y * S.scale + S.offsetY;
@@ -2196,6 +2198,11 @@ function deleteSelection() {
     clearSelection();
     commitAction();
     mark();
+    return;
+  }
+  if (selectedInstrument()) {
+    // Instruments manage their own begin/commit via hooks.
+    deleteSelectedInstrument();
     return;
   }
   if (!S.selObj && !S.selStrokes.length && !selectedMechItem()) return;
@@ -2564,6 +2571,7 @@ function onMove(e) {
     mark(); return;
   }
   if (S.moving) {
+    if (!S.selection) { S.moving = null; return; }
     const p = toPage(...cssArr(e));
     const dx = p.x - S.moving.lastX, dy = p.y - S.moving.lastY;
     for (const s of (S.selection.strokes || [])) for (const pt of s.points) { pt.x += dx; pt.y += dy; }
@@ -3826,12 +3834,16 @@ function goToPage(i, opts = {}) {
 // Insert page(s) after current; wrapped for rule compliance, undo cleared (structural change).
 function addPagesAfterCurrent(items) {
   const arr = Array.isArray(items) ? items : [items];
+  flushGeo();
   beginAction();
   pages().splice(S.pageIndex + 1, 0, ...arr);
   S.pageIndex += 1;
   commitAction();
   S.undo = []; S.redo = [];
   clearSelection();
+  // Remount the geometry board for the new page — leaving the old page's board
+  // live here made later dumps copy its geometry into the new page.
+  teardownGeo(); loadGeoPage(page());
   updatePageLabel();
   persist();
   mark();
@@ -4339,7 +4351,13 @@ function bindEditor() {
   $('#img-file').onchange = (e) => { const f = e.target.files[0]; if (f) insertImageFile(f); e.target.value = ''; };
   document.querySelectorAll('[data-geo]').forEach((b) => {
     if (!b.dataset.geo) return;
-    b.onclick = () => { setInstTool(null); setGeoTool(b.dataset.geo); setTab('maths'); };
+    // Second tap on the active tool disarms it (there's no other obvious "cancel").
+    b.onclick = () => {
+      const off = b.classList.contains('active');
+      setInstTool(null);
+      setGeoTool(off ? null : b.dataset.geo);
+      setTab('maths');
+    };
   });
   // Arming an instrument gives no visible feedback until the page is tapped —
   // say what to tap so the tools don't feel broken on first use.
@@ -4350,8 +4368,9 @@ function bindEditor() {
   };
   document.querySelectorAll('[data-inst]').forEach((b) => {
     b.onclick = () => {
-      setGeoTool(null); setInstTool(b.dataset.inst); setTab('maths');
-      if (INST_HINTS[b.dataset.inst]) mbToast(INST_HINTS[b.dataset.inst]);
+      const off = b.classList.contains('active');
+      setGeoTool(null); setInstTool(off ? null : b.dataset.inst); setTab('maths');
+      if (!off && INST_HINTS[b.dataset.inst]) mbToast(INST_HINTS[b.dataset.inst]);
     };
   });
   $('#geo-clear').onclick = async () => {
@@ -4383,7 +4402,8 @@ function bindEditor() {
     else if (e.key === 'z') setTool('plotz');
     else if (e.key === 't') setTool('text');
     else if (e.key === 'q') setTool('equation');
-    else if (e.key === 'Escape' && geoToolActive()) { cancelGeoDraft(); mark(); }
+    else if (e.key === 'Escape' && geoToolActive()) { cancelGeoDraft(); setGeoTool(null); mark(); }
+    else if (e.key === 'Escape' && instToolActive()) { setInstTool(null); mark(); }
     else if (e.key === 'Escape' && $('#editor')?.classList.contains('present-mode')) { e.preventDefault(); setPresentMode(false); }
     else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setPresentMode(!$('#editor').classList.contains('present-mode')); }
     else if ($('#editor')?.classList.contains('present-mode') && (e.key === 'ArrowLeft' || e.key === 'PageUp')) {
@@ -4469,7 +4489,7 @@ function calcReset() {
   $('#calc-shift-ind')?.classList.remove('on'); $('#calc-alpha-ind')?.classList.remove('on');
   $('#calc-mode-menu')?.classList.add('hidden');
   showCalcView('keys');
-  calcExprEl()?.focus({ preventScroll: true });
+  calcFocusExpr();
 }
 function toggleModeMenu() { $('#calc-mode-menu')?.classList.toggle('hidden'); }
 function setCalcMode(m) {
@@ -4736,6 +4756,17 @@ function calcRenderResult() {
   out.innerHTML = calcFormatValue(calcResultValue, calcDisplayMode);
 }
 function calcExprEl() { return $('#calc-expr'); }
+// Faceplate keys re-focus the expression field after every insert. That focus
+// must NOT open the MathLive keyboard: doing so switched the calculator into
+// compact "vk" mode and hid the very keys the user was pressing. The keyboard
+// only opens when the user taps the field or the ⌨ button directly.
+let calcQuietFocus = false;
+function calcFocusExpr() {
+  const el = calcExprEl();
+  if (!el) return;
+  calcQuietFocus = true;
+  try { el.focus({ preventScroll: true }); } finally { calcQuietFocus = false; }
+}
 // read one {..} group starting at s[i]==='{'; returns [content, indexAfterClosingBrace]
 function readBraceGroup(s, i) {
   let depth = 0, j = i, out = '';
@@ -4810,14 +4841,14 @@ function calcSetExpr(v) {
   if (!el) return;
   if (typeof el.setValue === 'function') el.setValue(v);
   else el.value = v;
-  el.focus?.();
+  calcFocusExpr();
 }
 function calcInsert(token) {
   const el = calcExprEl();
   if (!el) return;
-  if (typeof el.executeCommand === 'function') { el.executeCommand('insert', token); el.focus(); return; }
+  if (typeof el.executeCommand === 'function') { el.executeCommand('insert', token); calcFocusExpr(); return; }
   el.value = (el.value || '') + token;
-  el.focus();
+  calcFocusExpr();
 }
 function calcEvaluate() {
   const hist = $('#calc-history');
@@ -4856,12 +4887,12 @@ function calcKey(k, el) {
   if (k === 'mode') { toggleModeMenu(); return; }
   if (k === 'up') { calcRecall(); return; }
   if (k === 'down') { return; }
-  if (k === 'left') { inp?.executeCommand?.('moveToPreviousChar'); inp?.focus?.(); return; }
-  if (k === 'right') { inp?.executeCommand?.('moveToNextChar'); inp?.focus?.(); return; }
+  if (k === 'left') { inp?.executeCommand?.('moveToPreviousChar'); calcFocusExpr(); return; }
+  if (k === 'right') { inp?.executeCommand?.('moveToNextChar'); calcFocusExpr(); return; }
   if (k === 'del') {
     if (inp?.executeCommand) inp.executeCommand('deleteBackward');
     else if (inp) inp.value = inp.value.slice(0, -1);
-    inp?.focus(); rclAlpha = false; $('#calc-alpha-ind')?.classList.remove('on'); return;
+    calcFocusExpr(); rclAlpha = false; $('#calc-alpha-ind')?.classList.remove('on'); return;
   }
   // ALPHA variable letters (A–F, X, Y, M, i, e) read from the key's red label
   const letter = el?.querySelector?.('.al')?.textContent?.trim();
@@ -4892,7 +4923,7 @@ function calcKey(k, el) {
   if (token === 'frac') {
     if (inp?.executeCommand) inp.executeCommand('insert', '\\frac{\\placeholder{}}{\\placeholder{}}');
     else calcInsert('()/()');
-    inp?.focus?.(); return;
+    calcFocusExpr(); return;
   }
   if (token === 'inv') { calcInsert('^(-1)'); return; }
   if (token === 'neg') { calcInsert('-'); return; }
@@ -4983,12 +5014,10 @@ function setupCalculator() {
     if (open) {
       applyCalcDefaultPosition();
       startCalcKbdPoll();
-      const mf = calcExprEl();
-      // iPad: don't auto-open the math keyboard — faceplate keys work; tap expr or ⌨ to open.
-      if (!coarsePointer()) {
-        mf?.focus({ preventScroll: true });
-        setTimeout(() => showMathKeyboard(), 80);
-      }
+      // Never auto-open the math keyboard: it switches the calculator into the
+      // compact "vk" layout and hides the faceplate before a single key is
+      // pressed. Tap the expression or ⌨ to open it deliberately.
+      calcFocusExpr();
     } else {
       hideMathKeyboard();
       stopCalcKbdPoll();
@@ -5023,6 +5052,7 @@ function setupCalculator() {
   if (mf) {
     try { mf.smartMode = false; mf.smartFence = false; mf.mathVirtualKeyboardPolicy = 'manual'; } catch (_) {}
     mf.addEventListener('focusin', () => {
+      if (calcQuietFocus) return;   // faceplate-key re-focus — keep the keyboard closed
       showMathKeyboard();
       startCalcKbdPoll();
     });
