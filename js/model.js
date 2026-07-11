@@ -6,6 +6,69 @@ export const APP_NAME = 'mathboard';
 const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const clone = (o) => JSON.parse(JSON.stringify(o));
 
+/** Drop broken geoItems from pre-v120 saves (orphan refs / stray unnamed points).
+ *  Idempotent: valid data passes through unchanged. */
+export function sanitizeGeoItems(items) {
+  if (!Array.isArray(items) || !items.length) return Array.isArray(items) ? items : [];
+  const points = new Map();
+  for (const it of items) {
+    if (it?.t === 'point' && it.id != null) points.set(String(it.id), it);
+  }
+  const hasPt = (id) => id != null && points.has(String(id));
+  const referenced = new Set();
+  const mark = (...ids) => { for (const id of ids) if (id != null) referenced.add(String(id)); };
+
+  const structures = [];
+  for (const it of items) {
+    if (!it || !it.t || it.t === 'point') continue;
+    if (it.t === 'segment' || it.t === 'line') {
+      if (!hasPt(it.p1) || !hasPt(it.p2)) continue;
+      mark(it.p1, it.p2);
+      structures.push(it);
+    } else if (it.t === 'circle') {
+      if (!hasPt(it.c) || !hasPt(it.r)) continue;
+      mark(it.c, it.r);
+      structures.push(it);
+    } else if (it.t === 'ellipse' || it.t === 'angle') {
+      if (!hasPt(it.p1) || !hasPt(it.p2) || !hasPt(it.p3)) continue;
+      mark(it.p1, it.p2, it.p3);
+      structures.push(it);
+    } else if (it.t === 'polygon') {
+      if (!Array.isArray(it.verts) || it.verts.length < 3 || !it.verts.every(hasPt)) continue;
+      mark(...it.verts);
+      structures.push(it);
+    } else if (it.t === 'perp' || it.t === 'parallel') {
+      // Defer — need line ids from surviving line/segment items first.
+      if (it.line == null || !hasPt(it.pt)) continue;
+      structures.push(it);
+    } else {
+      structures.push(it);
+    }
+  }
+
+  // Perp/parallel need a resolvable line/segment id on the same page.
+  const lineIds = new Set();
+  for (const it of structures) {
+    if ((it.t === 'line' || it.t === 'segment') && it.id != null) lineIds.add(String(it.id));
+  }
+  const keptStruct = [];
+  for (const it of structures) {
+    if (it.t === 'perp' || it.t === 'parallel') {
+      if (!lineIds.has(String(it.line))) continue;
+      mark(it.pt);
+    }
+    keptStruct.push(it);
+  }
+
+  // Named points always keep; unnamed (composite helpers) only if referenced.
+  const keptPoints = [];
+  for (const [id, pt] of points) {
+    if (pt.name) keptPoints.push(pt);
+    else if (referenced.has(id)) keptPoints.push(pt);
+  }
+  return [...keptPoints, ...keptStruct];
+}
+
 /** Normalize one page — ensures all module fields exist. */
 export function normalizePage(p) {
   if (!p || typeof p !== 'object') return { id: genId(), paper: 'graph', strokes: [], objects: [] };
@@ -16,6 +79,7 @@ export function normalizePage(p) {
   if (!Array.isArray(p.objects)) p.objects = [];
   if (!Array.isArray(p.functions)) p.functions = [];
   if (!Array.isArray(p.geoItems)) p.geoItems = [];
+  else p.geoItems = sanitizeGeoItems(p.geoItems);
   if (!Array.isArray(p.geoConstructs)) p.geoConstructs = [];
   if (!Array.isArray(p.mechItems)) p.mechItems = [];
   if (!Array.isArray(p.cplxLoci)) p.cplxLoci = [];

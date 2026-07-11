@@ -118,7 +118,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 120;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 121;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -1291,6 +1291,7 @@ function equationBox(o) {
   return { w: r.w + 8, h: r.h + 8 };
 }
 function pointInEquation(o, p) {
+  if (!ptOk(o?.at)) return false;
   const b = equationBox(o);
   return p.x >= o.at.x - 4 && p.x <= o.at.x + b.w + 4 && p.y >= o.at.y - 4 && p.y <= o.at.y + b.h + 4;
 }
@@ -1344,7 +1345,23 @@ function shapeExtras() {
   return S.sketchy ? { sketchy: true } : {};
 }
 
+/** True when an object's geometry refs are present and finite (skip corrupt legacy data). */
+function ptOk(p) {
+  return !!(p && Number.isFinite(p.x) && Number.isFinite(p.y));
+}
+function objGeomOk(o) {
+  if (!o || !o.kind) return false;
+  const k = o.kind;
+  if (k === 'text' || k === 'equation' || k === 'complex' || k === 'graphpt' || k === 'intersect' || k === 'forcevec' || k === 'incline')
+    return ptOk(o.at);
+  if (k === 'circle' || k === 'tracer') return ptOk(o.center) && ptOk(o.edge);
+  if (k === 'triangle') return ptOk(o.p1) && ptOk(o.p2) && ptOk(o.p3);
+  // line / vector / resultant / rect / ellipse / image / tangent / drafts
+  return ptOk(o.from) && ptOk(o.to);
+}
+
 function drawObject(c, o, drawProgress = 1) {
+  if (!objGeomOk(o)) return;
   const col = o.color || '#1b1b1b';
   if (o.sketchy && ['line', 'rect', 'ellipse'].includes(o.kind) && drawRoughShape(c, o, col)) return;
   if (o.kind === 'line') {
@@ -1420,22 +1437,26 @@ function drawObject(c, o, drawProgress = 1) {
 function drawObjects(c, pg, t = 0) {
   refreshGraphObjects();
   for (const o of visibleObjects(pg)) {
-    const tracked = hasTargetTracks(pg, o.id);
-    const alpha = objAlpha(pg, o.id, t);
-    const scale = objPopScale(pg, o.id, t);
-    const drawProgress = objDrawProgress(pg, o.id, t);
-    if (tracked && alpha <= 0 && drawProgress <= 0) continue;
-    c.save();
-    if (alpha < 1) c.globalAlpha *= alpha;
-    if (scale !== 1 && tracked) {
-      const b = objBBox(o);
-      const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-      c.translate(cx, cy);
-      c.scale(scale, scale);
-      c.translate(-cx, -cy);
-    }
-    drawObject(c, o, drawProgress);
-    c.restore();
+    // Skip-and-continue: one corrupt object must never kill the render loop.
+    if (!objGeomOk(o)) continue;
+    try {
+      const tracked = hasTargetTracks(pg, o.id);
+      const alpha = objAlpha(pg, o.id, t);
+      const scale = objPopScale(pg, o.id, t);
+      const drawProgress = objDrawProgress(pg, o.id, t);
+      if (tracked && alpha <= 0 && drawProgress <= 0) continue;
+      c.save();
+      if (alpha < 1) c.globalAlpha *= alpha;
+      if (scale !== 1 && tracked) {
+        const b = objBBox(o);
+        const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+        c.translate(cx, cy);
+        c.scale(scale, scale);
+        c.translate(-cx, -cy);
+      }
+      drawObject(c, o, drawProgress);
+      c.restore();
+    } catch (_) { try { c.restore(); } catch (_) { /* ok */ } }
   }
   if (pg.showParallelogram) {
     const vs = (pg.objects || []).filter((o) => o.kind === 'vector');
@@ -1469,6 +1490,8 @@ function snapPt(p) {
   return { x: cx + Math.round((p.x - cx) / g) * g, y: cy + Math.round((p.y - cy) / g) * g };
 }
 function pointSegDist(p, a, b) {
+  // Guard missing endpoints — corrupted/legacy objects must not crash hit-testing.
+  if (!p || !a || !b || !Number.isFinite(a.x) || !Number.isFinite(b.x)) return Infinity;
   const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
   let t = l2 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2 : 0;
   t = Math.max(0, Math.min(1, t));
@@ -2006,6 +2029,8 @@ function objPoints(o) {                 // the point refs that define an object'
   return [o.from, o.to];               // vector / line / rect / ellipse
 }
 function objBBox(o) {
+  // Empty box for corrupt objects — callers use this for hit/selection chrome.
+  if (!objGeomOk(o)) return { x: 0, y: 0, w: 0, h: 0 };
   if (o.kind === 'circle' || o.kind === 'tracer') {
     const r = Math.hypot(o.edge.x - o.center.x, o.edge.y - o.center.y);
     return { x: o.center.x - r, y: o.center.y - r, w: 2 * r, h: 2 * r };
@@ -2034,6 +2059,7 @@ function objBBox(o) {
   return { x: x0, y: y0, w: Math.abs(o.to.x - o.from.x), h: Math.abs(o.to.y - o.from.y) };
 }
 function objHandles(o) {                 // named drag handles, in page units
+  if (!objGeomOk(o)) return [];
   if (o.kind === 'vector' || o.kind === 'line')
     return [{ name: 'from', x: o.from.x, y: o.from.y }, { name: 'to', x: o.to.x, y: o.to.y }];
   if (o.kind === 'circle' || o.kind === 'tracer')
@@ -2116,15 +2142,20 @@ function applyHandle(o, name, p) {        // drag a handle to point p (snapped o
     o.from = { x: x0, y: y0 }; o.to = { x: x1, y: y1 };
   }
 }
-function moveObject(o, dx, dy) { for (const pt of objPoints(o)) { pt.x += dx; pt.y += dy; } }
+function moveObject(o, dx, dy) {
+  for (const pt of objPoints(o)) { if (ptOk(pt)) { pt.x += dx; pt.y += dy; } }
+}
 function hitObject(p) {                   // topmost object under p (or null)
   const tol = 14 / S.scale, list = objs();
   for (let i = list.length - 1; i >= 0; i--) {
     const o = list[i];
-    if (objHit(o, p, tol)) return o;
-    const b = objBBox(o);
-    if (['rect', 'ellipse', 'text', 'equation', 'complex', 'circle', 'image'].includes(o.kind) &&
-        p.x >= b.x - tol && p.x <= b.x + b.w + tol && p.y >= b.y - tol && p.y <= b.y + b.h + tol) return o;
+    if (!objGeomOk(o)) continue;
+    try {
+      if (objHit(o, p, tol)) return o;
+      const b = objBBox(o);
+      if (['rect', 'ellipse', 'text', 'equation', 'complex', 'circle', 'image'].includes(o.kind) &&
+          p.x >= b.x - tol && p.x <= b.x + b.w + tol && p.y >= b.y - tol && p.y <= b.y + b.h + tol) return o;
+    } catch (_) { /* skip corrupt object */ }
   }
   return null;
 }
@@ -2713,10 +2744,16 @@ function eraseAt(p) {
   if (changed) { eraseDidChange = true; mark(); }
 }
 function pointInText(o, p) {
+  if (!ptOk(o?.at)) return false;
   const b = textBox(o);
   return p.x >= o.at.x - 8 && p.x <= o.at.x + b.w + 8 && p.y >= o.at.y - 8 && p.y <= o.at.y + b.h + 8;
 }
 function objHit(o, p, r) {
+  // Equations used to fall through to pointSegDist(from,to) — they have neither,
+  // which threw "Cannot read properties of undefined (reading 'x')" on Select/erase
+  // (and any path that hit-tests objects while an equation is on the page).
+  if (!objGeomOk(o)) return false;
+  if (o.kind === 'equation') return pointInEquation(o, p);
   if (o.kind === 'graphpt' || o.kind === 'intersect') return Math.hypot(p.x - o.at.x, p.y - o.at.y) < r + 10;
   if (o.kind === 'tangent') return pointSegDist(p, o.from, o.to) < r + 4;
   if (o.kind === 'forcevec') return pointSegDist(p, o.at, forceTip(o)) < r + 6 || Math.hypot(p.x - o.at.x, p.y - o.at.y) < r + 8;
@@ -3677,9 +3714,20 @@ async function openNotebook(id, opts = {}) {
 
 async function openNotebookData(raw, opts = {}) {
   if (!raw) return false;
+  // Count geo items without ensureSections (that mutates) — used to detect sanitize drops.
+  const geoCount = (nb) => {
+    const pages = Array.isArray(nb?.sections)
+      ? nb.sections.flatMap((s) => s.pages || [])
+      : (nb?.pages || []);
+    return pages.reduce((n, p) => n + (Array.isArray(p?.geoItems) ? p.geoItems.length : 0), 0);
+  };
+  const geoBefore = geoCount(raw);
   S.notebook = normalizeNotebook(clone(raw));
+  const geoAfter = geoCount(S.notebook);
   await migrateNotebookMedia(S.notebook);
   if (!S.notebook.kind) { S.notebook.kind = notebookKind(S.notebook); persist(); }
+  // Write back cleaned geo so IndexedDB doesn't keep reloading orphans every session.
+  else if (geoAfter !== geoBefore) persist();
   S.sectionIndex = 0; S.pageIndex = 0; S.undo = []; S.redo = []; clearSelection();
   setPresentMode(false);
   closeLibraryDialogs();
@@ -5742,9 +5790,25 @@ function showBootError(msg) {
   el.classList.remove('hidden');
 }
 
+/** Top stack frame as `file:line` for field reports (banner must stay short). */
+function topStackFrame(err) {
+  const stack = err?.stack || '';
+  if (!stack) return '';
+  for (const raw of String(stack).split('\n')) {
+    const line = raw.trim();
+    if (!line || /^(Error|TypeError|ReferenceError|SyntaxError)\b/.test(line)) continue;
+    // Chrome: at foo (http://host/js/app.js?v=120:2719:42)  /  at http://host/js/app.js:10:2
+    // Safari: foo@http://host/js/app.js:2719:42
+    const m = line.match(/(?:\/|^|@|\s)([\w.-]+\.(?:js|mjs|css|html))(?:\?[^:\s)]*)?:(\d+)(?::\d+)?/);
+    if (m) return `${m[1]}:${m[2]}`;
+  }
+  return '';
+}
+
 function surfaceUnexpectedError(prefix, err) {
-  const detail = err?.message || String(err || 'Unknown error');
-  const msg = prefix ? `${prefix}: ${detail}` : detail;
+  const detail = (err && typeof err === 'object' && err.message) ? err.message : String(err || 'Unknown error');
+  const frame = topStackFrame(err);
+  const msg = (prefix ? `${prefix}: ${detail}` : detail) + (frame ? ` (${frame})` : '');
   console.error(msg, err);
   showBootError(msg);
 }
@@ -5756,7 +5820,10 @@ window.addEventListener('unhandledrejection', (e) => {
 window.addEventListener('error', (e) => {
   // Ignore failed script/stylesheet loads (e.g. missing optional config.local.js).
   if (e.target && e.target !== window && e.target.tagName) return;
-  if (e.message) surfaceUnexpectedError('Unexpected error', e.error || e.message);
+  if (!e.message) return;
+  // Prefer Error with stack; fall back to filename:lineno from the event.
+  const err = e.error || { message: e.message, stack: e.filename ? `at ${e.filename}:${e.lineno}:${e.colno}` : '' };
+  surfaceUnexpectedError('Unexpected error', err);
 });
 
 function bindLibrary() {
