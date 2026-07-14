@@ -85,6 +85,44 @@ export function normalizePage(p) {
   if (!Array.isArray(p.cplxLoci)) p.cplxLoci = [];
   if (!Array.isArray(p.calcItems)) p.calcItems = [];
   if (!Array.isArray(p.instruments)) p.instruments = [];
+  else {
+    // Migrate pre-v122 legacy instrument schema to new widget model
+    // old ruler: {kind:'ruler', a, b} → new: {kind:'ruler', x, y, length, rotation}
+    // old protractor: {kind:'protractor', vertex, arm1, arm2} → new: {kind:'protractor', x, y, radius, rotation}
+    // old compass: {kind:'compass', center, r} → new: {kind:'compass', pivot, pencil, radius}
+    // pt() guards every field read in the migration below — old lessons can have
+    // partially-corrupt instrument records (e.g. a ruler with `a` but no `b`), and
+    // per the skip-and-continue rule this must drop the one bad item, never throw.
+    const pt = (v) => (v && typeof v.x === 'number' && typeof v.y === 'number') ? v : null;
+    p.instruments = p.instruments.map((it) => {
+      if (!it || !it.kind) return null;
+      try {
+        if (it.kind === 'ruler' && it.a != null && it.x == null) {
+          const a = pt(it.a), b = pt(it.b);
+          if (!a || !b) return null; // malformed legacy ruler — drop rather than crash
+          const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+          const dx = b.x - a.x, dy = b.y - a.y;
+          return { id: it.id || genId(), kind: 'ruler', x: cx, y: cy, length: Math.hypot(dx, dy), rotation: Math.atan2(dy, dx), width: 14 };
+        }
+        if (it.kind === 'protractor' && it.vertex != null && it.x == null) {
+          const vertex = pt(it.vertex), arm1 = pt(it.arm1), arm2 = pt(it.arm2);
+          if (!vertex || !arm1 || !arm2) return null; // malformed legacy protractor — drop
+          const arm1x = arm1.x - vertex.x, arm1y = arm1.y - vertex.y;
+          const arm2x = arm2.x - vertex.x, arm2y = arm2.y - vertex.y;
+          const r = Math.max(Math.hypot(arm1x, arm1y), Math.hypot(arm2x, arm2y));
+          const rot = Math.atan2(arm1y, arm1x);
+          return { id: it.id || genId(), kind: 'protractor', x: vertex.x, y: vertex.y, radius: r, rotation: rot };
+        }
+        if (it.kind === 'compass' && it.center != null && it.x == null) {
+          const center = pt(it.center);
+          if (!center) return null; // malformed legacy compass — drop
+          const r0 = it.r || 80;
+          return { id: it.id || genId(), kind: 'compass', pivot: { x: center.x, y: center.y }, pencil: { x: center.x + r0, y: center.y }, radius: r0 };
+        }
+      } catch (_) { return null; } // any unexpected shape — skip, never throw into #boot-error
+      return it;
+    }).filter(Boolean);
+  }
   if (typeof p.geoLabelN !== 'number') p.geoLabelN = 0;
   // Legacy incline diagrams lived in mechItems — promote to selectable page objects.
   if (Array.isArray(p.mechItems)) {

@@ -42,12 +42,16 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 async function openOnBoard(dir, file, msgEl) {
   if (msgEl) { msgEl.className = 'pl-msg'; msgEl.textContent = 'Loading PDF…'; }
   await ensureValidToken();
-  const res = await fetch(`./content/${dir}/${encodeURIComponent(file)}`, { headers: authHeaders() });
+  const url = `./content/${dir}/${encodeURIComponent(file)}`;
+  const res = await fetch(url, { headers: authHeaders() });
   if (!res.ok) throw new Error(`Could not load PDF (HTTP ${res.status}).`);
   const blob = await res.blob();
   if (msgEl) msgEl.textContent = '';
   document.getElementById('papers-dialog')?.classList.add('hidden');
-  await importPdf(new File([blob], file, { type: 'application/pdf' }));
+  // Pass the gated URL through so pdfPages.js can re-fetch and self-heal if Safari
+  // evicts/corrupts the stored blob later — without this, past papers could never
+  // recover from that (previously always missing; self-heal was unreachable dead code).
+  await importPdf(new File([blob], file, { type: 'application/pdf' }), url);
 }
 
 function openInTab(dir, file) {

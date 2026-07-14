@@ -39,7 +39,7 @@ import {
 import {
   setupInstruments, setInstTool, instToolActive, handleInstClick, drawInstruments,
   snapToRuler, hitInstrument, beginInstMove, moveInst, endInstMove, clearInstSelection,
-  selectedInstrument, selectedInstBBox, deleteSelectedInstrument,
+  selectedInstrument, selectedInstBBox, deleteSelectedInstrument, syncInstButtonState,
 } from './instruments.js';
 import {
   storeDataUrl, resolveMediaUrl, migrateNotebookMedia, cachedMediaUrl, setCachedUrl,
@@ -47,6 +47,7 @@ import {
 import {
   buildLazyPdfPages, isPdfPageBg, isImportedPageBg, loadPdfPageImage,
   pdfImportNeedsConfirm, assertPdfImportSize, renderPdfPageDataUrl,
+  setToastHook, collectPdfBlobIds, destroyUnusedPdfDocs,
 } from './pdfPages.js';
 import { setupLayers, setupLayersPanel, renderLayersPanel, visibleStrokes, visibleObjects } from './layers.js';
 import { setupGraphView, setupGraphViewPanel, refreshGraphView } from './graphView.js';
@@ -118,7 +119,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 121;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 126;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -293,6 +294,7 @@ function restorePage(s) {
   if (fmtChanged) { teardownGeo(); loadGeoPage(p); fitPage(); }
   updatePageLabel();
   if (!$('#graph').classList.contains('hidden')) renderGraphList();
+  syncInstButtonState();
 }
 function beginAction() {
   S.actionBefore = snapshotPage();
@@ -360,6 +362,10 @@ function doUndo() {
   }
   thumbCache.delete(page().id);
   clearSelection(); mark(); persist();
+  // Undo/redo can add or remove instruments (full-page snapshot entries) — resync
+  // toolbar active-state or a ruler/protractor/compass button can stay lit after
+  // its widget is undone away, or stay dark after a removal is redone back in.
+  syncInstButtonState();
 }
 function doRedo() {
   if (!S.redo.length) return;
@@ -371,6 +377,7 @@ function doRedo() {
   }
   thumbCache.delete(page().id);
   clearSelection(); mark(); persist();
+  syncInstButtonState();
 }
 
 // ---- geometry helpers --------------------------------------------------------
@@ -3431,7 +3438,7 @@ function ensurePdfJs(maxMs = 8000) {
     tick();
   });
 }
-async function renderPdfToPages(arrayBuffer) {
+async function renderPdfToPages(arrayBuffer, sourceUrl) {
   await ensurePdfJs();
   if (!window.pdfjsLib) throw new Error('PDF engine not loaded — hard refresh and try again.');
   if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
@@ -3448,20 +3455,22 @@ async function renderPdfToPages(arrayBuffer) {
   }
   return buildLazyPdfPages(arrayBuffer, pdf, (i, total) => {
     busy(true, `Preparing PDF — page ${i} of ${total}…`);
-  });
+  }, sourceUrl);
 }
 async function insertPdfIntoNotebook(file) {
   try {
     busy(true, 'Reading PDF…');
+    // No sourceUrl: this is a local file picker import, nothing to re-fetch from if
+    // Safari evicts the stored blob later — bg.src stays unset by design (see CLAUDE.md).
     const newPgs = await renderPdfToPages(await file.arrayBuffer());
     addPagesAfterCurrent(newPgs);
   } catch (e) { alert('Could not import PDF: ' + e.message); }
   finally { busy(false); }
 }
-async function importPdfAsNotebook(file) {
+async function importPdfAsNotebook(file, sourceUrl) {
   try {
     busy(true, 'Reading PDF…');
-    const newPgs = await renderPdfToPages(await file.arrayBuffer());
+    const newPgs = await renderPdfToPages(await file.arrayBuffer(), sourceUrl);
     const nb = newNotebook(file.name.replace(/\.pdf$/i, ''), 'paper');
     nb.sections[0].pages = newPgs.length ? newPgs : [newPage('plain')];
     await sync.push(nb);
@@ -3742,6 +3751,7 @@ async function openNotebookData(raw, opts = {}) {
   requestAnimationFrame(() => {
     resizeCanvas(); fitPage(); updatePageLabel(); updateTitle(); updatePresentTitle();
     renderSectionStrip(); loadGeoPage(page());
+    syncInstButtonState();
     // Course Library "Play": step 1 after layout; no-op cleanly when scene has no steps.
     if (opts.play) {
       const steps = page()?.scene?.steps;
@@ -3857,7 +3867,7 @@ function goToPage(i, opts = {}) {
   S.pageIndex = i;
   S.undo = []; S.redo = [];
   clearSelection();
-  setGeoTool(null); setInstTool(null);
+  setGeoTool(null); setInstTool(null); syncInstButtonState();
   // P1: Page transition — add fade class for present mode
   const cvEl = $('#board');
   if (isPresent && cvEl) cvEl.classList.remove('present-mode-fade');
@@ -4407,18 +4417,15 @@ function bindEditor() {
       setTab('maths');
     };
   });
-  // Arming an instrument gives no visible feedback until the page is tapped —
-  // say what to tap so the tools don't feel broken on first use.
-  const INST_HINTS = {
-    ruler: 'Ruler: tap the two end points on the page',
-    protractor: 'Protractor: tap the vertex, then one point on each arm',
-    compass: 'Compass: tap the centre, then a point on the rim',
-  };
   document.querySelectorAll('[data-inst]').forEach((b) => {
     b.onclick = () => {
-      const off = b.classList.contains('active');
-      setGeoTool(null); setInstTool(off ? null : b.dataset.inst); setTab('maths');
-      if (!off && INST_HINTS[b.dataset.inst]) mbToast(INST_HINTS[b.dataset.inst]);
+      setGeoTool(null); setInstTool(b.dataset.inst); setTab('maths');
+      // Toast reflects state AFTER the toggle: if the widget now exists, tell
+      // the user how to remove it; if it was removed, tell them how to add it.
+      const pg = page();
+      const nowHasInst = pg?.instruments?.some(i => i.kind === b.dataset.inst);
+      if (nowHasInst) mbToast(`${b.dataset.inst} placed · tap again to remove · drag to move · handles to rotate/resize`);
+      else mbToast(`${b.dataset.inst} removed · tap again to place`);
     };
   });
   $('#geo-clear').onclick = async () => {
@@ -4429,7 +4436,13 @@ function bindEditor() {
     // keyboard lives on <body>, so both would stay visible over the library.
     commitTextEditor();
     commitEquationEditor();
+    // Destroy cached PDFDocumentProxy objects — the user is leaving the
+    // editor so these heavy objects are no longer needed.
+    const prevNb = S.notebook;
     S.playing = false; setPresentMode(false); setGeoTool(null); setInstTool(null); teardownGeo(); show('library'); renderLibrary();
+    if (prevNb) {
+      destroyUnusedPdfDocs([]); // keep none — all PDFs are for the closed notebook
+    }
   };
 
   $('#nb-name').onchange = (e) => { S.notebook.title = e.target.value.trim() || 'Untitled lesson'; persist(); };
@@ -4451,7 +4464,9 @@ function bindEditor() {
     else if (e.key === 't') setTool('text');
     else if (e.key === 'q') setTool('equation');
     else if (e.key === 'Escape' && geoToolActive()) { cancelGeoDraft(); setGeoTool(null); mark(); }
-    else if (e.key === 'Escape' && instToolActive()) { setInstTool(null); mark(); }
+    // Escape: de-select instruments too (even though instToolActive() is always
+    // false in the new toggle model — we still want to clear any selection).
+    else if (e.key === 'Escape' && selectedInstrument()) { clearInstSelection(); mark(); }
     else if (e.key === 'Escape' && $('#editor')?.classList.contains('present-mode')) { e.preventDefault(); setPresentMode(false); }
     else if (e.key === 'f' || e.key === 'F') { e.preventDefault(); setPresentMode(!$('#editor').classList.contains('present-mode')); }
     else if ($('#editor')?.classList.contains('present-mode') && (e.key === 'ArrowLeft' || e.key === 'PageUp')) {
@@ -4729,7 +4744,9 @@ function mixedHtml(n, d) {
   return `${sign}${whole}&hairsp;${fracHtml(rem, d)}`;
 }
 function surdHtml(k, n) {
-  const g = gcd(k, n); k /= g; n /= g;
+  // k and n come pre-matched from trySurdDecimal's search over increasing n — do NOT
+  // gcd-reduce them like a fraction: k·√n ≠ (k/g)·√(n/g), and doing so corrupted results
+  // like √8 (2√2 → wrongly showed 0) and √72 (6√2 → wrongly showed 3).
   let out = '';
   if (k === -1) out = '−';
   else if (k !== 1 && k !== -1) out = String(k);
@@ -4741,6 +4758,10 @@ function trySurdDecimal(x) {
   if (!isFinite(x) || x === 0) return null;
   const sign = x < 0 ? -1 : 1;
   const ax = Math.abs(x);
+  // whole-number results (e.g. sqrt(100)=10) need no radical — without this the n=2.. search
+  // below matches the first n with an integer quotient (n=4, k=5 → wrongly rendered "5√4")
+  // instead of recognizing x itself is already the simplest form.
+  if (Math.abs(ax - Math.round(ax)) < 1e-9) return String(sign * Math.round(ax));
   for (let n = 2; n <= 500; n++) {
     const k = ax / Math.sqrt(n);
     if (Math.abs(k - Math.round(k)) < 1e-9) return surdHtml(sign * Math.round(k), n);
@@ -5873,6 +5894,7 @@ async function init() {
   });
   setupInstruments({
     page, snapPt, beginAction, commitAction, persist, mark, unit: UNIT,
+    getScale: () => S.scale,
     setGeoTool: () => setGeoTool(null), setMechPlacing: () => setMechPlacing(null), setCplxPlacing: () => setCplxPlacing(null),
   });
   setupCplxPanel();
@@ -5989,6 +6011,12 @@ async function init() {
   // Post-gate UI: teacher's admin panel + the gated papers/books browser.
   setupAdminPanel();
   setupPapersLibrary({ importPdf: importPdfAsNotebook });
+
+  // Wire PDF self-heal toast hook
+  setToastHook(mbToast);
+
+  // Request persistent storage to reduce iPad Safari blob eviction
+  navigator.storage?.persist?.().catch(() => {});
 
   // Service worker (offline PWA). Disabled on localhost to avoid stale-cache
   // surprises during development; enabled when served from a real host/LAN IP.
