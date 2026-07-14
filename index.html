@@ -44,8 +44,8 @@
 <link rel="apple-touch-icon" href="./assets/icon-512.png" sizes="512x512" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=128" />
-<link rel="stylesheet" href="./css/annotatedSim.css?v=128" />
+<link rel="stylesheet" href="./css/app.css?v=129" />
+<link rel="stylesheet" href="./css/annotatedSim.css?v=129" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -108,7 +108,7 @@
     <span id="sync-status" class="sync-status" title="Offline · saved on this device">● Local</span>
     · <button type="button" id="sync-settings-foot" class="sync-foot-link">Cloud sync</button>
     · Paginated notebook whiteboard · works offline · add to Home Screen on iPad
-    · <span id="mb-version" class="mb-version">v128</span>
+    · <span id="mb-version" class="mb-version">v129</span>
     · © 2026 Waseem Akhlaque
   </p>
 </section>
@@ -449,7 +449,6 @@
 
   <div id="calc" class="calc casio hidden">
     <div class="calc-head" id="calc-head">
-      <span class="casio-logo">CASIO</span>
       <span class="casio-model">fx-991ES PLUS</span>
       <span class="casio-vpam">NATURAL-V.P.A.M.</span>
       <span class="casio-solar" aria-hidden="true"></span>
@@ -468,7 +467,7 @@
       <div id="calc-result" class="calc-result">0</div>
     </div>
 
-    <div class="calc-kbd-bar">
+    <div class="calc-kbd-bar" id="calc-kbd-bar">
       <button type="button" id="calc-kbd-toggle" class="calc-kbd-btn">⌨ Keyboard</button>
       <button type="button" id="calc-done" class="calc-kbd-btn primary">Done (=)</button>
     </div>
@@ -570,13 +569,13 @@
         <button type="button" id="intg-tab-der" class="mx-tab">d/dx at x₀</button>
       </div>
       <label class="ct-lab">f(x) =</label>
-      <input id="intg-fx" class="ct-in" type="text" value="sin(x)" autocomplete="off" spellcheck="false" />
+      <input id="intg-fx" class="ct-in" inputmode="none" type="text" value="sin(x)" autocomplete="off" spellcheck="false" />
       <div class="ct-row3" id="intg-bounds">
-        <span><label class="ct-lab">lower a</label><input id="intg-a" class="ct-in" type="text" value="0" /></span>
-        <span><label class="ct-lab">upper b</label><input id="intg-b" class="ct-in" type="text" value="pi/3" /></span>
+        <span><label class="ct-lab">lower a</label><input id="intg-a" class="ct-in" inputmode="none" type="text" value="0" /></span>
+        <span><label class="ct-lab">upper b</label><input id="intg-b" class="ct-in" inputmode="none" type="text" value="pi/3" /></span>
       </div>
       <div class="ct-row3 hidden" id="intg-point">
-        <span><label class="ct-lab">at x₀</label><input id="intg-x0" class="ct-in" type="text" value="1" /></span>
+        <span><label class="ct-lab">at x₀</label><input id="intg-x0" class="ct-in" inputmode="none" type="text" value="1" /></span>
       </div>
       <div class="ct-btns">
         <button id="intg-back" class="ck ck-fn">‹ Keys</button>
@@ -603,7 +602,7 @@
 
     <div id="calc-base" class="calc-sub hidden">
       <label class="ct-lab">Value</label>
-      <input id="base-in" class="ct-in" type="text" value="42" autocomplete="off" spellcheck="false" />
+      <input id="base-in" class="ct-in" inputmode="none" type="text" value="42" autocomplete="off" spellcheck="false" />
       <label class="ct-lab">Input base</label>
       <select id="base-from" class="ct-in">
         <option value="10">DEC (decimal)</option>
@@ -620,11 +619,11 @@
 
     <div id="calc-table" class="calc-sub hidden">
       <label class="ct-lab">f(x) =</label>
-      <input id="ct-fx" class="ct-in" type="text" placeholder="x^2 - 3" autocomplete="off" spellcheck="false" />
+      <input id="ct-fx" class="ct-in" inputmode="none" type="text" placeholder="x^2 - 3" autocomplete="off" spellcheck="false" />
       <div class="ct-row3">
-        <span><label class="ct-lab">Start</label><input id="ct-start" class="ct-in" type="text" value="-3" /></span>
-        <span><label class="ct-lab">End</label><input id="ct-end" class="ct-in" type="text" value="3" /></span>
-        <span><label class="ct-lab">Step</label><input id="ct-step" class="ct-in" type="text" value="1" /></span>
+        <span><label class="ct-lab">Start</label><input id="ct-start" class="ct-in" inputmode="none" type="text" value="-3" /></span>
+        <span><label class="ct-lab">End</label><input id="ct-end" class="ct-in" inputmode="none" type="text" value="3" /></span>
+        <span><label class="ct-lab">Step</label><input id="ct-step" class="ct-in" inputmode="none" type="text" value="1" /></span>
       </div>
       <div class="ct-btns">
         <button id="ct-back" class="ck ck-fn">‹ Keys</button>
@@ -642,15 +641,15 @@
         <div class="mx-block">
           <span class="ct-lab">A</span>
           <div class="mx-grid">
-            <input id="ma00" class="mx-in" value="1" /><input id="ma01" class="mx-in" value="0" />
-            <input id="ma10" class="mx-in" value="0" /><input id="ma11" class="mx-in" value="1" />
+            <input id="ma00" class="mx-in" inputmode="none" value="1" /><input id="ma01" class="mx-in" inputmode="none" value="0" />
+            <input id="ma10" class="mx-in" inputmode="none" value="0" /><input id="ma11" class="mx-in" inputmode="none" value="1" />
           </div>
         </div>
         <div class="mx-block">
           <span class="ct-lab">B</span>
           <div class="mx-grid">
-            <input id="mb00" class="mx-in" value="1" /><input id="mb01" class="mx-in" value="1" />
-            <input id="mb10" class="mx-in" value="0" /><input id="mb11" class="mx-in" value="1" />
+            <input id="mb00" class="mx-in" inputmode="none" value="1" /><input id="mb01" class="mx-in" inputmode="none" value="1" />
+            <input id="mb10" class="mx-in" inputmode="none" value="0" /><input id="mb11" class="mx-in" inputmode="none" value="1" />
           </div>
         </div>
         <div class="mx-btns">
@@ -665,13 +664,13 @@
         <div class="mx-block">
           <span class="ct-lab">u = (x, y, z)</span>
           <div class="mx-row3">
-            <input id="vu0" class="mx-in" value="1" /><input id="vu1" class="mx-in" value="0" /><input id="vu2" class="mx-in" value="0" />
+            <input id="vu0" class="mx-in" inputmode="none" value="1" /><input id="vu1" class="mx-in" inputmode="none" value="0" /><input id="vu2" class="mx-in" inputmode="none" value="0" />
           </div>
         </div>
         <div class="mx-block">
           <span class="ct-lab">v = (x, y, z)</span>
           <div class="mx-row3">
-            <input id="vv0" class="mx-in" value="0" /><input id="vv1" class="mx-in" value="1" /><input id="vv2" class="mx-in" value="0" />
+            <input id="vv0" class="mx-in" inputmode="none" value="0" /><input id="vv1" class="mx-in" inputmode="none" value="1" /><input id="vv2" class="mx-in" inputmode="none" value="0" />
           </div>
         </div>
         <div class="mx-btns">
@@ -1184,5 +1183,5 @@
 </div>
 
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=128"></script>
+<script type="module" src="./js/app.js?v=129"></script>
 </html>

@@ -169,6 +169,63 @@ Acceptance:
       by script — all now match hand-checked correct simplified surd form. **Still needs
       on-device confirmation that the rendered `<span class="c-surd">` HTML displays correctly.**
 
+### v129 — CASIO branding, TABLE fix, faceplate-only entry in every sub-view, real compacting
+
+Waseem's follow-up round on top of v128: (1) remove the "CASIO" brand text, keep only
+"fx-991ES PLUS", (2) TABLE's Generate button was still failing with "Enter f(x) and valid
+start/end/step" even with correct-looking values filled in, (3) wants the calculator genuinely
+compact (not just scrollable), (4) wants NO keyboard — neither the native OS one nor MathLive's
+— popping in the TABLE or MATRIX sub-views either, entry should work "just like an emulator."
+
+- [x] **CASIO branding removed.** Deleted `<span class="casio-logo">CASIO</span>` from the
+      calculator header (`index.html`); `fx-991ES PLUS` is now the only brand text. Adjusted
+      `.casio-model` CSS (was relying on `.casio-logo`'s margin for spacing) to stand alone.
+- [x] **TABLE Generate bug + the "keyboard shouldn't pop" complaint — same root cause.**
+      `calcGenTable()`'s validation logic itself was verified correct by script (mathjs parses
+      `"x^2 - 3"`, `"-3"`, `"3"`, `"1"` with no error, so the `!fx || !isFinite(...)` guard should
+      pass). `#ct-fx`/`#ct-start`/`#ct-end`/`#ct-step` are plain `<input>`s, not the MathLive
+      field, and `showCalcView()` was hiding the *entire physical faceplate* (`#calc-keys`,
+      `.calc-ctl`, `.calc-funcs`) whenever a sub-view (TABLE/MATRIX/BASE/EQN/∫dx) was open — so
+      the only way to fill those fields in at all was the browser's native on-screen keyboard,
+      which is exactly what task (4) says shouldn't appear. The most likely explanation for "still
+      not working" is that field never actually received the typed value (native keyboard
+      dismissed/obscured mid-entry, viewport reflow on focus, etc.) — but regardless of the exact
+      failure mode, relying on a native keyboard for these fields was always the wrong design once
+      "emulator-only entry" was the explicit requirement. **Fixed by redesigning entry for every
+      sub-view to go through the physical faceplate, like a real fx-991ES's TABLE/MATRIX/EQN/BASE-N
+      prompts:**
+      - `showCalcView()` no longer hides `#calc-keys`/`.calc-ctl`/`.calc-funcs` — the faceplate now
+        stays live in every mode (only the MathLive keyboard toggle bar is hidden outside COMP,
+        since it's meaningless there).
+      - Added `calcActiveField` (tracks the currently "armed" TABLE/MATRIX/BASE/EQN/∫dx `<input>`,
+        set on focus and auto-armed to the first field when a sub-view opens) and
+        `calcFieldTarget()`/`calcInsertPlain()`/`calcDeletePlain()`/`calcPlainToken()` in `app.js`.
+      - `calcKey()` now routes digit/operator/function keys into the armed field when one is
+        active: DEL backspaces it, ◄► move its caret, ▲▼ cycle between sibling prompts in the same
+        sub-view (f(x) → Start → End → Step, matching the real device), AC clears it, and `=`
+        triggers that view's action button (`#ct-gen` / `#intg-go` / `#eqn-go` / `#base-go`).
+      - `#ct-fx`, `#ct-start/end/step`, the matrix/vector cells, `#base-in`, `#intg-fx/a/b/x0`, and
+        the dynamically-created `#eqn-r-c` fields all got `inputmode="none"` so tapping them to
+        arm them for faceplate entry never pops the native OS keyboard either.
+      - Added a `:focus` highlight (`box-shadow` in the accent colour) on these fields since
+        there's no OS caret+keyboard to show which one is armed.
+      - **Not yet on-device verified** (no browser session available this round) — code-reviewed,
+        `node --check`-clean, and mirrors the already-shipped `calcQuietFocus` pattern from v128.
+- [x] **Calculator made genuinely more compact**, not just scroll-safe, since the faceplate is now
+      always visible (adding height in every sub-view) and the user explicitly doesn't want to
+      scroll: shrank `.calc.casio` width 366→336px, header padding, `.calc-screen` margins, the
+      expr/result font sizes, `.ck` key padding/font-size (`.calc-keys` gap 6→4px, `.calc.casio
+      .ck` padding 13px0 6px→8px0 5px), `.calc-ctl` replay-pad size, `.ct-in`/`.mx-in` padding and
+      font-size, `.calc-sub` padding, `.ct-out` max-height 220→140px, and hid the MathLive
+      keyboard-toggle bar (`#calc-kbd-bar`) outside COMP mode entirely (it's meaningless once
+      sub-view fields are faceplate-driven). The `max-height: calc(100vh - 40px); overflow-y:
+      auto;` safety net from v128 is left in place as a fallback for extreme window sizes, but the
+      calculator should no longer need it in normal use.
+
+**Not yet re-deployed or on-device tested** — same caveat as v127/v128: code-reviewed and
+`node --check`/brace-balance-clean, but needs a real deploy + hands-on iPad/browser check before
+calling it done.
+
 ### v128 — calculator UI/UX (fits window + emulator-only entry, no code-required popup keyboard)
 
 Waseem's follow-up feedback: (1) inserting a fraction pops the on-screen math keyboard instead

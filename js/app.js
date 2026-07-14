@@ -119,7 +119,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 128;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 129;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -4525,6 +4525,8 @@ let calcLastExpr = null, calcResultValue = null, calcDisplayMode = 0; // 0=D 1=f
 let intgMode = 'integral';
 const calcVars = {};            // STO/RCL/ALPHA variables A–F, X, Y, M
 let stoPending = false, rclAlpha = false, hypPending = false;
+let calcView = 'keys';          // mirrors showCalcView's current sub-view
+let calcActiveField = null;     // last-focused TABLE/MATRIX/BASE/EQN/∫dx <input>, for faceplate routing
 const SHIFT_MAP = {
   'sin(': 'asin(', 'cos(': 'acos(', 'tan(': 'atan(', 'log(': 'e^(', 'log10(': '10^(',
   '^': 'nthRoot(', 'sqrt(': 'cbrt(', '^2': '^3', 'inv': '!', 'e10': 'pi', 'int': 'diff',
@@ -4534,9 +4536,18 @@ const SHIFT_MAP = {
 const CALC_FMT = ['D', 'F', 'ab/c', '√'];
 
 function showCalcView(view) {
-  $('#calc-keys').classList.toggle('hidden', view !== 'keys');
-  document.querySelector('.calc-ctl')?.classList.toggle('hidden', view !== 'keys');
-  document.querySelector('.calc-funcs')?.classList.toggle('hidden', view !== 'keys');
+  calcView = view;
+  // The faceplate (digits/ops/functions) stays visible and live in every mode —
+  // on a real fx-991ES the physical keys never disappear just because you're in
+  // TABLE/MATRIX/EQN/BASE-N/∫dx; they're how you fill in those prompts. Only the
+  // COMP-only control row is unnecessary elsewhere (DEG/MODE toggle stays put).
+  $('#calc-keys').classList.toggle('hidden', false);
+  document.querySelector('.calc-ctl')?.classList.toggle('hidden', false);
+  document.querySelector('.calc-funcs')?.classList.toggle('hidden', false);
+  // The MathLive-keyboard toggle/Done bar only matters for the COMP expr field —
+  // hiding it elsewhere reclaims space now that sub-view screens sit above the
+  // still-visible faceplate.
+  $('#calc-kbd-bar')?.classList.toggle('hidden', view !== 'keys');
   $('#calc-table').classList.toggle('hidden', view !== 'table');
   $('#calc-matrix').classList.toggle('hidden', view !== 'matrix');
   $('#calc-intg')?.classList.toggle('hidden', view !== 'intg');
@@ -4545,6 +4556,15 @@ function showCalcView(view) {
   const mn = $('#calc-modename');
   const names = { table: 'TABLE', matrix: 'MATRIX', eqn: 'EQN', base: 'BASE-N', intg: intgMode === 'derivative' ? 'd/dx' : '∫dx' };
   if (mn) mn.textContent = names[view] || 'COMP';
+  // Arm the first prompt field so the faceplate has somewhere to type immediately —
+  // these fields are inputmode="none", so focusing them never pops a keyboard.
+  const firstField = { table: '#ct-fx', matrix: '#ma00', base: '#base-in', intg: '#intg-fx', eqn: '#eqn-0-0' }[view];
+  if (firstField) {
+    const f = $(firstField);
+    if (f) { calcActiveField = f; f.focus({ preventScroll: true }); f.select?.(); }
+  } else if (view === 'keys') {
+    calcActiveField = null;
+  }
 }
 function calcReset() {
   calcSetExpr(''); $('#calc-result').textContent = '0'; $('#calc-history').textContent = '';
@@ -4644,6 +4664,7 @@ function renderEqnFields() {
       const inp = document.createElement('input');
       inp.className = 'ct-in';
       inp.id = `eqn-${r}-${c}`;
+      inp.inputMode = 'none'; // faceplate-driven entry, same as the other sub-view fields
       inp.placeholder = lab;
       inp.value = (spec.rows === 1) ? (c === 0 ? '1' : '0') : '';
       row.appendChild(inp);
@@ -4969,6 +4990,85 @@ function calcRecall() {
   if (!calcLastExpr) return;
   calcSetExpr(calcLastExpr);
 }
+// ---- faceplate routing into TABLE/MATRIX/BASE/EQN/∫dx prompt fields --------
+// Those sub-views use plain <input>s (not the MathLive expr field) so their
+// values can be read with a simple .value — but that means a tap on one would
+// normally pop the native/on-screen keyboard. inputmode="none" on the fields
+// suppresses that; calcActiveField remembers which one is "armed", and the
+// physical digit/op/function keys type into it, exactly like a real fx-991ES
+// prompt (f(x) =, Start?, End?, Step?, etc. are all filled from the keypad).
+function calcFieldTarget() {
+  if (calcView === 'keys') return null;
+  const f = calcActiveField;
+  if (f && document.body.contains(f) && f.offsetParent !== null) return f;
+  return null;
+}
+function calcInsertPlain(field, text) {
+  if (!field) return;
+  const start = field.selectionStart ?? field.value.length;
+  const end = field.selectionEnd ?? field.value.length;
+  field.value = field.value.slice(0, start) + text + field.value.slice(end);
+  const pos = start + text.length;
+  field.setSelectionRange?.(pos, pos);
+  field.focus({ preventScroll: true });
+}
+function calcDeletePlain(field) {
+  if (!field) return;
+  const start = field.selectionStart ?? field.value.length;
+  const end = field.selectionEnd ?? field.value.length;
+  if (start === end) {
+    if (start === 0) return;
+    field.value = field.value.slice(0, start - 1) + field.value.slice(end);
+    field.setSelectionRange?.(start - 1, start - 1);
+  } else {
+    field.value = field.value.slice(0, start) + field.value.slice(end);
+    field.setSelectionRange?.(start, start);
+  }
+  field.focus({ preventScroll: true });
+}
+// Maps a faceplate key (+ shift state) to the plain text it inserts into a
+// sub-view field. Keys with no sensible meaning for a bare numeric/expression
+// field (STO, Pol/Rec, ENG, hyp, …) resolve to null and are silently ignored,
+// same as they'd be inert on a real calculator's TABLE/MATRIX input prompts.
+function calcPlainToken(k, sh) {
+  if (/^[0-9]$/.test(k)) return k;
+  if (k === '.') return '.';
+  if (['+', '-', '*', '/', '(', ')', ','].includes(k)) return k;
+  if (k === 'ans') return 'Ans';
+  if (k === 'neg') return '-';
+  if (k === 'e10') return sh ? 'pi' : '*10^(';
+  if (k === 'sqrt(') return sh ? 'cbrt(' : 'sqrt(';
+  if (k === '^2') return sh ? '^3' : '^2';
+  if (k === '^') return sh ? 'nthRoot(' : '^';
+  if (k === 'inv') return sh ? '!' : '^(-1)';
+  if (k === 'log10(') return sh ? '10^(' : 'log10(';
+  if (k === 'log(') return sh ? 'e^(' : 'log(';
+  if (k === 'sin(') return sh ? 'asin(' : 'sin(';
+  if (k === 'cos(') return sh ? 'acos(' : 'cos(';
+  if (k === 'tan(') return sh ? 'atan(' : 'tan(';
+  if (k === 'frac') return '()/()';
+  return null;
+}
+// ▲▼ cycle the armed field between the sibling prompts in the same sub-view
+// (f(x) → Start → End → Step, or matrix cell → cell), mirroring the real
+// device's cursor moving between TABLE/MATRIX input prompts.
+function calcFieldStep(field, dir) {
+  const group = field.closest('.calc-sub');
+  if (!group) return;
+  const all = [...group.querySelectorAll('.ct-in, .mx-in')].filter((f) => f.offsetParent !== null);
+  const i = all.indexOf(field);
+  if (i === -1) return;
+  const next = all[(i + dir + all.length) % all.length];
+  calcActiveField = next;
+  next.focus({ preventScroll: true });
+  next.select?.();
+}
+// '=' while a sub-view field is armed triggers that view's action button —
+// same as pressing = advances/generates on the real calculator's prompts.
+function calcSubViewGo() {
+  const sel = { table: '#ct-gen', intg: '#intg-go', eqn: '#eqn-go', base: '#base-go' }[calcView];
+  $(sel)?.click();
+}
 function calcKey(k, el) {
   const inp = calcExprEl();
   if (k === 'shift') { calcShift = !calcShift; $('#calc-shift-ind').classList.toggle('on', calcShift); return; }
@@ -4979,6 +5079,26 @@ function calcKey(k, el) {
   if (calcAlpha) { calcAlpha = false; }
   // control keys (work regardless of shift/alpha)
   if (k === 'on') { calcReset(); return; }
+  // Faceplate routing into a TABLE/MATRIX/BASE/EQN/∫dx field, if one is armed —
+  // must come before the generic control-key handling below since del/left/
+  // right/eq/mode all mean something different while filling in a prompt.
+  const fieldTarget = calcFieldTarget();
+  if (fieldTarget) {
+    if (k === 'ac') { fieldTarget.value = ''; fieldTarget.focus({ preventScroll: true }); return; }
+    if (k === 'del') { calcDeletePlain(fieldTarget); return; }
+    if (k === 'left') { const p = Math.max(0, (fieldTarget.selectionStart ?? fieldTarget.value.length) - 1); fieldTarget.setSelectionRange?.(p, p); fieldTarget.focus({ preventScroll: true }); return; }
+    if (k === 'right') { const p = Math.min(fieldTarget.value.length, (fieldTarget.selectionEnd ?? 0) + 1); fieldTarget.setSelectionRange?.(p, p); fieldTarget.focus({ preventScroll: true }); return; }
+    if (k === 'up') { calcFieldStep(fieldTarget, -1); return; }
+    if (k === 'down') { calcFieldStep(fieldTarget, 1); return; }
+    if (k === 'eq') { calcSubViewGo(); return; }
+    if (k === 'mode') { toggleModeMenu(); return; }
+    if (k === 'matrix') { showCalcView('matrix'); return; }
+    if (k === 'table') { showCalcView('table'); return; }
+    if (k === 'calc' || k === 'int' || k === 'sd' || k === 'rcl' || k === 'mplus' || k === 'hyp') return; // not meaningful mid-prompt
+    const plain = calcPlainToken(k, sh);
+    if (plain != null) calcInsertPlain(fieldTarget, plain);
+    return;
+  }
   if (k === 'ac') { if (sh) return; calcReset(); return; } // SHIFT+AC = OFF (ignored)
   if (k === 'mode') { toggleModeMenu(); return; }
   // Up/Down move within a fraction (numerator <-> denominator) like the real
@@ -5122,6 +5242,12 @@ function setupCalculator() {
   if (!window.math) { $('#calc-toggle').style.display = 'none'; return; }
   mathFrac = math.create(math.all); mathFrac.config({ number: 'Fraction' });
   document.querySelectorAll('#calc [data-k]').forEach((b) => b.onclick = () => calcKey(b.dataset.k, b));
+  // Tapping a TABLE/MATRIX/BASE/EQN/∫dx field arms it for faceplate entry —
+  // delegated so dynamically-created EQN fields (renderEqnFields) are covered too.
+  $('#calc')?.addEventListener('focusin', (e) => {
+    const t = e.target;
+    if (t?.matches?.('.ct-in, .mx-in')) calcActiveField = t;
+  });
   $('#calc-toggle').onclick = () => {
     const open = $('#calc').classList.toggle('hidden') === false;
     if (open) {

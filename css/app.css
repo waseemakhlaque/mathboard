@@ -2068,16 +2068,18 @@ select:focus {
 /* Calculator keyboard bar — Done / toggle stay reachable when MathLive keyboard is open */
 .calc-kbd-bar {
   display: flex;
-  gap: 8px;
-  padding: 6px 12px 8px;
+  gap: 6px;
+  padding: 4px 10px 5px;
   background: #23262b;
   border-top: 1px solid #3a4048;
 }
 
+.calc-kbd-bar.hidden { display: none; }
+
 .calc-kbd-btn {
   flex: 1;
-  min-height: 44px;
-  font: 600 14px sans-serif;
+  min-height: 34px;
+  font: 600 13px sans-serif;
   border-radius: var(--radius-sm);
   border: 1px solid #4a515c;
   background: #3a4048;
@@ -2432,8 +2434,8 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 }
 
 .calc-screen {
-  margin: 10px;
-  padding: 7px 12px 9px;
+  margin: 8px 10px;
+  padding: 5px 10px 6px;
   background: #b3c0ac;
   border-radius: var(--radius-sm);
   box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.28);
@@ -2441,12 +2443,12 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 
 .calc-inds {
   display: flex;
-  gap: 12px;
-  font-size: 10px;
+  gap: 10px;
+  font-size: 9px;
   font-weight: 700;
   color: #4b574a;
-  min-height: 12px;
-  letter-spacing: 0.6px;
+  min-height: 11px;
+  letter-spacing: 0.5px;
 }
 
 #calc-mode { cursor: pointer; }
@@ -2460,9 +2462,9 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
   background: transparent;
   color: #1c241a;
   border: none;
-  padding: 4px 0 0;
+  padding: 2px 0 0;
   font-family: 'SF Mono', 'Fira Code', monospace;
-  font-size: 17px;
+  font-size: 15px;
   text-align: right;
 }
 
@@ -2471,9 +2473,9 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 .calc-result {
   text-align: right;
   font-family: 'SF Mono', 'Fira Code', monospace;
-  font-size: 23px;
+  font-size: 19px;
   font-weight: 700;
-  min-height: 26px;
+  min-height: 22px;
   color: #11160f;
   word-break: break-all;
 }
@@ -2481,14 +2483,14 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 .calc-keys {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
-  padding: 4px 10px 12px;
+  gap: 4px;
+  padding: 3px 8px 8px;
 }
 
 .ck {
   position: relative;
-  padding: 11px 0 9px;
-  font-size: 16px;
+  padding: 7px 0 6px;
+  font-size: 14px;
   border-radius: var(--radius-sm);
   border: none;
   background: #e9ecf1;
@@ -2517,31 +2519,30 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 
 /* ---------- fx-991ES PLUS faceplate ---------- */
 .calc.casio {
-  width: 366px;
+  width: 336px;
   background: linear-gradient(180deg, #2b2f36 0%, #1f2228 100%);
   border: 1px solid #0e1013;
   border-radius: 18px;
-  padding-bottom: 6px;
+  padding-bottom: 4px;
 }
 .calc.casio .calc-head {
   position: relative;
   background: linear-gradient(180deg, #34373d, #26292e);
-  padding: 10px 12px 9px;
+  padding: 7px 12px 6px;
   border-radius: 17px 17px 0 0;
 }
-.casio-logo { font-weight: 800; font-size: 16px; letter-spacing: 1px; color: #f2f4f7; }
-.casio-model { margin-left: 8px; font-style: italic; font-weight: 700; font-size: 12.5px; color: #cfd6e0; }
+.casio-model { font-style: italic; font-weight: 700; font-size: 13.5px; color: #f2f4f7; }
 .casio-vpam { margin-left: 8px; font-size: 8px; letter-spacing: 0.4px; color: #18b36b; font-weight: 700; }
 .casio-solar {
-  position: absolute; right: 34px; top: 11px;
-  width: 54px; height: 15px; border-radius: 3px;
+  position: absolute; right: 30px; top: 8px;
+  width: 46px; height: 13px; border-radius: 3px;
   background: repeating-linear-gradient(90deg, #5b4a2a, #5b4a2a 8px, #3a2f1c 8px, #3a2f1c 10px);
   border: 1px solid #1c160c;
 }
 .calc.casio .calc-x { position: absolute; right: 8px; top: 6px; color: #99a2ad; }
 
 .calc.casio .calc-screen {
-  margin: 10px 12px;
+  margin: 8px 10px;
   background: linear-gradient(180deg, #aebfa6, #9eb397);
   border: 2px solid #6f7d68;
 }
@@ -2551,16 +2552,16 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 
 .calc-ctl {
   display: grid;
-  grid-template-columns: 1fr 1fr 84px 1fr 1fr;
+  grid-template-columns: 1fr 1fr 68px 1fr 1fr;
   align-items: center;
-  gap: 6px;
-  padding: 2px 12px 8px;
+  gap: 5px;
+  padding: 1px 10px 5px;
 }
 .ck-alpha { background: #b23b2e; color: #fff; font-weight: 700; font-size: 12px; box-shadow: 0 2px 0 #7e271d; }
 
 .calc-replay {
   position: relative;
-  width: 78px; height: 58px;
+  width: 62px; height: 46px;
   margin: 0 auto;
   border-radius: 50%;
   background: radial-gradient(circle at 50% 38%, #4a515c, #2b3038);
@@ -2568,7 +2569,7 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 }
 .calc-replay .rep {
   position: absolute; background: transparent; border: none; color: #cfd6e0;
-  font-size: 9px; padding: 0; cursor: pointer; width: 22px; height: 18px; line-height: 1;
+  font-size: 9px; padding: 0; cursor: pointer; width: 20px; height: 16px; line-height: 1;
 }
 .calc-replay .rep:active { color: #fff; }
 .rep-up { top: 1px; left: 50%; transform: translateX(-50%); }
@@ -2577,14 +2578,14 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 .rep-right { right: 1px; top: 50%; transform: translateY(-50%); }
 .rep-hub {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  width: 26px; height: 26px; border-radius: 50%;
+  width: 20px; height: 20px; border-radius: 50%;
   background: radial-gradient(circle at 50% 38%, #5b636f, #343b44);
   box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.15), 0 1px 2px rgba(0, 0, 0, 0.4);
   pointer-events: none;
 }
 
-.calc.casio .calc-keys { padding: 2px 12px 8px; gap: 5px; }
-.calc.casio .ck { position: relative; background: #3a4048; color: #eef1f5; box-shadow: 0 2px 0 #1b1f25; font-size: 13px; padding: 13px 0 6px; }
+.calc.casio .calc-keys { padding: 2px 10px 6px; gap: 4px; }
+.calc.casio .ck { position: relative; background: #3a4048; color: #eef1f5; box-shadow: 0 2px 0 #1b1f25; font-size: 12px; padding: 8px 0 5px; }
 .calc.casio .ck .sh { left: 4px; right: auto; text-align: left; }
 .calc.casio .ck .al { position: absolute; top: 2px; right: 4px; font-size: 8px; line-height: 1; color: #e07a6b; }
 .calc.casio .ck-num { background: #eef1f5; color: #14181d; box-shadow: 0 2px 0 #aeb6c0; font-weight: 600; font-size: 15px; }
@@ -2629,14 +2630,14 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 .calc-expr::part(virtual-keyboard-toggle) { display: none; }
 
 /* ---------- Calculator TABLE / Matrix ---------- */
-.calc-sub { padding: 12px; }
+.calc-sub { padding: 8px 10px; }
 .calc-sub.hidden { display: none; }
 
 .ct-lab {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-3);
   display: block;
-  margin: 0 0 3px;
+  margin: 0 0 2px;
 }
 
 .ct-in {
@@ -2646,10 +2647,10 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 8px 10px;
+  padding: 6px 8px;
   font-family: 'SF Mono', 'Fira Code', monospace;
-  font-size: 14px;
-  margin-bottom: 8px;
+  font-size: 13px;
+  margin-bottom: 6px;
 }
 
 /* Calculator faceplate is always dark — its inputs keep the dark screen look,
@@ -2660,13 +2661,23 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
   border-color: var(--line);
 }
 
-.ct-row3 { display: flex; gap: 8px; }
+/* TABLE/MATRIX/BASE/EQN/∫dx fields are filled from the physical faceplate keys
+   (inputmode="none" keeps the native/on-screen keyboard from popping — see
+   calcActiveField in app.js), so the field currently armed for entry needs a
+   clear highlight since there's no blinking OS caret+keyboard to show it. */
+.calc .ct-in:focus, .calc .mx-in:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(230, 162, 60, 0.35);
+}
+
+.ct-row3 { display: flex; gap: 6px; }
 .ct-row3 span { flex: 1; }
-.ct-btns { display: flex; gap: 8px; margin-top: 2px; }
+.ct-btns { display: flex; gap: 6px; margin-top: 2px; }
 
 .ck-eq2 {
   flex: 2;
-  padding: 11px 0;
+  padding: 8px 0;
   border-radius: var(--radius-sm);
   border: 1px solid var(--accent);
   background: var(--accent);
@@ -2675,7 +2686,7 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
   cursor: pointer;
 }
 
-.ct-out { max-height: 220px; overflow: auto; margin-top: 10px; }
+.ct-out { max-height: 140px; overflow: auto; margin-top: 6px; }
 
 .ct-table {
   width: 100%;
@@ -2700,16 +2711,16 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 .ct-err { color: var(--danger); font-size: 13px; padding: 6px 0; }
 
 /* ---------- Matrix / Vector ---------- */
-.mx-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
-.mx-tab { padding: 6px 14px; font-size: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-3); color: var(--text-3); cursor: pointer; }
+.mx-tabs { display: flex; gap: 4px; margin-bottom: 6px; }
+.mx-tab { padding: 4px 12px; font-size: 11px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-3); color: var(--text-3); cursor: pointer; }
 .mx-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-.mx-block { margin-bottom: 10px; }
-.mx-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
-.mx-row3 { display: flex; gap: 4px; }
-.mx-in { width: 100%; box-sizing: border-box; background: #11161d; color: #e8ecf1; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 7px 9px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 14px; text-align: center; }
-.mx-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
-.mx-btns .ck { flex: 1; min-width: 50px; padding: 9px 0; font-size: 13px; }
-.mx-mat { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 14px; white-space: pre; line-height: 1.6; }
+.mx-block { margin-bottom: 6px; }
+.mx-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+.mx-row3 { display: flex; gap: 3px; }
+.mx-in { width: 100%; box-sizing: border-box; background: #11161d; color: #e8ecf1; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 5px 7px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; text-align: center; }
+.mx-btns { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 6px; }
+.mx-btns .ck { flex: 1; min-width: 50px; padding: 6px 0; font-size: 12px; }
+.mx-mat { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; white-space: pre; line-height: 1.5; }
 
 /* ---------- Function Grapher Panel ---------- */
 .gpanel {
