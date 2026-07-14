@@ -2094,12 +2094,17 @@ select:focus {
 
 .calc-kbd-btn:active { filter: brightness(0.92); }
 
-/* Present mode: park calculator high so the math keyboard can't bury it */
+/* Present mode: park calculator high so the math keyboard can't bury it.
+   top replaces the bottom anchor here, so the height cap must be measured
+   from THIS top offset (not the base rule's) or the panel still overflows
+   the bottom of short/resized windows — same bug the base .calc rule fixes. */
 #editor.present-mode #calc:not([data-dragged]) {
   top: max(72px, env(safe-area-inset-top));
   bottom: auto;
   right: max(12px, env(safe-area-inset-right));
   z-index: 10040;
+  max-height: calc(100vh - max(72px, env(safe-area-inset-top)) - 16px);
+  overflow-y: auto;
 }
 
 #calc.calc-kbd-open {
@@ -2385,9 +2390,16 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
   background: #2f333a;
   border: 1px solid #15181c;
   border-radius: var(--radius-lg);
-  overflow: hidden;
   box-shadow: 0 14px 44px rgba(0, 0, 0, 0.42);
   user-select: none;
+  /* Without a height cap, a short/resized browser window (or present mode's
+     top-pinned position below) pushes the bottom keypad rows past the visible
+     viewport with no way to reach them — this keeps the whole emulator visible
+     and scrollable internally instead of overflowing the window. */
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 .calc.hidden { display: none; }

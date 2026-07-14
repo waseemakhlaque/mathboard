@@ -119,7 +119,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 126;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 128;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -4873,7 +4873,16 @@ function latexToMath(src) {
         i += 5;
         const [num, a] = readArg(str, i); i = a;
         const [den, b] = readArg(str, i); i = b;
-        out += '((' + conv(num) + ')/(' + conv(den) + '))';
+        // A digit run immediately followed by \frac with NO operator between them
+        // (e.g. "2\frac{1}{3}") is the a-b/c key's mixed-number entry — 2⅓ means
+        // 2+1/3, never 2*(1/3). Without this, bare juxtaposition fell through to
+        // mathjs's implicit multiplication and silently computed the wrong answer
+        // (e.g. "2 1/3 - 2/3" evaluated to 0 instead of 5/3). Any other adjacency
+        // (operator, function, closing paren) is left as implicit multiplication,
+        // which is correct there — this only fires right after a bare digit run.
+        const digits = out.match(/(\d+\.?\d*)$/);
+        const sign = digits && out.slice(0, -digits[0].length).endsWith('-') ? '-' : '+';
+        out += (digits ? sign : '') + '((' + conv(num) + ')/(' + conv(den) + '))';
       } else if (str.startsWith('\\sqrt', i)) {
         i += 5;
         if (str[i] === '[') { const j = str.indexOf(']', i); const n = str.slice(i + 1, j); i = j + 1; const [g, a] = readArg(str, i); i = a; out += 'nthRoot((' + conv(g) + '),(' + conv(n) + '))'; }
@@ -4915,16 +4924,34 @@ function calcSetExpr(v) {
 function calcInsert(token) {
   const el = calcExprEl();
   if (!el) return;
-  if (typeof el.executeCommand === 'function') { el.executeCommand('insert', token); calcFocusExpr(); return; }
-  el.value = (el.value || '') + token;
+  // Inserting a structure with a placeholder (fractions, powers, etc.) moves
+  // MathLive's caret into that placeholder, which fires its own 'focusin' —
+  // BEFORE the calcFocusExpr() call below runs, so that call's calcQuietFocus
+  // guard was always too late to suppress it. Setting the flag around the
+  // executeCommand itself is what actually keeps faceplate keys from popping
+  // the on-screen keyboard (previously only plain single-char inserts avoided
+  // this, since they don't create a new placeholder to focus into).
+  calcQuietFocus = true;
+  try {
+    if (typeof el.executeCommand === 'function') el.executeCommand('insert', token);
+    else el.value = (el.value || '') + token;
+  } finally { calcQuietFocus = false; }
   calcFocusExpr();
+}
+// The real fx-991ES auto-closes unbalanced brackets when "=" is pressed (a
+// well-known feature — you can type "log(100" and hit "=" without typing the
+// closing paren). Without this, that muscle memory produced a bare "Error" here.
+function autoCloseParens(expr) {
+  let depth = 0;
+  for (const ch of expr) { if (ch === '(') depth++; else if (ch === ')') depth--; }
+  return depth > 0 ? expr + ')'.repeat(depth) : expr;
 }
 function calcEvaluate() {
   const hist = $('#calc-history');
   const expr = calcGetExpr();
   if (!expr) return;
   try {
-    const res = math.evaluate(expr, calcScope());
+    const res = math.evaluate(autoCloseParens(expr), calcScope());
     if (typeof res === 'function' || res === undefined) { $('#calc-result').textContent = 'Error'; return; }
     calcAns = res; calcLastExpr = expr; calcResultValue = res; calcDisplayMode = 0;
     if (hist) hist.textContent = `${expr} =`;
@@ -4954,8 +4981,19 @@ function calcKey(k, el) {
   if (k === 'on') { calcReset(); return; }
   if (k === 'ac') { if (sh) return; calcReset(); return; } // SHIFT+AC = OFF (ignored)
   if (k === 'mode') { toggleModeMenu(); return; }
-  if (k === 'up') { calcRecall(); return; }
-  if (k === 'down') { return; }
+  // Up/Down move within a fraction (numerator <-> denominator) like the real
+  // device's d-pad, so a-b/c entry never needs the on-screen keyboard. Down
+  // was previously a no-op and Up always recalled — meaning the ONLY way to
+  // reach a denominator was via the pop-up keyboard, which is exactly what
+  // forced it to appear even after the quiet-focus fix on insert. Recall stays
+  // on Up, but only when the field is empty (nothing to navigate into yet) —
+  // matches how a physical calculator's replay only kicks in on a fresh entry.
+  if (k === 'up') {
+    if (calcGetExpr()) { calcQuietFocus = true; try { inp?.executeCommand?.('moveUp'); } finally { calcQuietFocus = false; } calcFocusExpr(); }
+    else calcRecall();
+    return;
+  }
+  if (k === 'down') { calcQuietFocus = true; try { inp?.executeCommand?.('moveDown'); } finally { calcQuietFocus = false; } calcFocusExpr(); return; }
   if (k === 'left') { inp?.executeCommand?.('moveToPreviousChar'); calcFocusExpr(); return; }
   if (k === 'right') { inp?.executeCommand?.('moveToNextChar'); calcFocusExpr(); return; }
   if (k === 'del') {
@@ -4990,8 +5028,14 @@ function calcKey(k, el) {
   if (token === 'int') { openIntg('integral'); return; }
   if (token === 'diff') { openIntg('derivative'); return; }
   if (token === 'frac') {
-    if (inp?.executeCommand) inp.executeCommand('insert', '\\frac{\\placeholder{}}{\\placeholder{}}');
-    else calcInsert('()/()');
+    // Same placeholder-focus issue as calcInsert() — guard the insert itself,
+    // not just the re-focus after it, or the a-b/c key pops the on-screen
+    // keyboard the moment MathLive moves the caret into the numerator.
+    if (inp?.executeCommand) {
+      calcQuietFocus = true;
+      try { inp.executeCommand('insert', '\\frac{\\placeholder{}}{\\placeholder{}}'); }
+      finally { calcQuietFocus = false; }
+    } else calcInsert('()/()');
     calcFocusExpr(); return;
   }
   if (token === 'inv') { calcInsert('^(-1)'); return; }

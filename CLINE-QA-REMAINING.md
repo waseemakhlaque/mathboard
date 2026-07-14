@@ -169,6 +169,83 @@ Acceptance:
       by script — all now match hand-checked correct simplified surd form. **Still needs
       on-device confirmation that the rendered `<span class="c-surd">` HTML displays correctly.**
 
+### v128 — calculator UI/UX (fits window + emulator-only entry, no code-required popup keyboard)
+
+Waseem's follow-up feedback: (1) inserting a fraction pops the on-screen math keyboard instead
+of staying on the physical emulator, (2) the calculator doesn't fit within the browser window
+when resized, especially in present mode, and its layout can go off-screen.
+
+- [x] **Calculator doesn't fit the window / present mode.** Confirmed live: in present mode the
+      calculator is repositioned to `top: 72px; bottom: auto` with no height limit, so on a
+      650px-tall window its bottom keypad rows (1-2-3-0, "=", TABLE/MATRIX) render past the
+      bottom edge with no way to scroll to them — page-level scroll doesn't help since the panel
+      is `position: fixed`. The base (non-present) rule also had no height cap at all — only
+      the narrow `#calc.calc-vk-active` state (keyboard open) capped height, so a short/resized
+      window could overflow any time, not just in present mode. Fixed: added
+      `max-height: calc(100vh - 40px); overflow-y: auto;` to the base `.calc` rule, and a
+      matching present-mode-specific cap measured from its actual `top` offset
+      (`calc(100vh - max(72px, safe-area-inset-top) - 16px)`). Uses `vh` units so it reflows
+      automatically as the browser window is resized — no JS resize listener needed. Not
+      re-tested live (can't deploy from this session) but follows the exact pattern already
+      proven working for the keyboard-open state.
+- [x] **a-b/c key popped the on-screen keyboard.** Root cause: `calcInsert()` and the frac
+      handler in `calcKey()` called `executeCommand('insert', …)` and only wrapped the
+      *subsequent* re-focus call in the `calcQuietFocus` guard — too late, because inserting a
+      placeholder structure (a fraction) moves MathLive's caret into the new placeholder, which
+      fires its own `focusin` event *during* the insert, before the guard was set. Plain
+      single-character inserts (digits, operators) don't create a placeholder to focus into, so
+      they were never affected — only the fraction key was. Fixed: the `calcQuietFocus` guard
+      now wraps the `executeCommand` call itself, in both `calcInsert()` (covers `inv`, `neg`,
+      `e10`, `ran`, `ranint`, etc.) and the frac-specific handler.
+- [x] **No physical way to reach a fraction's denominator without the popup keyboard.** Found
+      while fixing the above: suppressing the keyboard alone would have made things *worse*,
+      because the d-pad's Down key was a literal no-op (`{ return; }`) and Up always triggered
+      Recall — meaning the popup keyboard's own arrow keys were the *only* way to move from
+      numerator to denominator. Wired Down to MathLive's `moveDown` command and Up to `moveUp`
+      (both confirmed to exist in the vendored `mathlive.min.js`), so the physical d-pad now
+      navigates within a fraction like the real device. Up still triggers Recall, but only when
+      the expression field is empty (nothing to navigate into) — matches how replay works on a
+      fresh entry on the physical calculator, without breaking mid-expression navigation.
+
+**Not yet re-deployed or on-device tested** — code-reviewed and follows already-proven CSS/JS
+patterns elsewhere in the file, but this needs a real deploy + hands-on iPad/browser check
+before calling it done, same as v127's fixes.
+
+### v127 — CRITICAL calculator bug found + fixed via live browser reproduction (v126 was already deployed)
+
+Waseem reported (screenshot) that on the live site, entering a mixed number via the `a b/c` key
+and subtracting another fraction gave a wrong result, the MODE menu "wasn't showing options",
+and "log wasn't working". Reproduced live on waseemonline.com (v126, signed in as the teacher
+account) via browser automation rather than guessing from code:
+
+- [x] **MODE menu: not a bug.** Opened correctly with all 10 options (1:COMP … 8:BASE-N, DEG,
+      RAD) visible. Whatever Waseem saw was very likely a stale Safari/PWA cache showing
+      pre-v120 code — not present in the current build.
+- [x] **CRITICAL — mixed-number entry silently gave wrong answers.** This is the real bug behind
+      the screenshot. Typing "2⅓ − ⅔" via the `a b/c` key produces LaTeX `2\frac{1}{3}-\frac{2}{3}`.
+      `latexToMath()` converted the adjacency `2\frac{1}{3}` into the bare-juxtaposition string
+      `2((1)/(3))` — which mathjs reads as **multiplication** (2 × ⅓), not addition. So
+      "2⅓ − ⅔" silently computed as (2×⅓) − ⅔ = **0** instead of the correct 5/3 ≈ 1.667. No
+      error shown — just a wrong number, on one of the most basic, everyday operations on this
+      calculator. Root-caused and reproduced with the exact screenshot expression before fixing.
+      Fix: in `latexToMath()`'s `conv()`, when a `\frac` is immediately preceded by a bare digit
+      run (no operator between — the a-b/c key's signature, since no other input path produces
+      that adjacency), insert `+` (or `-` if the digit run is itself negated, e.g. `-2\frac{1}{3}`
+      → `-2-((1)/(3))`, correctly giving -(2+1/3) not -2+1/3). Verified against the real function
+      extracted from the file: 9/9 cases pass — the screenshot case, negative mixed numbers,
+      chained subtraction (`5-2⅓`), two-digit whole parts, explicit-multiplication-preserved
+      (`3×⅓` still multiplies), bare fractions, and a sqrt regression check.
+- [x] **Log: not a distinct bug, but a related one found alongside it.** `log10(100)` with the
+      closing paren typed computes correctly (=2). But `log10(100` **without** the closing paren
+      — completely normal muscle memory from a real fx-991ES, which auto-closes brackets on "="
+      — gave a bare "Error". Fixed: `calcEvaluate()` now auto-closes unbalanced `(` before
+      calling `math.evaluate()`, matching real-device behavior. Verified 5/5 cases (unclosed
+      log, unclosed trig, nested unclosed parens, already-balanced expressions unaffected,
+      double-nested unclosed).
+
+**Not yet re-deployed** — v126 was already live when this was found; this fix is v127,
+uncommitted, needs a fresh deploy before Waseem can retest.
+
 ### v126 — calculator computation further verified this session (script, not device)
 
 Ran `calcScope()`'s trig/inverse-trig/power/root/memory logic through mathjs directly (same
