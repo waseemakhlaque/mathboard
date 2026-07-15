@@ -133,19 +133,35 @@ export function launchAnnotatedSim(labTag, params = {}, annotationBox) {
   hooks?.onSelect?.({ labTag, params: merged, box: annotationBox });
 }
 
+// A lab session (drag a mass, tap +/-, etc.) always has to be closeable — if
+// anything in the save/sync path below throws, the user must still get their
+// panel closed and their whiteboard back, not be stuck staring at a dead
+// close button. Each risky step is isolated so one failure can't skip the
+// ones after it (the closing/unlocking always happens; see closePanel()).
 function dismissLab(unlock = true) {
-  bridge?.detach();
+  try { bridge?.detach(); }
+  catch (err) { console.error('[annotSim] bridge.detach() failed — continuing', err); }
   if (activeLab && currentLabTag) {
-    saveState(currentLabTag, readLabState(activeLab, currentLabTag));
+    try { saveState(currentLabTag, readLabState(activeLab, currentLabTag)); }
+    catch (err) { console.error('[annotSim] saveState() failed — continuing', err); }
   }
   activeLab = null;
   currentLabTag = null;
-  hostEl?.replaceChildren();
+  try { hostEl?.replaceChildren(); }
+  catch (err) { console.error('[annotSim] host cleanup failed — continuing', err); }
   if (unlock) setLocked(false);
 }
 
 function closePanel() {
-  dismissLab(true);
+  try {
+    dismissLab(true);
+  } catch (err) {
+    // Belt-and-suspenders: dismissLab() already isolates its own steps, but if
+    // something upstream still throws, force the unlock so ink never stays
+    // stuck read-only even when the panel/lab state ends up half-cleaned-up.
+    console.error('[annotSim] dismissLab() failed — forcing unlock', err);
+    setLocked(false);
+  }
   panelEl?.classList.add('hidden');
   applyPanelLayout();
   hooks?.onDismiss?.();

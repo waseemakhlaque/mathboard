@@ -169,6 +169,53 @@ Acceptance:
       by script — all now match hand-checked correct simplified surd form. **Still needs
       on-device confirmation that the rendered `<span class="c-surd">` HTML displays correctly.**
 
+### v131 — Atwood machine (pulley lab): couldn't close the docked sim / resume annotating
+
+Waseem's report: opened the pulley (Atwood machine) lab, edited its mass values, and then
+couldn't close the docked panel or go back to drawing on the whiteboard.
+
+- [x] **Root cause: `closePanel()`/`dismissLab()` (`annotatedSim.js`) ran several
+      side-effecting steps as one unguarded synchronous chain** — sync the lab's final values
+      back to the page's text labels, save lab state to `localStorage`/the page, THEN hide the
+      panel and unlock the canvas (`S.annotSimLocked = false`). If any earlier step threw (e.g.
+      `commitAction()` inside `AnnotationSyncBridge.detach()`, which snapshots the whole page for
+      undo), the function aborted before reaching the "hide panel" / "unlock canvas" lines —
+      matching the reported symptom exactly: panel stays open AND the whiteboard stays
+      read-only. Fixed by isolating each step in `dismissLab()` (detach / save-state / host
+      cleanup each in their own try/catch, logging but not aborting) and wrapping `closePanel()`
+      itself so even an unexpected throw still forces `setLocked(false)` before returning — the
+      panel-hide and canvas-unlock now happen unconditionally, matching the "corrupt data must
+      skip-and-continue, never throw" rule already used elsewhere (`objGeomOk`,
+      `sanitizeGeoItems`, etc.).
+- [x] **Related bug found while fixing the above: every edit opened its own undo transaction
+      without closing it.** `AnnotationSyncBridge._pushToLabels()` called `hooks.beginAction()`
+      (a full-page snapshot) on every debounced sync — i.e. on every mass +/- click or drag
+      frame — but `commitAction()` only ran once, when the lab finally closed. Each new
+      `beginAction()` overwrote `S.actionBefore` with the page state as of the *latest* edit,
+      silently discarding the "before" snapshot from every earlier edit in the session — so
+      undo after closing the lab would only undo the last tiny change, not the whole editing
+      session. Fixed by gating `beginAction()` on the bridge's own `_dirty` flag (only fires
+      once per open→close session) instead of firing on every sync.
+- [x] **`js/app.js`, `js/annotatedSim.js`, `js/annotationSync.js`, `css/app.css`, `index.html`,
+      `sw.js`** all `node --check`-clean / brace-balance-clean.
+
+**Not yet on-device tested** — no browser session available this round; this needs a real
+repro-and-confirm pass on the pulley lab (and ideally the other docked labs, since the fix is
+in the shared `AnnotationSyncBridge`/`annotatedSim.js` path, not pulley-lab-specific code) after
+deploying v131.
+
+### v130 — π key inserted plain text instead of the Greek glyph
+
+Spotted live (v129 screenshot): `sin(pi/6)` evaluated correctly to `1/2`, but the expression
+line showed literal "pi" in italics (like two separate variables `p`, `i`) instead of the π
+symbol a real fx-991ES displays. Root cause: `SHIFT_MAP['e10']` (the SHIFT+×10ˣ key that types
+π) was `'pi'` — plain text — and `calcInsert()` passes tokens straight to MathLive's
+`executeCommand('insert', …)`, which treats the argument as LaTeX source. Plain `pi` LaTeX just
+renders as two adjacent italic letters, not the Greek glyph. Fixed by changing the mapping to
+the LaTeX command `'\\pi'`; `latexToMath()` already strips `\pi` back to the bare `pi` mathjs
+recognizes (line ~4878), so evaluation is unaffected — this was purely a display bug on the
+emulator's screen, not a computation bug. **v130.**
+
 ### v129 — CASIO branding, TABLE fix, faceplate-only entry in every sub-view, real compacting
 
 Waseem's follow-up round on top of v128: (1) remove the "CASIO" brand text, keep only

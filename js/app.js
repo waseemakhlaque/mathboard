@@ -119,7 +119,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 129;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 131;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -4529,7 +4529,11 @@ let calcView = 'keys';          // mirrors showCalcView's current sub-view
 let calcActiveField = null;     // last-focused TABLE/MATRIX/BASE/EQN/∫dx <input>, for faceplate routing
 const SHIFT_MAP = {
   'sin(': 'asin(', 'cos(': 'acos(', 'tan(': 'atan(', 'log(': 'e^(', 'log10(': '10^(',
-  '^': 'nthRoot(', 'sqrt(': 'cbrt(', '^2': '^3', 'inv': '!', 'e10': 'pi', 'int': 'diff',
+  // e10 (SHIFT -> pi) inserts the LaTeX command '\pi' (not the plain text "pi")
+  // so the MathLive field renders the actual Greek glyph on the emulator screen
+  // instead of two separate italic letters; latexToMath() already strips \pi
+  // back to the bare "pi" mathjs recognizes, so evaluation is unaffected.
+  '^': 'nthRoot(', 'sqrt(': 'cbrt(', '^2': '^3', 'inv': '!', 'e10': '\\pi', 'int': 'diff',
   'hyp': 'abs(', '*': 'permutations(', '/': 'combinations(', 'rcl': 'sto', 'mplus': 'mminus',
   'ran': 'ranint', 'ac': 'off', 'pol': 'rec', 'sum': 'prod',
 };

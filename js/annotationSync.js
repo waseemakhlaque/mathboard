@@ -152,13 +152,23 @@ export class AnnotationSyncBridge {
     this._scheduleSync(true);
   }
 
+  // Closing the docked lab panel MUST always succeed — if commitAction() (a
+  // full-page snapshot + undo push) throws for any reason, that used to abort
+  // detach() before the caller (dismissLab/closePanel) reached the code that
+  // hides the panel and unlocks the canvas, leaving the user stuck with the
+  // lab open and ink read-only. Skip-and-continue instead: log it, but always
+  // finish detaching.
   detach() {
     clearTimeout(this._timer);
     if (this._lab && this._origRefresh) this._lab.refresh = this._origRefresh;
     this._lab = null;
     this._tag = null;
     this._origRefresh = null;
-    if (this._dirty) { this._dirty = false; this.hooks.commitAction?.(); }
+    if (this._dirty) {
+      this._dirty = false;
+      try { this.hooks.commitAction?.(); }
+      catch (err) { console.error('[annotSim] commitAction failed while closing lab — continuing', err); }
+    }
   }
 
   _scheduleSync(immediate) {
@@ -182,7 +192,14 @@ export class AnnotationSyncBridge {
         re.lastIndex = 0;
         const updated = obj.text.replace(re, next);
         if (updated !== obj.text) {
-          if (!changed) { this.hooks.beginAction(); changed = true; this._dirty = true; }
+          // One beginAction() per editing SESSION (from lab-open to lab-close),
+          // not per debounced sync — dragging a mass or tapping +/- a few times
+          // fires this many times, and calling beginAction() again on every one
+          // overwrote S.actionBefore each time, silently discarding all but the
+          // last tiny edit from the undo stack. Gate on _dirty (reset only in
+          // detach()) so the whole session collapses into a single undo step.
+          if (!this._dirty) { this.hooks.beginAction(); this._dirty = true; }
+          changed = true;
           obj.text = updated;
         }
       }
