@@ -119,7 +119,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 133;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 134;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -4536,6 +4536,8 @@ const SHIFT_MAP = {
   '^': 'nthRoot(', 'sqrt(': 'cbrt(', '^2': '^3', 'inv': '!', 'e10': '\\pi', 'int': 'diff',
   'hyp': 'abs(', '*': 'permutations(', '/': 'combinations(', 'rcl': 'sto', 'mplus': 'mminus',
   'ran': 'ranint', 'ac': 'off', 'pol': 'rec', 'sum': 'prod',
+  // ClassWiz numpad SHIFT labels (Pol/Rec/Ran# sit on 1 / 2 / .)
+  '1': 'pol', '2': 'rec', '.': 'ran',
 };
 // Real LaTeX to insert for the "structural" function keys, keyed by the token
 // AFTER SHIFT_MAP resolution. Previously these keys inserted their mathjs
@@ -5240,13 +5242,15 @@ function calcKey(k, el) {
     if (k === 'mode') { toggleModeMenu(); return; }
     if (k === 'matrix') { showCalcView('matrix'); return; }
     if (k === 'table') { showCalcView('table'); return; }
-    if (k === 'calc' || k === 'int' || k === 'sd' || k === 'rcl' || k === 'mplus' || k === 'hyp') return; // not meaningful mid-prompt
+    if (k === 'calc' || k === 'int' || k === 'sd' || k === 'rcl' || k === 'mplus' || k === 'hyp' || k === 'optn') return; // not meaningful mid-prompt
+    if (k === 'varx') { calcInsertPlain(fieldTarget, 'x'); return; }
     const plain = calcPlainToken(k, sh);
     if (plain != null) calcInsertPlain(fieldTarget, plain);
     return;
   }
   if (k === 'ac') { if (sh) return; calcReset(); return; } // SHIFT+AC = OFF (ignored)
-  if (k === 'mode') { toggleModeMenu(); return; }
+  if (k === 'mode' || k === 'optn') { toggleModeMenu(); return; }
+  if (k === 'varx') { calcInsert('x'); return; }
   // Up/Down move within a fraction (numerator <-> denominator) like the real
   // device's d-pad, so a-b/c entry never needs the on-screen keyboard. Down
   // was previously a no-op and Up always recalled — meaning the ONLY way to

@@ -44,8 +44,8 @@
 <link rel="apple-touch-icon" href="./assets/icon-512.png" sizes="512x512" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=133" />
-<link rel="stylesheet" href="./css/annotatedSim.css?v=133" />
+<link rel="stylesheet" href="./css/app.css?v=134" />
+<link rel="stylesheet" href="./css/annotatedSim.css?v=134" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -108,7 +108,7 @@
     <span id="sync-status" class="sync-status" title="Offline · saved on this device">● Local</span>
     · <button type="button" id="sync-settings-foot" class="sync-foot-link">Cloud sync</button>
     · Paginated notebook whiteboard · works offline · add to Home Screen on iPad
-    · <span id="mb-version" class="mb-version">v133</span>
+    · <span id="mb-version" class="mb-version">v134</span>
     · © 2026 Waseem Akhlaque
   </p>
 </section>
@@ -447,10 +447,10 @@
     </div>
   </div>
 
-  <div id="calc" class="calc casio hidden">
+  <div id="calc" class="calc casio classwiz hidden">
     <div class="calc-head" id="calc-head">
-      <span class="casio-model">MathBoard Calc</span>
-      <span class="casio-vpam">NATURAL DISPLAY</span>
+      <span class="casio-model">MathBoard</span>
+      <span class="casio-classwiz">CLASSWIZ</span>
       <button class="calc-x" id="calc-close" title="Close" aria-label="Close calculator">×</button>
     </div>
     <div class="calc-screen">
@@ -471,79 +471,83 @@
       <button type="button" id="calc-done" class="calc-kbd-btn primary">Done (=)</button>
     </div>
 
+    <!-- ClassWiz control row: SHIFT / ALPHA · D-pad · MENU · ON -->
     <div class="calc-ctl">
-      <button data-k="shift" class="ck ck-shift">SHIFT</button>
-      <button data-k="alpha" class="ck ck-alpha">ALPHA</button>
-      <div class="calc-replay" role="group" aria-label="Replay">
-        <button data-k="up" class="rep rep-up" aria-label="up">▲</button>
-        <button data-k="left" class="rep rep-left" aria-label="left">◄</button>
-        <button data-k="right" class="rep rep-right" aria-label="right">►</button>
-        <button data-k="down" class="rep rep-down" aria-label="down">▼</button>
+      <div class="calc-ctl-stack">
+        <button data-k="shift" class="ck ck-shift" type="button">SHIFT</button>
+        <button data-k="alpha" class="ck ck-alpha" type="button">ALPHA</button>
+      </div>
+      <div class="calc-replay" role="group" aria-label="Cursor pad">
+        <button data-k="up" class="rep rep-up" type="button" aria-label="up">▲</button>
+        <button data-k="left" class="rep rep-left" type="button" aria-label="left">◄</button>
+        <button data-k="right" class="rep rep-right" type="button" aria-label="right">►</button>
+        <button data-k="down" class="rep rep-down" type="button" aria-label="down">▼</button>
         <span class="rep-hub"></span>
       </div>
-      <button data-k="mode" class="ck ck-ctl"><span class="sh sh-y">SETUP</span>MODE</button>
-      <button data-k="on" class="ck ck-ctl">ON</button>
+      <div class="calc-ctl-stack">
+        <button data-k="mode" class="ck ck-ctl" type="button"><span class="sh sh-y">SETUP</span>MENU</button>
+        <button data-k="on" class="ck ck-ctl" type="button">ON</button>
+      </div>
     </div>
 
     <div class="calc-keys" id="calc-keys">
-      <button data-k="calc" class="ck ck-fn"><span class="sh sh-y">SOLVE</span>CALC</button>
-      <button data-k="int" class="ck ck-fn"><span class="sh sh-y">d/dx</span>∫dx</button>
-      <button data-k="sum" class="ck ck-fn"><span class="sh sh-y">Π</span>Σ</button>
-      <button data-k="pol" class="ck ck-fn"><span class="sh sh-y">Rec</span>Pol</button>
-      <button data-k="ran" class="ck ck-fn"><span class="sh sh-y">RanInt</span>Ran#</button>
+      <!-- Scientific 4×6 — ClassWiz density -->
+      <div class="calc-sci">
+        <button data-k="optn" class="ck ck-fn" type="button"><span class="sh sh-y">QR</span>OPTN</button>
+        <button data-k="calc" class="ck ck-fn" type="button"><span class="sh sh-y">SOLVE</span>CALC</button>
+        <button data-k="int" class="ck ck-fn" type="button"><span class="sh sh-y">d/dx</span>∫dx</button>
+        <button data-k="varx" class="ck ck-fn" type="button"><span class="sh sh-y">Σ</span><span class="al">x</span>x</button>
+        <button data-k="frac" class="ck ck-fn" type="button"><span class="sh sh-y">a b/c</span>▢/▢</button>
+        <button data-k="sqrt(" class="ck ck-fn" type="button"><span class="sh sh-y">∛▢</span>√▢</button>
 
-      <button data-k="frac" class="ck ck-fn"><span class="sh sh-y">a b/c</span>▯/▯</button>
-      <button data-k="sqrt(" class="ck ck-fn"><span class="sh sh-y">∛▯</span>√▯</button>
-      <button data-k="^2" class="ck ck-fn"><span class="sh sh-y">x³</span>x²</button>
-      <button data-k="^" class="ck ck-fn"><span class="sh sh-y">ˣ√▯</span>x▪</button>
-      <button data-k="log10(" class="ck ck-fn"><span class="sh sh-y">10ˣ</span>log</button>
+        <button data-k="^2" class="ck ck-fn" type="button"><span class="sh sh-y">x³</span>x²</button>
+        <button data-k="^" class="ck ck-fn" type="button"><span class="sh sh-y">ˣ√▢</span>x▢</button>
+        <button data-k="log10(" class="ck ck-fn" type="button"><span class="sh sh-y">10ˣ</span>log</button>
+        <button data-k="log(" class="ck ck-fn" type="button"><span class="sh sh-y">eˣ</span>ln</button>
+        <button data-k="neg" class="ck ck-fn" type="button"><span class="al">A</span>(−)</button>
+        <button data-k="dms" class="ck ck-fn" type="button"><span class="sh sh-y">DRG►</span><span class="al">B</span>° ′ ″</button>
 
-      <button data-k="inv" class="ck ck-fn"><span class="sh sh-y">x!</span>x⁻¹</button>
-      <button data-k="log(" class="ck ck-fn"><span class="sh sh-y">eˣ</span>ln</button>
-      <button data-k="neg" class="ck ck-fn"><span class="al">A</span>(−)</button>
-      <button data-k="dms" class="ck ck-fn"><span class="sh sh-y">DRG►</span><span class="al">B</span>°’”</button>
-      <button data-k="hyp" class="ck ck-fn"><span class="sh sh-y">Abs</span><span class="al">C</span>hyp</button>
+        <button data-k="inv" class="ck ck-fn" type="button"><span class="sh sh-y">x!</span>x⁻¹</button>
+        <button data-k="sin(" class="ck ck-fn" type="button"><span class="sh sh-y">sin⁻¹</span><span class="al">D</span>sin</button>
+        <button data-k="cos(" class="ck ck-fn" type="button"><span class="sh sh-y">cos⁻¹</span><span class="al">E</span>cos</button>
+        <button data-k="tan(" class="ck ck-fn" type="button"><span class="sh sh-y">tan⁻¹</span><span class="al">F</span>tan</button>
+        <button data-k="rcl" class="ck ck-fn" type="button"><span class="sh sh-y">STO</span>RCL</button>
+        <button data-k="eng" class="ck ck-fn" type="button"><span class="sh sh-y">←</span><span class="al">i</span>ENG</button>
 
-      <button data-k="sin(" class="ck ck-fn"><span class="sh sh-y">sin⁻¹</span><span class="al">D</span>sin</button>
-      <button data-k="cos(" class="ck ck-fn"><span class="sh sh-y">cos⁻¹</span><span class="al">E</span>cos</button>
-      <button data-k="tan(" class="ck ck-fn"><span class="sh sh-y">tan⁻¹</span><span class="al">F</span>tan</button>
-      <button data-k="rcl" class="ck ck-fn"><span class="sh sh-y">STO</span>RCL</button>
-      <button data-k="eng" class="ck ck-fn"><span class="al">i</span>ENG</button>
+        <button data-k="(" class="ck ck-fn" type="button"><span class="sh sh-y">%</span><span class="al">X</span>(</button>
+        <button data-k=")" class="ck ck-fn" type="button"><span class="al">Y</span>)</button>
+        <button data-k="sd" class="ck ck-fn" type="button">S⇔D</button>
+        <button data-k="mplus" class="ck ck-fn" type="button"><span class="sh sh-y">M−</span><span class="al">M</span>M+</button>
+        <button data-k="," class="ck ck-fn" type="button"><span class="sh sh-y">;</span>,</button>
+        <button data-k="hyp" class="ck ck-fn" type="button"><span class="sh sh-y">Abs</span><span class="al">C</span>hyp</button>
+      </div>
 
-      <button data-k="(" class="ck ck-fn"><span class="sh sh-y">%</span>(</button>
-      <button data-k=")" class="ck ck-fn"><span class="al">X</span>)</button>
-      <button data-k="," class="ck ck-fn">,</button>
-      <button data-k="sd" class="ck ck-fn"><span class="al">Y</span>S⇔D</button>
-      <button data-k="mplus" class="ck ck-fn"><span class="sh sh-y">M−</span><span class="al">M</span>M+</button>
+      <!-- Number pad 4×5 — white digits, blue DEL/AC -->
+      <div class="calc-num">
+        <button data-k="7" class="ck ck-num" type="button"><span class="sh sh-y">CONST</span>7</button>
+        <button data-k="8" class="ck ck-num" type="button"><span class="sh sh-y">CONV</span>8</button>
+        <button data-k="9" class="ck ck-num" type="button"><span class="sh sh-y">RESET</span>9</button>
+        <button data-k="del" class="ck ck-del" type="button"><span class="sh sh-y">INS</span>DEL</button>
+        <button data-k="ac" class="ck ck-ac" type="button"><span class="sh sh-y">OFF</span>AC</button>
 
-      <button data-k="7" class="ck ck-num">7</button>
-      <button data-k="8" class="ck ck-num">8</button>
-      <button data-k="9" class="ck ck-num">9</button>
-      <button data-k="del" class="ck ck-warn">DEL</button>
-      <button data-k="ac" class="ck ck-warn"><span class="sh sh-y">OFF</span>AC</button>
+        <button data-k="4" class="ck ck-num" type="button">4</button>
+        <button data-k="5" class="ck ck-num" type="button">5</button>
+        <button data-k="6" class="ck ck-num" type="button">6</button>
+        <button data-k="*" class="ck ck-op" type="button"><span class="sh sh-y">nPr</span>×</button>
+        <button data-k="/" class="ck ck-op" type="button"><span class="sh sh-y">nCr</span>÷</button>
 
-      <button data-k="4" class="ck ck-num">4</button>
-      <button data-k="5" class="ck ck-num">5</button>
-      <button data-k="6" class="ck ck-num">6</button>
-      <button data-k="*" class="ck ck-op"><span class="sh sh-y">nPr</span>×</button>
-      <button data-k="/" class="ck ck-op"><span class="sh sh-y">nCr</span>÷</button>
+        <button data-k="1" class="ck ck-num" type="button"><span class="sh sh-y">Pol</span>1</button>
+        <button data-k="2" class="ck ck-num" type="button"><span class="sh sh-y">Rec</span>2</button>
+        <button data-k="3" class="ck ck-num" type="button">3</button>
+        <button data-k="+" class="ck ck-op" type="button">+</button>
+        <button data-k="-" class="ck ck-op" type="button">−</button>
 
-      <button data-k="1" class="ck ck-num">1</button>
-      <button data-k="2" class="ck ck-num">2</button>
-      <button data-k="3" class="ck ck-num">3</button>
-      <button data-k="+" class="ck ck-op">+</button>
-      <button data-k="-" class="ck ck-op">−</button>
-
-      <button data-k="0" class="ck ck-num">0</button>
-      <button data-k="." class="ck ck-num"><span class="sh sh-y">Ran#</span>.</button>
-      <button data-k="e10" class="ck ck-num"><span class="sh sh-y">π</span><span class="al">e</span>×10ˣ</button>
-      <button data-k="ans" class="ck ck-num">Ans</button>
-      <button data-k="eq" class="ck ck-eq">=</button>
-    </div>
-
-    <div class="calc-funcs">
-      <button data-k="table" class="ck ck-ctl">TABLE</button>
-      <button data-k="matrix" class="ck ck-ctl">MATRIX / VCT</button>
+        <button data-k="0" class="ck ck-num" type="button"><span class="sh sh-y">Rnd</span>0</button>
+        <button data-k="." class="ck ck-num" type="button"><span class="sh sh-y">Ran#</span>.</button>
+        <button data-k="e10" class="ck ck-num" type="button"><span class="sh sh-y">π</span><span class="al">e</span>×10ˣ</button>
+        <button data-k="ans" class="ck ck-num" type="button"><span class="sh sh-y">≈</span>Ans</button>
+        <button data-k="eq" class="ck ck-eq" type="button">=</button>
+      </div>
     </div>
 
     <div id="calc-mode-menu" class="calc-mode-menu hidden">
@@ -1182,5 +1186,5 @@
 </div>
 
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=133"></script>
+<script type="module" src="./js/app.js?v=134"></script>
 </html>
