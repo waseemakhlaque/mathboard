@@ -2480,6 +2480,18 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
   word-break: break-all;
 }
 
+/* KaTeX renders inside .calc-result (calcPaintResult) so the answer is
+   typeset with the same engine as the MathLive input line — match weight/
+   color/alignment to the plain-text fallback and fade+lift in on every new
+   answer instead of an instant innerHTML swap. */
+.calc-result .katex { font-size: 1.15em; color: inherit; }
+.calc-result .katex-display { margin: 0; text-align: right; }
+.calc-result.cr-pop { animation: crPop 160ms ease-out; }
+@keyframes crPop {
+  from { opacity: 0.35; transform: translateY(2px); }
+  to   { opacity: 1;    transform: translateY(0); }
+}
+
 .calc-keys {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
@@ -2497,9 +2509,10 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
   color: #20242b;
   cursor: pointer;
   box-shadow: 0 2px 0 #b9bfc9;
+  transition: transform 70ms ease-out, box-shadow 70ms ease-out, filter 70ms ease-out;
 }
 
-.ck:active { transform: translateY(1px); box-shadow: 0 1px 0 #b9bfc9; }
+.ck:active { transform: translateY(1px); box-shadow: 0 1px 0 #b9bfc9; filter: brightness(0.97); }
 .ck-fn { background: #d8dde6; font-size: 14px; }
 .ck-op { background: #c7d0dc; font-weight: 700; }
 .ck-ctl { background: #4a515c; color: #eceef2; box-shadow: 0 2px 0 #2c313a; font-size: 13px; }

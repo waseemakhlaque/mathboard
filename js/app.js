@@ -119,7 +119,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 131;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 132;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -4793,6 +4793,91 @@ function trySurdDecimal(x) {
   }
   return null;
 }
+// ---- LaTeX result rendering (KaTeX) -----------------------------------------
+// Mirrors fracHtml/mixedHtml/surdHtml/trySurdDecimal but emits LaTeX so the
+// ANSWER is typeset by the same engine (KaTeX, vendored) that already renders
+// the MathLive input — a hand-rolled span/CSS fraction next to a properly
+// typeset input line is exactly what read as "not smooth" vs a real emulator.
+function fracLatex(n, d) {
+  if (!d) return String(n);
+  if (d < 0) { n = -n; d = -d; }
+  const g = gcd(n, d); n /= g; d /= g;
+  if (d === 1) return String(n);
+  const sign = n < 0 ? '-' : '';
+  return `${sign}\\frac{${Math.abs(n)}}{${d}}`;
+}
+function mixedLatex(n, d) {
+  if (!d) return String(n);
+  if (d < 0) { n = -n; d = -d; }
+  const g = gcd(n, d); n /= g; d /= g;
+  if (d === 1) return String(n);
+  const sign = n < 0 ? '-' : '';
+  const an = Math.abs(n);
+  const whole = Math.floor(an / d), rem = an % d;
+  if (!whole) return fracLatex(n, d);
+  return `${sign}${whole}\\ \\frac{${rem}}{${d}}`;
+}
+function surdLatex(k, n) {
+  let out = '';
+  if (k === -1) out = '-';
+  else if (k !== 1 && k !== -1) out = String(k);
+  if (n === 1) return out || '0';
+  out += `\\sqrt{${n > 1 ? n : ''}}`;
+  return out;
+}
+function trySurdLatex(x) {
+  if (!isFinite(x) || x === 0) return null;
+  const sign = x < 0 ? -1 : 1;
+  const ax = Math.abs(x);
+  if (Math.abs(ax - Math.round(ax)) < 1e-9) return String(sign * Math.round(ax));
+  for (let n = 2; n <= 500; n++) {
+    const k = ax / Math.sqrt(n);
+    if (Math.abs(k - Math.round(k)) < 1e-9) return surdLatex(sign * Math.round(k), n);
+  }
+  return null;
+}
+function calcFormatLatex(val, mode) {
+  if (val == null) return '0';
+  const t = math.typeOf(val);
+  if (t === 'Complex' || (val && val.re != null && val.im != null)) {
+    const re = val.re ?? val, im = val.im ?? 0;
+    if (Math.abs(im) < 1e-12) return calcFormatLatex(re, mode);
+    const rp = calcFormatLatex(re, mode), ip = calcFormatLatex(Math.abs(im), mode);
+    const sign = im < 0 ? ' - ' : ' + ';
+    const ii = Math.abs(im) === 1 ? 'i' : `${ip}i`;
+    return `${rp}${sign}${ii}`;
+  }
+  if (t === 'Matrix' || (val && val.size)) {
+    const s = val.size();
+    const rows = [];
+    for (let r = 0; r < s[0]; r++) {
+      const row = [];
+      for (let c = 0; c < s[1]; c++) row.push(calcFormatPlain(val.get([r, c])));
+      rows.push(row.join(' & '));
+    }
+    return `\\begin{bmatrix}${rows.join('\\\\\\\\')}\\end{bmatrix}`;
+  }
+  if (mode === 1 || mode === 2) {
+    try {
+      const f = mathFrac.fraction(val);
+      if (f && Number.isFinite(f.n) && Number.isFinite(f.d)) {
+        return mode === 1 ? fracLatex(f.s * f.n, f.d) : mixedLatex(f.s * f.n, f.d);
+      }
+    } catch (_) { /* decimal */ }
+  }
+  if (mode === 3) {
+    if (typeof val === 'number') {
+      const s = trySurdLatex(val);
+      if (s) return s;
+    }
+    try {
+      const simp = math.simplify(math.parse(String(calcLastExpr || val)));
+      const str = simp.toString();
+      if (/sqrt|√/.test(str)) return str.replace(/sqrt\((\d+)\)/g, '\\sqrt{$1}');
+    } catch (_) { /* fall through */ }
+  }
+  return calcFormatPlain(val).replace(/e\+?(-?\d+)/i, '\\times 10^{$1}');
+}
 function calcFormatValue(val, mode) {
   if (val == null) return '0';
   const t = math.typeOf(val);
@@ -4845,9 +4930,24 @@ function calcFormatPlain(val) {
 function calcRenderResult() {
   const out = $('#calc-result'), ind = $('#calc-fmt-ind');
   if (!out) return;
-  if (calcResultValue == null) { out.textContent = '0'; if (ind) ind.textContent = 'D'; return; }
+  if (calcResultValue == null) { calcPaintResult(out, '0'); if (ind) ind.textContent = 'D'; return; }
   if (ind) ind.textContent = CALC_FMT[calcDisplayMode] || 'D';
-  out.innerHTML = calcFormatValue(calcResultValue, calcDisplayMode);
+  let latex;
+  try { latex = calcFormatLatex(calcResultValue, calcDisplayMode); } catch (_) { latex = null; }
+  calcPaintResult(out, latex, calcResultValue, calcDisplayMode);
+}
+// Paints the answer through KaTeX so it's typeset the same way as the MathLive
+// input line above it (falls back to the old span/CSS renderer if KaTeX hasn't
+// loaded yet or a LaTeX string fails to parse — never leave the display blank).
+function calcPaintResult(out, latex, rawVal, mode) {
+  out.classList.remove('cr-pop'); void out.offsetWidth; // restart the pop-in transition each answer
+  let painted = false;
+  if (latex && window.katex) {
+    try { window.katex.render(latex, out, { throwOnError: false, output: 'html', displayMode: false }); painted = true; }
+    catch (_) { painted = false; }
+  }
+  if (!painted) out.innerHTML = (rawVal !== undefined) ? calcFormatValue(rawVal, mode) : String(latex ?? '0');
+  out.classList.add('cr-pop');
 }
 function calcExprEl() { return $('#calc-expr'); }
 // Faceplate keys re-focus the expression field after every insert. That focus
