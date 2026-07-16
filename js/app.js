@@ -4537,6 +4537,34 @@ const SHIFT_MAP = {
   'hyp': 'abs(', '*': 'permutations(', '/': 'combinations(', 'rcl': 'sto', 'mplus': 'mminus',
   'ran': 'ranint', 'ac': 'off', 'pol': 'rec', 'sum': 'prod',
 };
+// Real LaTeX to insert for the "structural" function keys, keyed by the token
+// AFTER SHIFT_MAP resolution. Previously these keys inserted their mathjs
+// function name as literal characters (e.g. "log10(", "asin(") — MathLive
+// then typeset them as plain italic letters with NO subscript/superscript,
+// which is exactly the "not as smooth/natural as a real emulator" gap: the
+// input line looked like plain text next to a properly-typeset fraction key.
+// \placeholder{} gives MathLive a highlighted slot and puts the caret there.
+const FN_TEMPLATES = {
+  'sin(': '\\sin\\left(\\placeholder{}\\right)',
+  'cos(': '\\cos\\left(\\placeholder{}\\right)',
+  'tan(': '\\tan\\left(\\placeholder{}\\right)',
+  'asin(': '\\sin^{-1}\\left(\\placeholder{}\\right)',
+  'acos(': '\\cos^{-1}\\left(\\placeholder{}\\right)',
+  'atan(': '\\tan^{-1}\\left(\\placeholder{}\\right)',
+  'sinh(': '\\sinh\\left(\\placeholder{}\\right)',
+  'cosh(': '\\cosh\\left(\\placeholder{}\\right)',
+  'tanh(': '\\tanh\\left(\\placeholder{}\\right)',
+  'asinh(': '\\sinh^{-1}\\left(\\placeholder{}\\right)',
+  'acosh(': '\\cosh^{-1}\\left(\\placeholder{}\\right)',
+  'atanh(': '\\tanh^{-1}\\left(\\placeholder{}\\right)',
+  'log10(': '\\log_{10}\\left(\\placeholder{}\\right)',
+  'log(': '\\ln\\left(\\placeholder{}\\right)',
+  'sqrt(': '\\sqrt{\\placeholder{}}',
+  'cbrt(': '\\sqrt[3]{\\placeholder{}}',
+  'nthRoot(': '\\sqrt[\\placeholder{}]{\\placeholder{}}',
+  '10^(': '10^{\\placeholder{}}',
+  'e^(': 'e^{\\placeholder{}}',
+};
 const CALC_FMT = ['D', 'F', 'ab/c', '√'];
 
 function showCalcView(view) {
@@ -4980,6 +5008,20 @@ function latexToMath(src) {
     .replace(/\\cdot|\\times/g, '*')
     .replace(/\\div/g, '/')
     .replace(/\\pi/g, 'pi')
+    // Inverse-function LaTeX (from FN_TEMPLATES, or hand-typed via the on-screen
+    // keyboard) must be rewritten to the asin/acos/... mathjs name BEFORE the
+    // generic '^' handler below runs — otherwise "\sin^{-1}(x)" would parse as
+    // "sin" raised to the power -1 (i.e. 1/sin(x), cosecant) instead of arcsine.
+    // Routed through \operatorname{} so the existing unwrap line just below
+    // turns it into the bare mathjs function name.
+    .replace(/\\sinh\^\{-1\}/g, '\\operatorname{asinh}')
+    .replace(/\\cosh\^\{-1\}/g, '\\operatorname{acosh}')
+    .replace(/\\tanh\^\{-1\}/g, '\\operatorname{atanh}')
+    .replace(/\\sin\^\{-1\}/g, '\\operatorname{asin}')
+    .replace(/\\cos\^\{-1\}/g, '\\operatorname{acos}')
+    .replace(/\\tan\^\{-1\}/g, '\\operatorname{atan}')
+    .replace(/\\log_\{10\}/g, '\\operatorname{log10}')
+    .replace(/\\ln/g, '\\operatorname{log}')
     .replace(/\\operatorname\{([^}]*)\}/g, '$1')
     .replace(/\\mathrm\{([^}]*)\}/g, '$1')
     .replace(/\\placeholder\{\}|\\!|\\,|\\;|\\:|\\ /g, '')
@@ -5237,7 +5279,8 @@ function calcKey(k, el) {
   if (hypPending && (k === 'sin(' || k === 'cos(' || k === 'tan(')) {
     hypPending = false;
     const base = k === 'sin(' ? 'sinh(' : k === 'cos(' ? 'cosh(' : 'tanh(';
-    calcInsert(sh ? 'a' + base : base);
+    const hkey = sh ? 'a' + base : base;
+    calcInsert(FN_TEMPLATES[hkey] || hkey);
     return;
   }
   if (k === 'matrix') { showCalcView('matrix'); return; }
@@ -5262,9 +5305,9 @@ function calcKey(k, el) {
     } else calcInsert('()/()');
     calcFocusExpr(); return;
   }
-  if (token === 'inv') { calcInsert('^(-1)'); return; }
+  if (token === 'inv') { calcInsert('^{-1}'); return; }
   if (token === 'neg') { calcInsert('-'); return; }
-  if (token === 'e10') { calcInsert('*10^('); return; }
+  if (token === 'e10') { calcInsert('\\times10^{\\placeholder{}}'); return; }
   if (token === 'ran') { calcInsert('random()'); return; }
   if (token === 'ranint') { calcInsert('randomInt('); return; }
   if (token === 'mminus') { const v = Number(calcResultValue) || 0; calcVars.M = (Number(calcVars.M) || 0) - v; $('#calc-history').textContent = `M = ${calcVars.M}`; return; }
@@ -5273,6 +5316,7 @@ function calcKey(k, el) {
   if (token === 'rec') { calcInsert('Rec('); return; }
   // keys present on the faceplate but not yet wired to an engine action (visual fidelity)
   if (['dms', 'eng', 'sum', 'prod', 'drg', 'off'].includes(token)) return;
+  if (FN_TEMPLATES[token]) { calcInsert(FN_TEMPLATES[token]); return; }
   calcInsert(token);
 }
 function calcGenTable() {
