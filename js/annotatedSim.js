@@ -162,7 +162,16 @@ function closePanel() {
     console.error('[annotSim] dismissLab() failed — forcing unlock', err);
     setLocked(false);
   }
+  // Always clear fullscreen (native or CSS fallback) before hiding — otherwise
+  // mb-fs-fallback keeps a full-viewport shell that looks like close failed.
+  try {
+    if (panelEl && isFullscreen(panelEl)) toggleFullscreen(panelEl);
+  } catch (err) {
+    console.error('[annotSim] fullscreen exit failed — continuing', err);
+  }
+  panelEl?.classList.remove('mb-fs-fallback', 'is-fullscreen');
   panelEl?.classList.add('hidden');
+  setLocked(false); // final guarantee: ink must unlock even if dismissLab short-circuited
   applyPanelLayout();
   hooks?.onDismiss?.();
 }
@@ -212,7 +221,12 @@ export function setupAnnotatedSim(h) {
     onReadout: (s) => { if (readoutEl) readoutEl.textContent = s; },
   });
 
-  panelEl.querySelector('#annot-sim-close')?.addEventListener('click', closePanel);
+  // pointerup + click: after dragging a mass on iPad, click on × can be lost
+  // while pointerup still reaches the button.
+  const closeBtn = panelEl.querySelector('#annot-sim-close');
+  const onClose = (e) => { e.preventDefault(); e.stopPropagation(); closePanel(); };
+  closeBtn?.addEventListener('click', onClose);
+  closeBtn?.addEventListener('pointerup', onClose);
   panelEl.querySelector('#annot-sim-expand')?.addEventListener('click', () => {
     expanded = !expanded;
     panelW = expanded ? PANEL_MAX_W : 340;

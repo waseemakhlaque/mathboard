@@ -198,7 +198,15 @@ export class AnnotationSyncBridge {
           // overwrote S.actionBefore each time, silently discarding all but the
           // last tiny edit from the undo stack. Gate on _dirty (reset only in
           // detach()) so the whole session collapses into a single undo step.
-          if (!this._dirty) { this.hooks.beginAction(); this._dirty = true; }
+          if (!this._dirty) {
+            try { this.hooks.beginAction(); this._dirty = true; }
+            catch (err) {
+              // Don't let a snapshot failure leave refresh() broken mid-drag —
+              // labels still update; undo for this session may be incomplete.
+              console.error('[annotSim] beginAction failed during label sync', err);
+              this._dirty = true;
+            }
+          }
           changed = true;
           obj.text = updated;
         }

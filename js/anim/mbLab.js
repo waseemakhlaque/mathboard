@@ -91,18 +91,25 @@ export class MbLab extends HTMLElement {
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       this.stop();
-      try { el.setPointerCapture(e.pointerId); } catch (_) { /* synthetic events */ }
+      const pid = e.pointerId;
+      try { el.setPointerCapture(pid); } catch (_) { /* synthetic events */ }
       el.classList.add('is-dragging');
       const move = (ev) => { onMove(this.svgPoint(ev)); this.refresh(); };
+      // Always release capture — if pointerup is lost (common on iPad after a
+      // long drag), clicks on the dialog × get swallowed by the captured handle
+      // and the lab looks "stuck open". lostpointercapture is the safety net.
       const up = () => {
         el.classList.remove('is-dragging');
         el.removeEventListener('pointermove', move);
         el.removeEventListener('pointerup', up);
         el.removeEventListener('pointercancel', up);
+        el.removeEventListener('lostpointercapture', up);
+        try { if (el.hasPointerCapture?.(pid)) el.releasePointerCapture(pid); } catch (_) { /* already released */ }
       };
       el.addEventListener('pointermove', move);
       el.addEventListener('pointerup', up);
       el.addEventListener('pointercancel', up);
+      el.addEventListener('lostpointercapture', up);
     });
   }
 }

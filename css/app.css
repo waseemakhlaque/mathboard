@@ -2962,8 +2962,57 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 .rag-card-actions { display: flex; gap: 8px; }
 .rag-card-actions button { font-size: 12px; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); cursor: pointer; }
 .rag-card-actions .rag-anim { background: var(--accent-light); }
-.anim-dialog { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(900px, 94vw); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-lg, 0 12px 40px rgba(0,0,0,.35)); z-index: 300; display: flex; flex-direction: column; max-height: 90vh; }
-.anim-dialog:fullscreen { top: 0; left: 0; transform: none; width: 100vw; max-height: 100vh; border-radius: 0; }
+/* Physics Labs / anim tools — shell is a full-screen overlay; the card is
+   centered inside. (Previously .sync-dialog + .anim-dialog on one node fought
+   each other: inset:0 vs top/left 50%, which could clip the close button.) */
+.anim-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+  background: transparent;
+}
+.anim-dialog.hidden { display: none !important; }
+.anim-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+}
+.anim-card {
+  position: relative;
+  z-index: 1;
+  width: min(900px, 94vw);
+  max-height: min(90vh, 900px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg, 0 12px 40px rgba(0,0,0,.35));
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.anim-dialog:fullscreen,
+.anim-dialog.mb-fs-fallback {
+  padding: 0;
+  background: var(--surface);
+}
+.anim-dialog:fullscreen .anim-backdrop,
+.anim-dialog.mb-fs-fallback .anim-backdrop { display: none; }
+.anim-dialog:fullscreen .anim-card,
+.anim-dialog.mb-fs-fallback .anim-card {
+  width: 100%;
+  max-height: none;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
 
 /* Fullscreen fallback for browsers without the Fullscreen API (iPad PWA,
    iPhone Safari) — js/fullscreen.js toggles this class instead. */
@@ -2981,7 +3030,25 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
   margin: 0 !important;
   z-index: 100001 !important;
 }
-.anim-dialog .gp-head { display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.anim-dialog .gp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+}
+.anim-dialog .gp-head .calc-x,
+.anim-dialog .gp-head .icon-btn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  font-size: 22px;
+  line-height: 1;
+  flex-shrink: 0;
+}
 .anim-main { display: flex; flex: 1; min-height: 0; overflow: hidden; }
 .anim-dialog #anim-host { flex: 1; padding: 12px; overflow: auto; }
 .anim-params { width: 240px; padding: 12px; border-left: 1px solid var(--border); overflow-y: auto; background: var(--surface-2); }

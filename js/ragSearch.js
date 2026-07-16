@@ -4,7 +4,7 @@
 
 import { animForTopic, LABS, defaultParams, simByTag } from './anim/ragRoutes.js';
 import { authHeaders } from './auth.js';
-import { toggleFullscreen } from './fullscreen.js';
+import { toggleFullscreen, isFullscreen } from './fullscreen.js';
 
 const RAG_RESULTS = 10;
 const COURSES = ['Pure Mathematics 3', 'Mechanics', 'Statistics', 'Pure Mathematics 1'];
@@ -135,8 +135,16 @@ export function openLabPicker() {
 }
 
 function closeAnimDialog() {
-  document.querySelector('#anim-dialog').classList.add('hidden');
-  document.querySelector('#anim-host').replaceChildren(); // disconnect stops rAF
+  const dlg = document.querySelector('#anim-dialog');
+  if (!dlg) return;
+  // Exit native / CSS fullscreen first — otherwise mb-fs-fallback (z-index
+  // 100001) can leave a full-screen shell that looks like the lab won't close.
+  if (isFullscreen(dlg)) toggleFullscreen(dlg);
+  dlg.classList.remove('mb-fs-fallback', 'is-fullscreen');
+  dlg.classList.add('hidden');
+  document.querySelector('#anim-host')?.replaceChildren(); // disconnect stops rAF
+  document.querySelector('#anim-params')?.replaceChildren();
+  document.querySelector('#anim-params')?.classList.add('hidden');
 }
 
 export function setupRagSearch(host, hooks = {}) {
@@ -155,7 +163,13 @@ export function setupRagSearch(host, hooks = {}) {
   const form = host.querySelector('.rag-form');
   host.querySelector('.rag-labs-btn').addEventListener('click', () => openLabPicker());
 
-  document.querySelector('#anim-close')?.addEventListener('click', closeAnimDialog);
+  // pointerup + click: iPad sometimes drops click after a lab drag that held
+  // pointer capture; pointerup on the × still fires.
+  const closeBtn = document.querySelector('#anim-close');
+  const onClose = (e) => { e.preventDefault(); e.stopPropagation(); closeAnimDialog(); };
+  closeBtn?.addEventListener('click', onClose);
+  closeBtn?.addEventListener('pointerup', onClose);
+  document.querySelector('#anim-backdrop')?.addEventListener('click', closeAnimDialog);
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
