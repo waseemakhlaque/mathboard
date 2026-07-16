@@ -2544,14 +2544,8 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
   padding: 7px 12px 6px;
   border-radius: 17px 17px 0 0;
 }
-.casio-model { font-style: italic; font-weight: 700; font-size: 13.5px; color: #f2f4f7; }
+.casio-model { font-weight: 700; font-size: 13.5px; color: #f2f4f7; }
 .casio-vpam { margin-left: 8px; font-size: 8px; letter-spacing: 0.4px; color: #18b36b; font-weight: 700; }
-.casio-solar {
-  position: absolute; right: 30px; top: 8px;
-  width: 46px; height: 13px; border-radius: 3px;
-  background: repeating-linear-gradient(90deg, #5b4a2a, #5b4a2a 8px, #3a2f1c 8px, #3a2f1c 10px);
-  border: 1px solid #1c160c;
-}
 .calc.casio .calc-x { position: absolute; right: 8px; top: 6px; color: #99a2ad; }
 
 .calc.casio .calc-screen {
