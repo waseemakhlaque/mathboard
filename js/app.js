@@ -119,7 +119,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 132;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 133;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
