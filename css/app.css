@@ -1709,9 +1709,9 @@ math-field.calc-expr:focus-within { outline: none; }
   .nb-name { width: 110px; }
   #cplx.panel-cplx { right: 12px; top: auto; bottom: 80px; max-height: 45vh; }
   #calculus.panel-calculus { right: 12px; top: auto; bottom: 80px; max-height: 45vh; }
-  .calc { width: min(328px, calc(100vw - 24px)); right: 12px; bottom: 12px; }
-  .calc.casio { width: min(372px, calc(100vw - 16px)); right: 8px; }
-  .calc.casio.classwiz { width: min(386px, calc(100vw - 12px)); }
+  .calc { width: min(340px, 95vw); max-width: 100vw; right: 12px; bottom: 12px; }
+  .calc.casio { width: min(368px, 95vw); max-width: 100vw; right: 8px; }
+  .calc.casio.classwiz { width: min(378px, 95vw); max-width: 100vw; }
   .stats-panel { width: min(340px, calc(100vw - 24px)); left: 12px; bottom: 12px; }
   .nb-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; padding: 14px 16px; }
   .lib-head { padding: max(env(safe-area-inset-top), 14px) 16px 10px; }
@@ -2389,20 +2389,49 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
   right: 20px;
   bottom: 20px;
   z-index: 20;
-  width: 314px;
+  width: min(340px, 95vw);
+  max-width: 100vw;
   background: #2f333a;
   border: 1px solid #15181c;
   border-radius: var(--radius-lg);
   box-shadow: 0 14px 44px rgba(0, 0, 0, 0.42);
   user-select: none;
-  /* Without a height cap, a short/resized browser window (or present mode's
-     top-pinned position below) pushes the bottom keypad rows past the visible
-     viewport with no way to reach them — this keeps the whole emulator visible
-     and scrollable internally instead of overflowing the window. */
-  max-height: calc(100vh - 40px);
+  box-sizing: border-box;
+  /* Cap height so short/laptop viewports keep the keypad reachable via
+     internal scroll instead of clipping past the window bottom. */
+  max-height: 90vh;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+}
+
+/* Maximized / fullscreen: no transform — avoids GPU layer clipping of scroll. */
+.calc.maximized,
+.calc.calc-maximized {
+  transform: none;
+  width: 100vw;
+  max-width: 100vw;
+  max-height: 100vh;
+}
+
+/* Manual resize: disable transitions while dragging the handle. */
+.calc.calc-resizing {
+  transition: none !important;
+  user-select: none;
+}
+.calc .calc-resize-handle {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  border-radius: 2px;
+  background:
+    linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.22) 50%),
+    linear-gradient(135deg, transparent 65%, rgba(255, 255, 255, 0.14) 65%);
+  touch-action: none;
+  z-index: 3;
 }
 
 .calc.hidden { display: none; }
@@ -2533,7 +2562,8 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 
 /* ---------- ClassWiz-style faceplate (MathBoard) ---------- */
 .calc.casio {
-  width: 368px;
+  width: min(368px, 95vw);
+  max-width: 100vw;
   background: linear-gradient(165deg, #3a3e46 0%, #2a2e35 42%, #1c1f25 100%);
   border: 1px solid #0a0c0f;
   border-radius: 22px;
@@ -2542,7 +2572,7 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
     0 18px 48px rgba(0, 0, 0, 0.48),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
-.calc.casio.classwiz { width: 378px; }
+.calc.casio.classwiz { width: min(378px, 95vw); max-width: 100vw; }
 .calc.casio .calc-head {
   position: relative;
   display: flex;
@@ -2762,6 +2792,47 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 .calc-expr::part(menu-toggle),
 .calc-expr::part(virtual-keyboard-toggle) { display: none; }
 
+/* Phone / small tablet: calculator fills the viewport.
+   Placed after faceplate button rules so padding/font overrides win. */
+@media (max-width: 768px) {
+  .calc,
+  .calc.casio,
+  .calc.casio.classwiz {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: auto;
+    bottom: auto;
+    border-radius: 0;
+    transform: none;
+  }
+  .calc.casio .calc-head { border-radius: 0; }
+  .calc-keys .ck,
+  .calc.casio .ck,
+  .calc.casio .calc-sci .ck,
+  .calc.casio .ck-num {
+    padding: 8px 10px;
+  }
+  /* ≥16px prevents iOS Safari from auto-zooming focused inputs. */
+  .calc-expr,
+  math-field.calc-expr {
+    font-size: 16px;
+  }
+}
+
+/* Short laptop viewports: reclaim vertical space. */
+@media (max-height: 700px) {
+  .calc-kbd-bar { display: none; }
+  .calc-screen,
+  .calc.casio .calc-screen { height: auto; }
+  .calc-sci,
+  .calc-num { gap: 2px; }
+}
+
 /* ---------- Calculator TABLE / Matrix ---------- */
 .calc-sub { padding: 8px 10px; }
 .calc-sub.hidden { display: none; }
@@ -2772,6 +2843,11 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
   display: block;
   margin: 0 0 2px;
 }
+
+/* Marks the label of whichever TABLE/MATRIX/EQN/BASE field is currently
+   armed for faceplate entry (see focusin handler in setupCalculator) — makes
+   it obvious which prompt physical key taps are landing in. */
+.calc .ct-lab.ct-armed { color: var(--accent); font-weight: 700; }
 
 .ct-in {
   width: 100%;
@@ -2840,6 +2916,15 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
   top: 0;
   background: var(--surface);
 }
+
+/* The calculator faceplate is always dark (see the .calc .ct-in rule above),
+   but .ct-table's cells never set their own color/background — they were
+   falling through to the page theme's --text (near-black in light mode)
+   against the calc's dark body, which reads as blacked-out/unreadable rows.
+   Give the TABLE output the same explicit dark-screen treatment as the
+   input fields so it's always legible regardless of the app's theme. */
+.calc .ct-table th { background: #11161d; color: #94a3b8; }
+.calc .ct-table td { color: #e8ecf1; }
 
 .ct-err { color: var(--danger); font-size: 13px; padding: 6px 0; }
 

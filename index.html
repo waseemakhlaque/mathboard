@@ -44,8 +44,8 @@
 <link rel="apple-touch-icon" href="./assets/icon-512.png" sizes="512x512" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=135" />
-<link rel="stylesheet" href="./css/annotatedSim.css?v=135" />
+<link rel="stylesheet" href="./css/app.css?v=140" />
+<link rel="stylesheet" href="./css/annotatedSim.css?v=140" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -153,6 +153,7 @@
           <div id="tbar-more-drop" class="panel-drop hidden" role="menu">
             <button type="button" id="share-lesson-more" role="menuitem">Share lesson</button>
             <button type="button" id="sync-settings-editor-more" role="menuitem">Cloud sync</button>
+            <button type="button" id="editor-signout-more" class="hidden" role="menuitem">Sign out</button>
             <button type="button" id="export-json-more" role="menuitem">Backup JSON</button>
             <button type="button" id="export-pdf-more" role="menuitem">Export PDF</button>
             <button type="button" id="theme-toggle-editor" data-theme-toggle role="menuitem">Theme</button>
@@ -174,6 +175,7 @@
       </span>
       <button id="share-lesson" class="present-hide hidden" title="Share or export lesson file">Share</button>
       <button id="sync-settings-editor" class="present-hide hidden" title="Cloud sync">Sync</button>
+      <button id="editor-signout" class="present-hide hidden" title="Sign out of MathBoard">Sign out</button>
       <button id="export-json" class="present-hide hidden" title="Download portable .mathboard.json backup">Backup</button>
       <button id="export-pdf" class="present-hide hidden primary">Export PDF</button>
     </div>
@@ -1192,5 +1194,5 @@
 </div>
 
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=135"></script>
+<script type="module" src="./js/app.js?v=140"></script>
 </html>

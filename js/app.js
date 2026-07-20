@@ -12,12 +12,12 @@ import {
   syncAllToRemote, mergeSync, retryPendingSync,
 } from './share.js';
 import {
-  signInWithPassword, signOut, isSignedIn, getAuthUser, defaultSyncApiUrl,
+  signInWithPassword, signOut as authSignOut, isSignedIn, getAuthUser, defaultSyncApiUrl,
   getSupabaseUrl, getSupabaseAnonKey,
 } from './auth.js';
 import { initTheme } from './theme.js';
 import {
-  canCreateLesson, initEntitlement,
+  canCreateLesson, initEntitlement, clearProfile,
 } from './entitlement.js';
 import { ensureAccess } from './gate.js';
 import { setupAdminPanel } from './adminPanel.js';
@@ -69,7 +69,7 @@ import {
   loadTaxonomy, renderCourseLibrary, isCatalogued, notebookCatalog,
   taxonomyCourses, taxonomyTopics, taxonomyExercises, expandCoursePath,
 } from './courseLibrary.js';
-import { setupRagSearch, openLabPicker } from './ragSearch.js';
+import { setupRagSearch, openLabPicker, setupAnimDialogChrome } from './ragSearch.js';
 import { setupAnnotatedSim, onAnnotSimPageChange } from './annotatedSim.js';
 import { pageW, pageH, thumbDims, A4_W, A4_H } from './pageLayout.js';
 import { getAllNotebooks, getNotebook, storageReady } from './storage.js';
@@ -119,7 +119,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 135;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 140;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -736,6 +736,30 @@ function sliceStrokePoints(pts, progress) {
   return out.length >= 2 ? out : [pts[0], pts[Math.min(1, pts.length - 1)]];
 }
 
+// perfect-freehand returns the stroke outline as a plain vertex polygon —
+// connecting those vertices with straight lineTo segments (the previous
+// approach) produces a visibly faceted/jagged edge, especially on curves and
+// fast strokes, which is what made ink look rougher than GoodNotes/OneNote.
+// Routing through the midpoint of each edge with quadraticCurveTo (the
+// technique perfect-freehand's own docs recommend, e.g. getSvgPathFromStroke)
+// keeps the same vertex data and cost but renders a smooth, rounded outline.
+// Works on both Path2D and CanvasRenderingContext2D since both implement
+// moveTo/quadraticCurveTo/closePath.
+function addSmoothOutlinePath(path, outline) {
+  const n = outline.length;
+  if (n < 2) return;
+  const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  const first = mid(outline[n - 1], outline[0]);
+  path.moveTo(first[0], first[1]);
+  for (let i = 0; i < n; i++) {
+    const cur = outline[i];
+    const next = outline[(i + 1) % n];
+    const m = mid(cur, next);
+    path.quadraticCurveTo(cur[0], cur[1], m[0], m[1]);
+  }
+  path.closePath();
+}
+
 // Committed strokes never change their points, so the perfect-freehand outline
 // is computed once and cached as a Path2D. The fingerprint (length + endpoints)
 // catches in-place mutation from lasso/selection moves, which shift every point.
@@ -752,11 +776,7 @@ function strokeOutline(s) {
   const input = s.points.map((pt) => [pt.x, pt.y, pt.p ?? 0.5]);
   const outline = getStroke(input, { ...strokeOpts(s), last: true });
   const path = new Path2D();
-  if (outline.length >= 2) {
-    path.moveTo(outline[0][0], outline[0][1]);
-    for (let i = 1; i < outline.length; i++) path.lineTo(outline[i][0], outline[i][1]);
-    path.closePath();
-  }
+  addSmoothOutlinePath(path, outline);
   const entry = { fp, path, n: outline.length };
   inkPathCache.set(s, entry);
   return entry;
@@ -794,9 +814,7 @@ function drawStroke(c, s, progress = 1) {
     return;
   }
   c.beginPath();
-  c.moveTo(outline[0][0], outline[0][1]);
-  for (let i = 1; i < outline.length; i++) c.lineTo(outline[i][0], outline[i][1]);
-  c.closePath();
+  addSmoothOutlinePath(c, outline);
   c.fill();
   c.globalAlpha = 1;
 }
@@ -833,9 +851,7 @@ function drawStrokePreview(c, s) {
     return;
   }
   c.beginPath();
-  c.moveTo(outline[0][0], outline[0][1]);
-  for (let i = 1; i < outline.length; i++) c.lineTo(outline[i][0], outline[i][1]);
-  c.closePath();
+  addSmoothOutlinePath(c, outline);
   c.fill();
   c.restore();
 }
@@ -3504,6 +3520,46 @@ function updateSyncStatus(s) {
   }
 }
 
+/** Keep editor Sign out controls in sync with auth state. */
+function updateEditorSignOutUI() {
+  const signed = isSignedIn();
+  $('#editor-signout')?.classList.toggle('hidden', !signed);
+  $('#editor-signout-more')?.classList.toggle('hidden', !signed);
+}
+
+let refreshSyncAuthUI = () => {};
+
+/**
+ * Global sign-out: revoke session, clear cached user/profile, reload for a clean gate.
+ * @param {{ confirm?: boolean }} [opts]
+ */
+async function signOut(opts = {}) {
+  const { confirm = false } = opts;
+  console.log('[mathboard] signOut()', { confirm, signedIn: isSignedIn() });
+  if (confirm) {
+    const ok = await mbConfirm('Sign out? Unsaved changes will be saved locally.', {
+      okText: 'Sign out',
+      title: 'Sign out',
+    });
+    if (!ok) return false;
+  }
+  try {
+    flushPersist();
+    await authSignOut();
+  } catch (e) {
+    mbToast('Sign out failed: ' + (e?.message || e));
+    // Local tokens are already cleared inside authSignOut — keep going.
+  }
+  clearProfile();
+  refreshSyncAuthUI();
+  updateEditorSignOutUI();
+  updateSyncStatus({ state: 'saved', mode: 'local' });
+  setTimeout(() => window.location.reload(), 500);
+  return true;
+}
+// DevTools / other modules can call the same path.
+window.mbSignOut = () => signOut({ confirm: false });
+
 function show(view) {
   $('#library').classList.toggle('hidden', view !== 'library');
   $('#editor').classList.toggle('hidden', view !== 'editor');
@@ -5058,13 +5114,19 @@ function latexToMath(src) {
         else { const [g, a] = readArg(str, i); i = a; out += 'sqrt(' + conv(g) + ')'; }
       } else if (str[i] === '^') {
         i++;
-        if (str[i] === '{') { const [g, a] = readBraceGroup(str, i); i = a; out += '^(' + conv(g) + ')'; }
+        // An empty {} base immediately before a superscript (MathLive can produce
+        // "2{}^{3}" depending on how the exponent was inserted — e.g. a faceplate
+        // key that raises the previous atom to a power) must NOT become "2()^(3)":
+        // mathjs has no such thing as an empty parenthesised expression, so that
+        // rendered a correct-looking "2³" on screen but a bare "Error" on "=".
+        // Emitting nothing for an empty group leaves "2^(3)", which evaluates.
+        if (str[i] === '{') { const [g, a] = readBraceGroup(str, i); i = a; const c = conv(g); out += c ? '^(' + c + ')' : ''; }
         else { out += '^' + (str[i] || ''); i++; }
       } else if (str[i] === '_') {
         i++;
         if (str[i] === '{') { const [, a] = readBraceGroup(str, i); i = a; } else i++;
       } else if (str[i] === '{') {
-        const [g, a] = readBraceGroup(str, i); i = a; out += '(' + conv(g) + ')';
+        const [g, a] = readBraceGroup(str, i); i = a; const c = conv(g); out += c ? '(' + c + ')' : '';
       } else if (str[i] === '\\') {
         // strip an unknown leading backslash but keep the command letters
         i++;
@@ -5309,7 +5371,24 @@ function calcKey(k, el) {
     } else calcInsert('()/()');
     calcFocusExpr(); return;
   }
-  if (token === 'inv') { calcInsert('^{-1}'); return; }
+  // x² / x³ (and x⁻¹) raise the PRECEDING atom to a power — inserting the raw
+  // LaTeX fragment "^2"/"^{-1}" via calcInsert() sometimes left an empty {}
+  // base ahead of the superscript (e.g. "2{}^{3}") depending on caret state:
+  // it still typeset correctly on screen (2³) but latexToMath()'s old empty-
+  // group handling turned that into "2()^(3)", which mathjs can't evaluate —
+  // a correct-looking expression that always errored on "=". moveToSuperscript
+  // is MathLive's actual command for "attach a power to what's before the
+  // caret", so it can't produce that empty-base shape in the first place.
+  if (token === '^2' || token === '^3' || token === 'inv') {
+    const exp = token === '^2' ? '2' : token === '^3' ? '3' : '-1';
+    if (inp?.executeCommand) {
+      calcQuietFocus = true;
+      try { inp.executeCommand('moveToSuperscript'); inp.executeCommand('insert', exp); }
+      finally { calcQuietFocus = false; }
+      calcFocusExpr();
+    } else calcInsert(`^{${exp}}`);
+    return;
+  }
   if (token === 'neg') { calcInsert('-'); return; }
   if (token === 'e10') { calcInsert('\\times10^{\\placeholder{}}'); return; }
   if (token === 'ran') { calcInsert('random()'); return; }
@@ -5399,6 +5478,15 @@ function setupCalculator() {
   $('#calc')?.addEventListener('focusin', (e) => {
     const t = e.target;
     if (t?.matches?.('.ct-in, .mx-in')) calcActiveField = t;
+    // The armed field previously only got a subtle focus ring — on TABLE/EQN
+    // views with several stacked prompts (f(x)/Start/End/Step) that wasn't
+    // enough to tell at a glance which one faceplate taps are landing in.
+    // Bold the field's own label too, so it reads "you are typing into Start"
+    // the way the labelled prompt on a real fx-991ES does.
+    document.querySelectorAll('#calc .ct-lab.ct-armed').forEach((el) => el.classList.remove('ct-armed'));
+    if (t?.matches?.('.ct-in, .mx-in') && t.previousElementSibling?.classList.contains('ct-lab')) {
+      t.previousElementSibling.classList.add('ct-armed');
+    }
   });
   $('#calc-toggle').onclick = () => {
     const open = $('#calc').classList.toggle('hidden') === false;
@@ -5840,11 +5928,19 @@ function setupPanelMenu() {
 }
 
 function setupSyncSettings() {
+  // Toolbar Sign out — wired even if the sync dialog markup is missing.
+  $('#editor-signout')?.addEventListener('click', () => signOut({ confirm: true }));
+  $('#editor-signout-more')?.addEventListener('click', () => {
+    $('#tbar-more-drop')?.classList.add('hidden');
+    signOut({ confirm: true });
+  });
+  updateEditorSignOutUI();
+
   const dlg = $('#sync-dialog');
   const urlIn = $('#sync-url');
   if (!dlg || !urlIn) return;
 
-  function refreshSyncAuthUI() {
+  refreshSyncAuthUI = function refreshSyncAuthUI() {
     const user = getAuthUser();
     const signed = isSignedIn();
     const configured = !!(getSupabaseUrl() && getSupabaseAnonKey());
@@ -5854,7 +5950,8 @@ function setupSyncSettings() {
     $('#sync-signout')?.classList.toggle('hidden', !signed);
     if ($('#sync-email')) $('#sync-email').disabled = signed;
     if ($('#sync-password')) $('#sync-password').disabled = signed;
-  }
+    updateEditorSignOutUI();
+  };
 
   function openSyncDialog() {
     urlIn.value = getSyncBaseUrl() || defaultSyncApiUrl();
@@ -5895,11 +5992,15 @@ function setupSyncSettings() {
   function canMerge() {
     return isSignedIn() && getSyncBaseUrl() && getSupabaseAnonKey();
   }
-  $('#sync-signout')?.addEventListener('click', async () => {
-    await signOut();
-    refreshSyncAuthUI();
-    updateSyncStatus({ state: 'saved', mode: 'local' });
-  });
+  const syncSignOutBtn = $('#sync-signout');
+  if (syncSignOutBtn) {
+    syncSignOutBtn.addEventListener('click', async () => {
+      console.log('[mathboard] #sync-signout click');
+      await signOut({ confirm: true });
+    });
+  } else {
+    console.warn('[mathboard] #sync-signout not found — sign-out listener not attached');
+  }
   $('#sync-save')?.addEventListener('click', () => {
     setSyncBaseUrl(urlIn.value);
     dlg.classList.add('hidden');
@@ -6296,6 +6397,13 @@ async function init() {
     uid,
     onLockedChange: (locked) => { S.annotSimLocked = locked; },
   });
+  // #anim-dialog's × / backdrop close handlers used to only get wired the
+  // first time the Course Library tab opened (inside setupRagSearch()) — but
+  // the "Physics Labs 🧪" menu item (#open-labs, wired below in
+  // setupPanelMenu) opens the same dialog directly, so a lab launched from
+  // the menu without ever visiting Course Library had a dead close button.
+  // Wire it here, once, unconditionally, so every entry point works.
+  setupAnimDialogChrome();
   setupPanelMenu();
   setupRail();
   setupDemo();

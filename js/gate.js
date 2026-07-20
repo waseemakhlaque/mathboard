@@ -200,7 +200,7 @@ function renderNoAccess() {
     <button type="button" class="gate-ghost" id="gate-signout">Sign out</button>`);
   el.querySelector('#gate-retry').addEventListener('click', () => location.reload());
   el.querySelector('#gate-signout').addEventListener('click', async () => {
-    await signOut();
+    try { await signOut(); } catch { /* local session already cleared in auth.signOut */ }
     clearProfile();
     location.reload();
   });

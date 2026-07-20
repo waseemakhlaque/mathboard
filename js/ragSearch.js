@@ -147,6 +147,30 @@ function closeAnimDialog() {
   document.querySelector('#anim-params')?.classList.add('hidden');
 }
 
+// The #anim-dialog close/backdrop listeners used to be wired inside
+// setupRagSearch() below, which only ever runs the FIRST time the Course
+// Library tab is opened (see app.js's `ragSearchReady` gate). But the
+// "Physics Labs 🧪" menu item (#open-labs) calls openLabPicker() directly —
+// a completely separate entry point that never touches the Course Library
+// tab or setupRagSearch(). A teacher who opens a lab straight from that menu
+// (the natural, most-used path) got a dialog whose × and backdrop had no
+// click handlers at all: it looked closeable but silently did nothing.
+// Wiring this once, unconditionally, at app boot (see app.js init()) fixes
+// every entry point — Course Library, the Labs menu item, and the PDF-snip
+// picker — instead of only the ones that happen to run after RAG search.
+let animDialogChromeWired = false;
+export function setupAnimDialogChrome() {
+  if (animDialogChromeWired) return;
+  animDialogChromeWired = true;
+  // pointerup + click: iPad sometimes drops click after a lab drag that held
+  // pointer capture; pointerup on the × still fires.
+  const closeBtn = document.querySelector('#anim-close');
+  const onClose = (e) => { e.preventDefault(); e.stopPropagation(); closeAnimDialog(); };
+  closeBtn?.addEventListener('click', onClose);
+  closeBtn?.addEventListener('pointerup', onClose);
+  document.querySelector('#anim-backdrop')?.addEventListener('click', closeAnimDialog);
+}
+
 export function setupRagSearch(host, hooks = {}) {
   host.innerHTML = `
     <form class="rag-form">
@@ -163,13 +187,7 @@ export function setupRagSearch(host, hooks = {}) {
   const form = host.querySelector('.rag-form');
   host.querySelector('.rag-labs-btn').addEventListener('click', () => openLabPicker());
 
-  // pointerup + click: iPad sometimes drops click after a lab drag that held
-  // pointer capture; pointerup on the × still fires.
-  const closeBtn = document.querySelector('#anim-close');
-  const onClose = (e) => { e.preventDefault(); e.stopPropagation(); closeAnimDialog(); };
-  closeBtn?.addEventListener('click', onClose);
-  closeBtn?.addEventListener('pointerup', onClose);
-  document.querySelector('#anim-backdrop')?.addEventListener('click', closeAnimDialog);
+  setupAnimDialogChrome(); // no-op if init() already wired it (normal boot order)
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();

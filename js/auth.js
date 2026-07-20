@@ -38,11 +38,33 @@ export function isSignedIn() {
   return !!getAccessToken();
 }
 
+/** Drop MathBoard session keys plus any leftover supabase-js auth tokens. */
 export function clearSession() {
   try {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(USER_KEY);
+    // Known project key (supabase-js default) — remove explicitly too.
+    localStorage.removeItem('sb-mjiuhdcxdllurizffvik-auth-token');
+    // Sweep any other sb-*-auth-token / supabase.auth.* leftovers.
+    const drop = [];
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if ((k.startsWith('sb-') && k.includes('auth-token')) || k.startsWith('supabase.auth.')) {
+        drop.push(k);
+      }
+    }
+    for (const k of drop) localStorage.removeItem(k);
+  } catch { /* ok */ }
+}
+
+/** Dispose any cached Supabase JS client so a stale session can't linger. */
+function disposeSupabaseClient() {
+  try {
+    const c = window.__mbSupabase || window.supabase;
+    if (c?.auth?.signOut) c.auth.signOut().catch(() => {});
+    if (window.__mbSupabase) window.__mbSupabase = null;
   } catch { /* ok */ }
 }
 
@@ -172,15 +194,32 @@ export function consumeAuthRedirect() {
   return { kind: params.get('type') === 'recovery' ? 'recovery' : 'signin' };
 }
 
+/**
+ * Revoke the server session (best-effort), then always clear local tokens.
+ * Throws if the remote logout request fails — local session is still cleared.
+ */
 export async function signOut() {
   const url = getSupabaseUrl();
   const key = getSupabaseAnonKey();
   const token = getAccessToken();
+  let remoteErr = null;
   if (url && key && token) {
-    await fetch(`${url}/auth/v1/logout`, {
-      method: 'POST',
-      headers: { apikey: key, Authorization: `Bearer ${token}` },
-    }).catch(() => {});
+    try {
+      const res = await fetch(`${url}/auth/v1/logout`, {
+        method: 'POST',
+        headers: { apikey: key, Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        remoteErr = new Error(
+          data.error_description || data.msg || data.message || `Logout failed (${res.status})`,
+        );
+      }
+    } catch (e) {
+      remoteErr = e instanceof Error ? e : new Error(String(e));
+    }
   }
   clearSession();
+  disposeSupabaseClient();
+  if (remoteErr) throw remoteErr;
 }
