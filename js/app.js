@@ -19,6 +19,9 @@ import { initTheme } from './theme.js';
 import {
   canCreateLesson, initEntitlement, clearProfile,
 } from './entitlement.js';
+import {
+  loginUser, logoutUser, getCurrentUser, hasPermission, applyPermissions, createUser,
+} from './users.js';
 import { ensureAccess } from './gate.js';
 import { setupAdminPanel } from './adminPanel.js';
 import { setupPapersLibrary, openPaperFile } from './papersLibrary.js';
@@ -119,7 +122,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 140;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 142;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -1844,6 +1847,11 @@ function stampStrokeIntoSnapshot(stroke) {
 }
 
 function render() {
+  // Keep the rAF pump alive, but skip paint work while the library view is up.
+  if ($('#editor')?.classList.contains('hidden')) {
+    requestAnimationFrame(render);
+    return;
+  }
   const now = performance.now();
   const pg = page();
   const hasScene = !!(pg?.scene?.steps?.length);
@@ -2375,7 +2383,12 @@ function appendInkPoints(stroke, points) {
 function isDrawPointer(e) {
   if (geoToolActive() || instToolActive()) return false;
   if (e.pointerType === 'pen' || e.pointerType === 'mouse' || e.pointerType === 'eraser') return true;
-  if (e.pointerType === 'touch') return S.fingerDraw && S.touch.size === 1 && ['pen', 'highlighter'].includes(S.tool);
+  // Touch never draws when "Finger draws" is off — even with a single contact.
+  // Prevents Pencil + resting finger from being treated as ink / aborting mid-stroke.
+  if (e.pointerType === 'touch') {
+    if (!S.fingerDraw) return false;
+    return S.touch.size === 1 && ['pen', 'highlighter'].includes(S.tool);
+  }
   return false;
 }
 
@@ -2410,12 +2423,16 @@ function onDown(e) {
   if (e.pointerType === 'pen' && e.cancelable) e.preventDefault();
   try { cv.setPointerCapture(e.pointerId); } catch (_) { /* non-fatal */ }
   if (e.pointerType === 'touch') {
+    // Palm / second contact while Pencil is inking must not abort the stroke.
+    if (!S.fingerDraw && S.drawing) { mark(); return; }
     S.touch.set(e.pointerId, cssPt(e));
     setGestureRef();
     if (S.touch.size >= 2) { abortGesture(); return; }  // 2+ fingers = pan/zoom only; cancel any tool action
   }
   // Annotate-to-Animate: ink read-only while docked sim is live (two-finger pan still OK above)
   if (S.annotSimLocked) { mark(); return; }
+  // Local RBAC: viewers may pan/navigate but must not ink, geo, or instruments.
+  if (!hasPermission('draw') && (isDrawPointer(e) || instToolActive() || geoToolActive())) { mark(); return; }
   // Armed instruments (ruler/protractor/compass) place via canvas taps, but
   // isDrawPointer() is false while one is armed — without the extra clause the
   // early return ate every tap and the tools looked dead on iPad and desktop.
@@ -2903,9 +2920,45 @@ function mathKeyboardEl() {
   return container.querySelector('.MLK__backdrop') || container;
 }
 
+function hideEqNativeFallback() {
+  $('#eq-native-fallback')?.remove();
+}
+
+/** Windows / stuck MathLive: plain input overlay that mirrors into the math-field. */
+function showEqNativeFallback() {
+  if ($('#eq-native-fallback') || !eqDockOpen()) return;
+  const dock = $('#eq-dock');
+  if (!dock) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'eq-native-fallback';
+  wrap.className = 'eq-native-fallback';
+  wrap.innerHTML = '<label class="eq-native-lab">Keyboard fallback</label>'
+    + '<input id="eq-native-input" class="eq-native-input" type="text" autocomplete="off" spellcheck="false" />'
+    + '<button type="button" id="eq-native-done" class="eq-dock-btn primary">Use this</button>';
+  dock.appendChild(wrap);
+  const inp = wrap.querySelector('#eq-native-input');
+  if (inp) {
+    inp.value = eqField?.value || '';
+    inp.addEventListener('input', () => {
+      try { eqField?.setValue?.(inp.value); } catch (_) { if (eqField) eqField.value = inp.value; }
+    });
+    inp.focus();
+  }
+  wrap.querySelector('#eq-native-done')?.addEventListener('click', () => {
+    hideEqNativeFallback();
+    commitEquationEditor();
+  });
+}
+
 function showMathKeyboard() {
   const vk = mathVirtualKeyboard();
-  if (!vk) return;
+  hideEqNativeFallback();
+  if (!vk) {
+    setTimeout(() => {
+      if (eqDockOpen() && !mathVirtualKeyboard()?.visible) showEqNativeFallback();
+    }, 500);
+    return;
+  }
   try {
     vk.layouts = ['numeric', 'symbols', 'alphabetic', 'greek'];
     vk.show({ animate: true });
@@ -2913,6 +2966,12 @@ function showMathKeyboard() {
     try { eqField?.executeCommand?.('showVirtualKeyboard'); } catch (e2) { /* non-fatal */ }
   }
   scheduleCalcKeyboardSync();
+  // If the VK never appears (Windows / stuck MathLive), offer a native input.
+  setTimeout(() => {
+    if (!eqDockOpen()) return;
+    const visible = !!(mathVirtualKeyboard()?.visible || mathKeyboardEl());
+    if (!visible) showEqNativeFallback();
+  }, 500);
 }
 
 function hideMathKeyboard() {
@@ -3022,15 +3081,21 @@ function applyCalcDefaultPosition() {
   if (!calc || calc.dataset.dragged) return;
   const present = $('#editor')?.classList.contains('present-mode');
   calc.style.position = 'fixed';
-  calc.style.left = 'auto';
-  calc.style.right = present ? 'max(12px, env(safe-area-inset-right))' : '20px';
-  if (present) {
-    calc.style.top = 'max(72px, env(safe-area-inset-top))';
-    calc.style.bottom = 'auto';
-  } else {
-    calc.style.top = 'auto';
-    calc.style.bottom = '20px';
-  }
+  calc.style.right = 'auto';
+  calc.style.bottom = 'auto';
+  // Measure after clearing anchors so offsetWidth/Height are reliable.
+  const w = calc.offsetWidth || 340;
+  const h = calc.offsetHeight || 400;
+  const margin = 8;
+  const safeR = present ? 12 : 20;
+  const safeT = present ? 72 : margin;
+  const safeB = present ? margin : 20;
+  let left = window.innerWidth - w - safeR;
+  let top = present ? safeT : window.innerHeight - h - safeB;
+  left = Math.max(margin, Math.min(window.innerWidth - w - margin, left));
+  top = Math.max(margin, Math.min(window.innerHeight - h - margin, top));
+  calc.style.left = `${left}px`;
+  calc.style.top = `${top}px`;
 }
 function calcVkDone() {
   calcEvaluate();
@@ -3138,6 +3203,7 @@ function eqDockClosed() {
 function commitEquationEditor() {
   if (!eqTarget || !eqField) return;
   hideMathKeyboard();
+  hideEqNativeFallback();
   eqDockClosed();
   const latex = eqField.value || '';
   eqTarget.latex = latex;
@@ -3157,6 +3223,7 @@ function commitEquationEditor() {
 function cancelEquationEditor() {
   if (!eqTarget) return;
   hideMathKeyboard();
+  hideEqNativeFallback();
   eqDockClosed();
   if (!eqTarget.latex || !eqTarget.latex.trim()) {
     const i = objs().indexOf(eqTarget);
@@ -3253,6 +3320,7 @@ function exportPNG() {
   })();
 }
 async function exportPDF() {
+  if (!hasPermission('export')) { mbToast('Export is not available for this account.'); return; }
   if (!window.jspdf) { alert('PDF library not loaded (need internet on first use).'); return; }
   await ensureImagesLoaded();
   await ensureObjImagesLoaded();
@@ -3430,32 +3498,38 @@ function withTimeout(promise, ms, label) {
   const timer = new Promise((_, rej) => { t = setTimeout(() => rej(new Error(label + ' timed out')), ms); });
   return Promise.race([promise, timer]).finally(() => clearTimeout(t));
 }
-function ensurePdfJs(maxMs = 8000) {
+function ensurePdfJs(maxMs = 20000) {
   if (window.pdfjsLib) {
     if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
       pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js';
     }
     return Promise.resolve();
   }
+  busy(true, 'Loading PDF engine…');
   return new Promise((resolve, reject) => {
     const t0 = Date.now();
     const tick = () => {
       if (window.pdfjsLib) {
         pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js';
+        busy(false);
         resolve();
         return;
       }
-      if (Date.now() - t0 > maxMs) {
+      const elapsed = Date.now() - t0;
+      if (elapsed > maxMs) {
+        busy(false);
         reject(new Error('PDF engine not loaded — hard refresh the page (Cmd+Shift+R).'));
         return;
       }
+      const sec = Math.ceil((maxMs - elapsed) / 1000);
+      busy(true, `Loading PDF engine… (${sec}s)`);
       setTimeout(tick, 50);
     };
     tick();
   });
 }
 async function renderPdfToPages(arrayBuffer, sourceUrl) {
-  await ensurePdfJs();
+  await ensurePdfJs(20000);
   if (!window.pdfjsLib) throw new Error('PDF engine not loaded — hard refresh and try again.');
   if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.js';
@@ -3639,18 +3713,24 @@ async function renderLibrary() {
     card.querySelector('.nb-thumb')?.addEventListener('click', () => openNotebook(nb.id));
     card.querySelector('.nb-title')?.addEventListener('click', () => openNotebook(nb.id));
     card.querySelector('.cat').onclick = () => catalogNotebook(nb);
-    card.querySelector('.exp').onclick = () => exportNotebookJSON(nb).catch((e) => alert(e.message));
+    card.querySelector('.exp').onclick = () => {
+      if (!hasPermission('export')) { mbToast('Export is not available for this account.'); return; }
+      exportNotebookJSON(nb).catch((e) => alert(e.message));
+    };
     card.querySelector('.ren').onclick = async () => {
+      if (!hasPermission('editLessons')) { mbToast('This account cannot rename lessons.'); return; }
       const t = await mbPrompt('Rename lesson', nb.title, { title: 'Rename' });
       if (t) { nb.title = t; nb.updated = Date.now(); await sync.push(nb); renderLibrary(); }
     };
     card.querySelector('.del').onclick = async () => {
+      if (!hasPermission('editLessons')) { mbToast('This account cannot delete lessons.'); return; }
       if (await mbConfirm(`Delete "${nb.title}"? This cannot be undone.`, { okText: 'Delete', danger: true, title: 'Delete lesson' })) {
         await sync.remove(nb.id); renderLibrary();
       }
     };
     list.appendChild(card);
   }
+  applyPermissions(list);
 }
 
 const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -3769,12 +3849,18 @@ function mbCatalogDialog({ course, topic, exercise, courses, tax }) {
 }
 
 async function openNotebook(id, opts = {}) {
-  const raw = await getNotebook(id);
-  if (!raw) {
-    alert('Could not open lesson — it may have been deleted or storage is blocked.');
+  try {
+    const raw = await getNotebook(id);
+    if (!raw) {
+      mbToast('Could not load lesson — it may have been deleted or storage is blocked.');
+      return false;
+    }
+    return openNotebookData(raw, opts);
+  } catch (e) {
+    console.warn('openNotebook', e);
+    mbToast('Could not load lesson');
     return false;
   }
-  return openNotebookData(raw, opts);
 }
 
 async function openNotebookData(raw, opts = {}) {
@@ -3872,6 +3958,10 @@ function askNewLessonName(defaultTitle = 'Vectors — Lesson 1') {
 async function createNotebook() {
   if (!(await storageReady())) {
     alert('Local storage is blocked. In Safari: turn off Private Browsing, or Settings → Safari → allow site data.');
+    return;
+  }
+  if (!hasPermission('editLessons')) {
+    mbToast('This account cannot create or edit lessons.');
     return;
   }
   const all = await getAllNotebooks();
@@ -4447,11 +4537,38 @@ function bindEditor() {
   };
   applyBrand(brandOn);
   $('#brand-toggle').onclick = () => applyBrand($('#brand').classList.contains('hidden'));
+  // Keep brand badge inside the stage on window resize (absolute bottom-left).
+  function positionBrand() {
+    const el = $('#brand');
+    if (!el || el.classList.contains('hidden')) return;
+    const stage = $('#stage') || $('#editor');
+    if (!stage) return;
+    const sr = stage.getBoundingClientRect();
+    const br = el.getBoundingClientRect();
+    const pad = 16;
+    let left = pad;
+    let bottom = pad;
+    if (br.width > sr.width - pad * 2) left = pad;
+    if (br.height > sr.height - pad * 2) bottom = pad;
+    el.style.left = `${left}px`;
+    el.style.bottom = `${bottom}px`;
+    el.style.right = 'auto';
+    el.style.top = 'auto';
+  }
+  window.addEventListener('resize', () => {
+    if (!$('#brand')?.classList.contains('hidden')) positionBrand();
+    if (!$('#calc')?.dataset.dragged) applyCalcDefaultPosition();
+  });
+  positionBrand();
 
   $('#export-pdf').onclick = exportPDF;
   $('#export-png').onclick = exportPNG;
-  $('#export-json').onclick = () => { if (S.notebook) exportNotebookJSON(S.notebook).catch((e) => alert(e.message)); };
+  $('#export-json').onclick = () => {
+    if (!hasPermission('export')) { mbToast('Export is not available for this account.'); return; }
+    if (S.notebook) exportNotebookJSON(S.notebook).catch((e) => alert(e.message));
+  };
   $('#share-lesson').onclick = async () => {
+    if (!hasPermission('export')) { mbToast('Share/export is not available for this account.'); return; }
     if (!S.notebook) return;
     const r = await shareNotebook(S.notebook);
     if (r === 'downloaded') { /* fallback export already ran */ }
@@ -4506,6 +4623,12 @@ function bindEditor() {
   // keyboard shortcuts (desktop)
   window.addEventListener('keydown', (e) => {
     if ($('#editor').classList.contains('hidden')) return;
+    // Force-close equation dock even when MathLive keyboard / fallback has focus.
+    if (eqDockOpen() && e.key === 'Escape') {
+      e.preventDefault();
+      cancelEquationEditor();
+      return;
+    }
     if (eqDockOpen()) return;
     if (/^(INPUT|TEXTAREA|SELECT|MATH-FIELD)$/.test(e.target.tagName)) return;
     if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); doUndo(); }
@@ -5571,8 +5694,12 @@ function makeDraggable(panel, handle) {
   });
   handle.addEventListener('pointermove', (e) => {
     if (!dragging) return;
-    panel.style.left = (ox + e.clientX - sx) + 'px';
-    panel.style.top = Math.max(0, oy + e.clientY - sy) + 'px';
+    const w = panel.offsetWidth || 0;
+    const h = panel.offsetHeight || 0;
+    const left = Math.max(8, Math.min(window.innerWidth - w - 8, ox + e.clientX - sx));
+    const top = Math.max(8, Math.min(window.innerHeight - h - 8, oy + e.clientY - sy));
+    panel.style.left = left + 'px';
+    panel.style.top = top + 'px';
   });
   handle.addEventListener('pointerup', () => { dragging = false; });
 }
@@ -5986,6 +6113,10 @@ function setupSyncSettings() {
         renderLibrary();
         dlg.classList.add('hidden');
         alert(`Signed in. Synced: ${pulled} pulled, ${pushed} pushed.`);
+      } else {
+        // Sign-in succeeded but merge wasn't possible — still close the dialog.
+        dlg.classList.add('hidden');
+        mbToast('Signed in.');
       }
     } catch (e) { alert(e.message); }
   });
@@ -6421,6 +6552,13 @@ async function init() {
   setupProductUI();
   setupCollabGate();
   setupSyncSettings();
+  // Local RBAC: seed default owner, apply chrome permissions, expose helpers for QA.
+  getCurrentUser();
+  applyPermissions();
+  window.mbLoginUser = (id) => { const u = loginUser(id); applyPermissions(); return u; };
+  window.mbLogoutUser = () => { const u = logoutUser(); applyPermissions(); return u; };
+  window.mbCreateUser = (fields) => { const u = createUser(fields); applyPermissions(); return u; };
+  window.mbCurrentUser = () => getCurrentUser();
   show('library');
   renderLibrary();
   requestAnimationFrame(render);

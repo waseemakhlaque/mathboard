@@ -305,3 +305,99 @@ export function usersDebugInfo() {
     canExport: canExport(),
   };
 }
+
+// ---- app.js integration API -------------------------------------------------
+
+const PERM_FN = {
+  editLessons: canEditLessons,
+  createLesson: canEditLessons,
+  manageStudents: canManageStudents,
+  manageUsers: canManageUsers,
+  draw: canDraw,
+  export: canExport,
+  view: canView,
+};
+
+/** @param {string} perm one of editLessons|createLesson|manageStudents|manageUsers|draw|export|view */
+export function hasPermission(perm) {
+  const fn = PERM_FN[perm];
+  return typeof fn === 'function' ? !!fn() : false;
+}
+
+/** Switch active local user by id or email. */
+export function loginUser(idOrEmail) {
+  ensureDefaultOwner();
+  const key = String(idOrEmail || '').trim();
+  if (!key) throw new Error('User id or email required.');
+  const list = listUsers();
+  const u = list.find((x) => x.id === key || (x.email && x.email === key.toLowerCase()));
+  if (!u || !u.active) throw new Error('User not found or inactive.');
+  setCurrentUserId(u.id);
+  return u;
+}
+
+/** Clear local session, then fall back to default owner so the device stays usable. */
+export function logoutUser() {
+  clearCurrentUser();
+  return getCurrentUser();
+}
+
+/** Alias for addUser — used by app.js import. */
+export function createUser(fields) {
+  return addUser(fields);
+}
+
+/**
+ * Apply role permissions to the DOM (hide/disable chrome) and set body role markers.
+ * Safe to call after library re-renders. Elements with [data-perm="draw"] etc. are honored.
+ */
+export function applyPermissions(root = document) {
+  ensureDefaultOwner();
+  const role = getRole();
+  const edit = hasPermission('editLessons');
+  const draw = hasPermission('draw');
+  const exp = hasPermission('export');
+  const manage = hasPermission('manageStudents');
+
+  try {
+    document.documentElement.dataset.mbRole = role;
+    document.body?.classList.toggle('mb-role-readonly', !edit);
+    document.body?.classList.toggle('mb-role-viewonly', !draw);
+  } catch { /* ok */ }
+
+  const scope = root && root.querySelectorAll ? root : document;
+
+  scope.querySelectorAll('[data-perm]').forEach((el) => {
+    const ok = hasPermission(el.getAttribute('data-perm'));
+    el.classList.toggle('perm-denied', !ok);
+    if (el.hasAttribute('data-perm-hide')) el.classList.toggle('hidden', !ok);
+    if ('disabled' in el) el.disabled = !ok;
+  });
+
+  const setHidden = (sel, hide) => {
+    scope.querySelectorAll(sel).forEach((el) => el.classList.toggle('hidden', hide));
+  };
+
+  setHidden('#new-nb, #lib-empty-new', !edit);
+  scope.querySelectorAll('.nb-card .del, .nb-card .ren, .nb-card .cat').forEach((el) => {
+    el.classList.toggle('hidden', !edit);
+  });
+  scope.querySelectorAll('.nb-card .exp').forEach((el) => {
+    el.classList.toggle('hidden', !exp);
+  });
+  setHidden(
+    '#export-pdf, #export-json, #share-lesson, #export-pdf-more, #export-json-more, #share-lesson-more',
+    !exp,
+  );
+  scope.querySelectorAll(
+    '.tool-rail [data-tool="pen"], .tool-rail [data-tool="highlighter"], .tool-rail [data-tool="eraser"], .tool-rail [data-tool="lasso"]',
+  ).forEach((el) => {
+    el.classList.toggle('perm-denied', !draw);
+    if ('disabled' in el) el.disabled = !draw;
+  });
+
+  // Admin / Students panel — teachers+ only
+  setHidden('#admin-panel-btn, #students-btn, [data-admin-only]', !manage);
+
+  return { role, edit, draw, export: exp, manage };
+}
