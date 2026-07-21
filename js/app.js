@@ -122,7 +122,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 147;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 148;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -5818,24 +5818,26 @@ function setupCalculator() {
   $('#calc-vk-done')?.addEventListener('click', calcVkDone);
   $('#calc-vk-hide')?.addEventListener('click', exitCalcVkMode);
   $('#calc-kbd-toggle')?.addEventListener('click', () => {
-    // Only focus when opening — focusing before hide makes MathLive ignore hide().
-    const vk = mathVirtualKeyboard();
-    if (vk?.visible || $('#calc').classList.contains('calc-vk-active')) {
+    // The calculator has its own complete on-screen keypad, so it must NEVER summon
+    // MathLive's virtual keyboard: on some classroom devices that VK renders
+    // full-width/partly off-screen and can't be dismissed — a total lockout with no
+    // reachable close (reported live on v147). This button now only guarantees an
+    // exit if a VK is somehow up, and otherwise just focuses the expression so a
+    // PHYSICAL keyboard can type (physical typing never needs the on-screen VK).
+    if (mathVirtualKeyboard()?.visible || $('#calc').classList.contains('calc-vk-active')) {
       exitCalcVkMode();
     } else {
-      calcExprEl()?.focus({ preventScroll: true });
-      showMathKeyboard();
+      calcQuietFocus = true;
+      try { calcExprEl()?.focus({ preventScroll: true }); } finally { calcQuietFocus = false; }
     }
   });
   $('#calc-mode').onclick = () => setCalcDeg(!calcDeg);
   const mf = calcExprEl();
   if (mf) {
     try { mf.smartMode = false; mf.smartFence = false; mf.mathVirtualKeyboardPolicy = 'manual'; } catch (_) {}
-    mf.addEventListener('focusin', () => {
-      if (calcQuietFocus) return;   // faceplate-key re-focus — keep the keyboard closed
-      showMathKeyboard();
-      startCalcKbdPoll();
-    });
+    // Tapping the calc display focuses the field for physical typing but must NOT
+    // open the on-screen MathLive keyboard — use the faceplate keys instead. This
+    // removes the only path that produced the un-closable keyboard on touch devices.
   }
   mf?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); calcEvaluate(); } });
   document.querySelectorAll('[data-cmode]').forEach((b) => b.onclick = () => setCalcMode(b.dataset.cmode));
