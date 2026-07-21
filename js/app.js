@@ -122,7 +122,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 145;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 146;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -2470,6 +2470,20 @@ function onDown(e) {
   if (handleCplxClick(p)) return;
   if (handleMechClick(p)) return;
 
+  // Instruments (ruler / protractor / compass) must stay draggable even when
+  // Pen is active — otherwise placing a compass then trying to arc with the
+  // Pencil just inks through it and the tool feels broken.
+  if (S.tool !== 'select' && hitInstrument(p)) {
+    setSelectedMech(null);
+    S.selObj = null; S.selStrokes = [];
+    if (beginInstMove(p)) {
+      S.instDrag = true;
+      if (S.tool !== 'select') setTool('select');
+      mark();
+      return;
+    }
+  }
+
   // Apple Pencil eraser end — always erase, any selected tool
   if (e.pointerType === 'eraser') {
     beginEraseAction();
@@ -2481,9 +2495,9 @@ function onDown(e) {
   if (S.tool === 'select') {
     const tol = 14 / S.scale;
     setSelectedMech(null);
-    clearInstSelection();
     const mech = hitMech(p, tol);
     if (mech) {
+      clearInstSelection();
       S.selObj = null; S.selStrokes = [];
       setSelectedMech(mech);
       syncPanelFromItem(mech);
@@ -2494,12 +2508,15 @@ function onDown(e) {
       mark();
       return;
     }
+    // Hit-test instruments BEFORE clearInstSelection — close-button UX needs
+    // to know whether this widget was already selected.
     if (beginInstMove(p)) {
       S.selObj = null; S.selStrokes = [];
       S.instDrag = true;
       mark();
       return;
     }
+    clearInstSelection();
     if (S.selObj) {
       const h = handleAt(S.selObj, p);
       if (h) { beginAction(); S.objResize = h; return; }
@@ -4654,8 +4671,14 @@ function bindEditor() {
       // the user how to remove it; if it was removed, tell them how to add it.
       const pg = page();
       const nowHasInst = pg?.instruments?.some(i => i.kind === b.dataset.inst);
-      if (nowHasInst) mbToast(`${b.dataset.inst} placed · tap again to remove · drag to move · handles to rotate/resize`);
-      else mbToast(`${b.dataset.inst} removed · tap again to place`);
+      if (nowHasInst) {
+        const tip = b.dataset.inst === 'compass'
+          ? 'compass placed · drag pivot to move · drag pencil tip to draw arc · drag faint circle to resize · Select tool is on'
+          : b.dataset.inst === 'protractor'
+            ? 'protractor placed · drag centre/baseline to move · outer rim measures angle · ✕ only removes when already selected'
+            : `${b.dataset.inst} placed · drag to move · handles to rotate/resize · tap toolbar again to remove`;
+        mbToast(tip);
+      } else mbToast(`${b.dataset.inst} removed · tap again to place`);
     };
   });
   $('#geo-clear').onclick = async () => {
@@ -6602,6 +6625,7 @@ async function init() {
   setupInstruments({
     page, snapPt, beginAction, commitAction, persist, mark, unit: UNIT,
     getScale: () => S.scale,
+    setTool: (t) => setTool(t),
     setGeoTool: () => setGeoTool(null), setMechPlacing: () => setMechPlacing(null), setCplxPlacing: () => setCplxPlacing(null),
   });
   setupCplxPanel();

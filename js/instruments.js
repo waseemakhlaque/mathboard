@@ -10,9 +10,12 @@ let instMove = null;      // { lastX, lastY, handle, ... } for active drag gestu
 const HANDLE_R = 9;       // handle radius in page units (visual)
 const CLOSE_R = 8;        // close button radius
 // Screen-px hit targets — converted via tolPx() so they stay ~finger-sized at
-// any zoom. 28/40 were too tight on smart boards / distant iPad projection.
+// any zoom. Close uses a tighter target so ✕ doesn't eat body/pencil drags
+// (that was deleting the protractor/compass mid-lesson and felt like the
+// "portal/lesson kept closing").
 const TOL_HANDLE = 32;
 const TOL_BODY = 44;
+const TOL_CLOSE = 16;
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 function page() { return hooks.page?.(); }
@@ -371,10 +374,10 @@ function drawCompass(c, it, sel) {
   c.textAlign = 'center'; c.textBaseline = 'bottom';
   c.fillText(`r = ${radUnits.toFixed(1)} u`, pivot.x, pivot.y - R - 6);
 
-  // Close button
+  // Close button — a bit further out so it doesn't collide with the pencil tip
   const dx = pencil.x - pivot.x, dy = pencil.y - pivot.y;
   const d = Math.hypot(dx, dy) || 1;
-  const closePt = { x: pivot.x + dx / d * (R + 16), y: pivot.y + dy / d * (R + 16) };
+  const closePt = { x: pivot.x + dx / d * (R + 28), y: pivot.y + dy / d * (R + 28) };
   c.fillStyle = 'rgba(220, 60, 60, 0.85)';
   c.beginPath(); c.arc(closePt.x, closePt.y, CLOSE_R, 0, Math.PI * 2); c.fill();
   c.fillStyle = '#fff'; c.font = 'bold 10px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
@@ -387,6 +390,7 @@ function drawCompass(c, it, sel) {
 /** Determine which handle of `it` is near `p`, or 'body' / 'close' / null. */
 function handleAt(it, p) {
   const tol = tolPx(TOL_HANDLE);
+  const closeTol = tolPx(TOL_CLOSE);
 
   if (it.kind === 'ruler') {
     const { x, y, length: L, rotation: rot, width: W } = it;
@@ -394,7 +398,7 @@ function handleAt(it, p) {
     const hw = L / 2;
     // Close button at top-right corner of strip
     const closePt = { x: x + cxt * hw - s * (-W / 2), y: y + s * hw + cxt * (-W / 2) };
-    if (dist(p, closePt) < tol + CLOSE_R) return 'close';
+    if (dist(p, closePt) < closeTol + CLOSE_R) return 'close';
     // Rotation handle at left end
     const rotH = { x: x - cxt * hw, y: y - s * hw };
     if (dist(p, rotH) < tol + HANDLE_R) return 'rotate';
@@ -413,37 +417,48 @@ function handleAt(it, p) {
     // Close button at top of disc
     const closeAng = rot - Math.PI / 2;
     const closePt = { x: x + Math.cos(closeAng) * (R - 12), y: y + Math.sin(closeAng) * (R - 12) };
-    if (dist(p, closePt) < tol + CLOSE_R) return 'close';
+    if (dist(p, closePt) < closeTol + CLOSE_R) return 'close';
     // Rotation handle at baseline end
     const rotH = { x: x + Math.cos(rot) * R, y: y + Math.sin(rot) * R };
     if (dist(p, rotH) < tol + HANDLE_R) return 'rotate';
-    // Needle area: inside the half-disc
+
     const d = dist(p, { x, y });
-    if (d < R + tol) {
-      // Check if point is in the half-disc area (angled between rot-PI and rot)
-      const a = Math.atan2(p.y - y, p.x - x);
-      let da = ((a - (rot - Math.PI)) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
-      if (da <= Math.PI + 0.1) return 'needle';
-    }
-    return null;
+    if (d > R + tol) return null;
+    // Is the point on the half-disc (including baseline)?
+    const a = Math.atan2(p.y - y, p.x - x);
+    let da = ((a - (rot - Math.PI)) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+    const onHalf = da <= Math.PI + 0.15;
+    // Baseline band (diameter) — always body-drag, like grabbing the ruler edge
+    const basex = Math.cos(rot), basey = Math.sin(rot);
+    const along = (p.x - x) * basex + (p.y - y) * basey;
+    const perp = Math.abs(-(p.x - x) * basey + (p.y - y) * basex);
+    if (Math.abs(along) <= R + tol && perp <= tol + 10) return 'body';
+    if (!onHalf) return null;
+    // Inner disc / hub → free drag (this was missing — every half-disc hit was
+    // 'needle', so the protractor measured angles but could never be moved).
+    if (d <= R * 0.55 + tol) return 'body';
+    // Outer ring of the half-disc → angle needle
+    return 'needle';
   }
 
   if (it.kind === 'compass') {
     const { pivot, pencil, radius: R } = it;
     const bodyTol = tolPx(TOL_BODY);
-    // Close button beyond pencil tip
     const dx = pencil.x - pivot.x, dy = pencil.y - pivot.y;
-    const d = Math.hypot(dx, dy) || 1;
-    const closePt = { x: pivot.x + dx / d * (R + 16), y: pivot.y + dy / d * (R + 16) };
-    if (dist(p, closePt) < tol + CLOSE_R) return 'close';
-    // Pencil tip handle
-    if (dist(p, pencil) < tol + 8) return 'pencil';
-    // Pivot (body drag) — must use screen-px tol, not raw page units (zoomed-out
-    // classroom view made the pivot nearly untouchable on smart boards).
-    if (dist(p, pivot) < bodyTol + 10) return 'body';
-    // Body: near the line between pivot and pencil
+    const dArm = Math.hypot(dx, dy) || 1;
+    // Close beyond the pencil — tight hit so arc-drawing isn't a delete.
+    const closePt = { x: pivot.x + dx / dArm * (R + 28), y: pivot.y + dy / dArm * (R + 28) };
+    if (dist(p, closePt) < closeTol + CLOSE_R) return 'close';
+    // Pencil tip — generous for finger / smart-board stylus (arc draw)
+    if (dist(p, pencil) < tol + 14) return 'pencil';
+    // Pivot hub — body drag
+    if (dist(p, pivot) < bodyTol + 14) return 'body';
+    // Ring away from the pencil tip → change radius without starting an arc
+    const dFromPivot = dist(p, pivot);
+    if (Math.abs(dFromPivot - R) < tol + 8 && dist(p, pencil) > tol + 18) return 'resize';
+    // Arm between pivot and pencil → body drag
     const proj = projSeg(p, pivot, pencil);
-    if (dist(p, proj) < bodyTol && dist(proj, pivot) <= R && dist(proj, { x: pivot.x + dx / d * R, y: pivot.y + dy / d * R }) <= R) return 'body';
+    if (dist(p, proj) < bodyTol && dist(proj, pivot) <= R + 4) return 'body';
     return null;
   }
 
@@ -477,8 +492,16 @@ export function beginInstMove(p) {
 
     selInst = it;
 
-    // Close button → delete immediately
+    // Close button → delete only when this widget is already selected.
+    // A first tap on ✕ while unselected just selects + starts a body drag,
+    // so a fat finger can't wipe the instrument (or feel like the lesson closed).
     if (handle === 'close') {
+      if (selInst !== it) {
+        selInst = it;
+        hooks.beginAction?.();
+        instMove = { lastX: p.x, lastY: p.y, handle: 'body' };
+        return true;
+      }
       hooks.beginAction?.();
       pg.instruments.splice(i, 1);
       selInst = null;
@@ -586,26 +609,17 @@ export function moveInst(p) {
     selInst.pencil.x = selInst.pivot.x + dx2 / d * selInst.radius;
     selInst.pencil.y = selInst.pivot.y + dy2 / d * selInst.radius;
 
-    // Sample arc points: only record if moving along the arc (angular change)
-    const ang = Math.atan2(dy2, dx2);
-    const last = instMove.arcPoints[instMove.arcPoints.length - 1];
-    if (last) {
-      const lastAng = Math.atan2(last.y - selInst.pivot.y, last.x - selInst.pivot.x);
-      const aDiff = Math.abs(normalizeAngle(ang - lastAng));
-      // Sample every ~2 degrees or 3px movement
-      if (aDiff > 0.035 || dist(p, instMove.arcPoints[instMove.arcPoints.length - 1]) > 3) {
-        instMove.arcPoints.push({ x: selInst.pencil.x, y: selInst.pencil.y, p: 0.5 });
-      }
+    const pts = instMove.arcPoints;
+    const tip = { x: selInst.pencil.x, y: selInst.pencil.y, p: 0.5 };
+    if (!pts.length) {
+      pts.push(tip);
     } else {
-      // First point: also add the starting position
-      const startPt = instMove.arcPoints[0] || { x: instMove.lastX, y: instMove.lastY, p: 0.5 };
-      if (instMove.arcPoints.length === 0) {
-        // Project start onto arc
-        const sdx = instMove.lastX - selInst.pivot.x, sdy = instMove.lastY - selInst.pivot.y;
-        const sd = Math.hypot(sdx, sdy) || 1;
-        instMove.arcPoints.push({ x: selInst.pivot.x + sdx / sd * selInst.radius, y: selInst.pivot.y + sdy / sd * selInst.radius, p: 0.5 });
-      }
-      instMove.arcPoints.push({ x: selInst.pencil.x, y: selInst.pencil.y, p: 0.5 });
+      const last = pts[pts.length - 1];
+      const lastAng = Math.atan2(last.y - selInst.pivot.y, last.x - selInst.pivot.x);
+      const ang = Math.atan2(dy2, dx2);
+      const aDiff = Math.abs(normalizeAngle(ang - lastAng));
+      // Sample every ~2° or ~3 page-units so short arcs still commit
+      if (aDiff > 0.035 || dist(tip, last) > 3) pts.push(tip);
     }
     instMove.lastX = p.x; instMove.lastY = p.y;
     hooks.mark?.();
@@ -630,8 +644,8 @@ function normalizeAngle(a) {
 
 export function endInstMove() {
   if (selInst && instMove) {
-    // Compass arc: commit as ink stroke
-    if (instMove.handle === 'pencil' && instMove.arcPoints?.length >= 3) {
+    // Compass arc: commit as ink stroke (2+ samples is enough for a short tick)
+    if (instMove.handle === 'pencil' && instMove.arcPoints?.length >= 2) {
       const pg = hooks.page();
       if (pg) {
         const stroke = {
@@ -640,7 +654,7 @@ export function endInstMove() {
           color: '#1b1b1b',
           width: 4,
           penType: 'fine',
-          points: instMove.arcPoints.map(p => ({ x: p.x, y: p.y, p: p.p ?? 0.5 })),
+          points: instMove.arcPoints.map(pt => ({ x: pt.x, y: pt.y, p: pt.p ?? 0.5 })),
         };
         pg.strokes.push(stroke);
       }
@@ -721,6 +735,10 @@ export function setInstTool(tool) {
     selInst = widget; // auto-select
     hooks.commitAction?.();
     hooks.mark?.();
+    // Switch to Select so the just-placed widget can be dragged immediately —
+    // instruments only received drags under the Select tool, so leaving Pen
+    // active made the compass/protractor look completely dead after place.
+    hooks.setTool?.('select');
   }
   syncInstButtons();
 }
