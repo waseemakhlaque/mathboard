@@ -227,15 +227,22 @@ function drawRuler(c, it, sel) {
     }
   }
 
-  // Rotation handle (circle at one end of the strip)
-  const rotH = { x: x - ux(cxt, s, hw), y: y - uy(cxt, s, hw) };
-  c.fillStyle = '#ffffff'; c.strokeStyle = sel ? '#d23b3b' : '#2566c8'; c.lineWidth = 2;
-  c.beginPath(); c.arc(rotH.x, rotH.y, HANDLE_R, 0, Math.PI * 2); c.fill(); c.stroke();
+  // Handles at the two ends must look DIFFERENT or you can't tell which end
+  // lengthens the ruler vs. rotates it (both were identical white circles —
+  // reported as "ruler can't be enlarged"). Left end = rotate (↻ glyph),
+  // right end = resize (↔ double-arrow aligned with the ruler).
+  const accent = sel ? '#d23b3b' : '#2566c8';
+  const HR = HANDLE_R + 1;
 
-  // Resize handle at other end
+  const rotH = { x: x - ux(cxt, s, hw), y: y - uy(cxt, s, hw) };
+  c.fillStyle = '#ffffff'; c.strokeStyle = accent; c.lineWidth = 2;
+  c.beginPath(); c.arc(rotH.x, rotH.y, HR, 0, Math.PI * 2); c.fill(); c.stroke();
+  drawRotateIcon(c, rotH.x, rotH.y, HR - 3.5, accent);
+
   const resH = { x: x + ux(cxt, s, hw), y: y + uy(cxt, s, hw) };
-  c.fillStyle = '#ffffff';
-  c.beginPath(); c.arc(resH.x, resH.y, HANDLE_R, 0, Math.PI * 2); c.fill(); c.stroke();
+  c.fillStyle = '#ffffff'; c.strokeStyle = accent; c.lineWidth = 2;
+  c.beginPath(); c.arc(resH.x, resH.y, HR, 0, Math.PI * 2); c.fill(); c.stroke();
+  drawResizeArrows(c, resH.x, resH.y, rot, HR - 2, accent);
 
   // Rotate indicator: small angle readout near rotation handle
   if (sel && Math.abs(it.rotation) > 0.01) {
@@ -257,6 +264,61 @@ function drawRuler(c, it, sel) {
 
 function ux(c, s, hw) { return c * hw; }
 function uy(c, s, hw) { return s * hw; }
+
+// Double-headed arrow inside the resize handle, aligned with the ruler axis —
+// the universal "drag to lengthen" affordance.
+function drawResizeArrows(ctx, cx, cy, rot, r, color) {
+  ctx.save();
+  ctx.translate(cx, cy); ctx.rotate(rot);
+  ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-r, 0); ctx.lineTo(r, 0);
+  ctx.moveTo(-r, 0); ctx.lineTo(-r + 4, -3); ctx.moveTo(-r, 0); ctx.lineTo(-r + 4, 3);
+  ctx.moveTo(r, 0); ctx.lineTo(r - 4, -3); ctx.moveTo(r, 0); ctx.lineTo(r - 4, 3);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Curved arrow inside the rotate handle — distinguishes it from the resize end.
+function drawRotateIcon(ctx, cx, cy, r, color) {
+  ctx.save();
+  ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI * 0.75, Math.PI * 0.75); ctx.stroke();
+  const a = Math.PI * 0.75;
+  const ex = cx + Math.cos(a) * r, ey = cy + Math.sin(a) * r;
+  const t = a + Math.PI / 2; // tangent direction at arc end
+  ctx.beginPath();
+  ctx.moveTo(ex, ey); ctx.lineTo(ex - Math.cos(t - 0.6) * 4, ey - Math.sin(t - 0.6) * 4);
+  ctx.moveTo(ex, ey); ctx.lineTo(ex - Math.cos(t + 0.6) * 4, ey - Math.sin(t + 0.6) * 4);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Position of the compass "draw full circle" button (perpendicular to the radius,
+// near the pivot). Shared by drawCompass and handleAt so they never disagree.
+function compassFullCircleBtn(it) {
+  const dx = it.pencil.x - it.pivot.x, dy = it.pencil.y - it.pivot.y;
+  const d = Math.hypot(dx, dy) || 1;
+  return { x: it.pivot.x + (-dy / d) * 26, y: it.pivot.y + (dx / d) * 26 };
+}
+
+// Commit a complete circle (current radius) as an ink stroke — one tap gives the
+// clean two-circle intersections a perpendicular-bisector construction needs.
+function commitCompassCircle(it) {
+  const pg = page();
+  if (!pg) return;
+  ensure(pg);
+  hooks.beginAction?.();
+  const R = it.radius, cx = it.pivot.x, cy = it.pivot.y, N = 96;
+  const points = [];
+  for (let i = 0; i <= N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    points.push({ x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R, p: 0.5 });
+  }
+  pg.strokes.push({ id: uid(), tool: 'pen', color: '#1b1b1b', width: 4, penType: 'fine', points });
+  hooks.commitAction?.();
+  hooks.mark?.();
+}
 
 function drawProtractor(c, it, sel) {
   const { x, y, radius: R, rotation: rot } = it;
@@ -383,6 +445,17 @@ function drawCompass(c, it, sel) {
   c.fillStyle = '#fff'; c.font = 'bold 10px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
   c.fillText('✕', closePt.x, closePt.y);
 
+  // "Draw full circle" button (only when selected): one tap stamps the whole
+  // circle at the current radius. Two such circles (same radius, from each end
+  // of a segment) intersect at the perpendicular-bisector points.
+  if (sel) {
+    const fc = compassFullCircleBtn(it);
+    c.fillStyle = 'rgba(31, 157, 87, 0.92)';
+    c.beginPath(); c.arc(fc.x, fc.y, CLOSE_R + 1, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = '#fff'; c.lineWidth = 1.6;
+    c.beginPath(); c.arc(fc.x, fc.y, 4.5, 0, Math.PI * 2); c.stroke();
+  }
+
   c.restore();
 }
 
@@ -449,6 +522,8 @@ function handleAt(it, p) {
     // Close beyond the pencil — tight hit so arc-drawing isn't a delete.
     const closePt = { x: pivot.x + dx / dArm * (R + 28), y: pivot.y + dy / dArm * (R + 28) };
     if (dist(p, closePt) < closeTol + CLOSE_R) return 'close';
+    // Full-circle button — only hittable while selected (it's only drawn then).
+    if (selInst === it && dist(p, compassFullCircleBtn(it)) < closeTol + CLOSE_R) return 'fullcircle';
     // Pencil tip — generous for finger / smart-board stylus (arc draw)
     if (dist(p, pencil) < tol + 14) return 'pencil';
     // Pivot hub — body drag
@@ -474,7 +549,7 @@ export function hitInstrument(p, tol) {
     const it = pg.instruments[i];
     if (!instGeomOk(it)) continue; // corrupt/partial widget — never hit-testable
     const h = handleAt(it, p);
-    if (h === 'close' || h === 'body' || h === 'needle' || h === 'pencil' || h === 'rotate' || h === 'resize') return it;
+    if (h === 'close' || h === 'body' || h === 'needle' || h === 'pencil' || h === 'rotate' || h === 'resize' || h === 'fullcircle') return it;
   }
   return null;
 }
@@ -509,6 +584,13 @@ export function beginInstMove(p) {
       hooks.mark?.();
       syncInstButtons();
       return false; // no drag gesture
+    }
+
+    // Full-circle button (compass, already selected) → stamp a complete circle,
+    // no drag gesture. Only reachable when selected (handleAt guards on that).
+    if (handle === 'fullcircle') {
+      commitCompassCircle(it);
+      return false;
     }
 
     hooks.beginAction?.();
