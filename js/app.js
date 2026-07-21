@@ -122,7 +122,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 144;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 145;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -4805,6 +4805,27 @@ const FN_TEMPLATES = {
 };
 const CALC_FMT = ['D', 'F', 'ab/c', '√'];
 
+function armCalcField(sel) {
+  const f = typeof sel === 'string' ? $(sel) : sel;
+  if (!f) return null;
+  calcActiveField = f;
+  try { f.focus({ preventScroll: true }); f.select?.(); } catch (_) { /* ok */ }
+  return f;
+}
+
+/** Scroll the open MODE / EQN / VECTOR panel into view inside the calc card. */
+function revealCalcPanel(el) {
+  const calc = $('#calc');
+  if (!calc || !el || el.classList.contains('hidden')) return;
+  requestAnimationFrame(() => {
+    try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (_) { /* ok */ }
+    // Keep the panel near the top of the scrollable calc so Solve / vector
+    // buttons aren't buried under the fold on short laptop viewports.
+    const top = el.offsetTop - 8;
+    if (Number.isFinite(top)) calc.scrollTop = Math.max(0, top);
+  });
+}
+
 function showCalcView(view) {
   calcView = view;
   // The faceplate (digits/ops/functions) stays visible and live in every mode —
@@ -4825,17 +4846,33 @@ function showCalcView(view) {
   $('#calc-base')?.classList.toggle('hidden', view !== 'base');
   const mn = $('#calc-modename');
   const names = { table: 'TABLE', matrix: 'MATRIX', eqn: 'EQN', base: 'BASE-N', intg: intgMode === 'derivative' ? 'd/dx' : '∫dx' };
-  if (mn) mn.textContent = names[view] || 'COMP';
+  if (mn && view !== 'matrix') mn.textContent = names[view] || 'COMP';
   // Arm the first prompt field so the faceplate has somewhere to type immediately —
   // these fields are inputmode="none", so focusing them never pops a keyboard.
+  // EQN fields are created in renderEqnFields() *before* this runs (see openEqn).
   const firstField = { table: '#ct-fx', matrix: '#ma00', base: '#base-in', intg: '#intg-fx', eqn: '#eqn-0-0' }[view];
-  if (firstField) {
-    const f = $(firstField);
-    if (f) { calcActiveField = f; f.focus({ preventScroll: true }); f.select?.(); }
-  } else if (view === 'keys') {
-    calcActiveField = null;
-  }
+  if (firstField) armCalcField(firstField);
+  else if (view === 'keys') calcActiveField = null;
+  const panel = { table: '#calc-table', matrix: '#calc-matrix', eqn: '#calc-eqn', base: '#calc-base', intg: '#calc-intg' }[view];
+  if (panel) revealCalcPanel($(panel));
+  else if (view === 'keys') { const c = $('#calc'); if (c) c.scrollTop = 0; }
 }
+
+/** Switch MATRIX card between 2×2 and VECTOR tabs and arm a visible field. */
+function showMxTab(which) {
+  const isVec = which === 'vec';
+  $('#mx-tab-mat')?.classList.toggle('active', !isVec);
+  $('#mx-tab-vec')?.classList.toggle('active', isVec);
+  $('#mx-mat')?.classList.toggle('hidden', isVec);
+  $('#mx-vec')?.classList.toggle('hidden', !isVec);
+  const mn = $('#calc-modename');
+  if (mn) mn.textContent = isVec ? 'VECTOR' : 'MATRIX';
+  // Critical: after VECTOR opens, #ma00 is display:none — leaving it as
+  // calcActiveField made every faceplate digit a no-op (offsetParent null).
+  armCalcField(isVec ? '#vu0' : '#ma00');
+  revealCalcPanel($('#calc-matrix'));
+}
+
 function calcReset() {
   calcSetExpr(''); $('#calc-result').textContent = '0'; $('#calc-history').textContent = '';
   calcResultValue = null; calcShift = false; calcAlpha = false; stoPending = false; rclAlpha = false; hypPending = false;
@@ -4844,15 +4881,20 @@ function calcReset() {
   showCalcView('keys');
   calcFocusExpr();
 }
-function toggleModeMenu() { $('#calc-mode-menu')?.classList.toggle('hidden'); }
+function toggleModeMenu() {
+  const menu = $('#calc-mode-menu');
+  if (!menu) return;
+  menu.classList.toggle('hidden');
+  if (!menu.classList.contains('hidden')) revealCalcPanel(menu);
+}
 function setCalcMode(m) {
   $('#calc-mode-menu')?.classList.add('hidden');
   if (m === 'keys') showCalcView('keys');
   else if (m === 'intg-integral') openIntg('integral');
   else if (m === 'intg-derivative') openIntg('derivative');
   else if (m === 'table') showCalcView('table');
-  else if (m === 'matrix') { showCalcView('matrix'); $('#mx-tab-mat')?.click(); }
-  else if (m === 'vector') { showCalcView('matrix'); $('#mx-tab-vec')?.click(); }
+  else if (m === 'matrix') { showCalcView('matrix'); showMxTab('mat'); }
+  else if (m === 'vector') { showCalcView('matrix'); showMxTab('vec'); }
   else if (m === 'eqn') openEqn();
   else if (m === 'base') showCalcView('base');
   else if (m === 'deg') setCalcDeg(true);
@@ -4920,13 +4962,27 @@ const EQN_SPEC = {
   quad: { rows: 1, labels: ['a', 'b', 'c'], hint: 'a·x² + b·x + c = 0' },
   cubic: { rows: 1, labels: ['a', 'b', 'c', 'd'], hint: 'a·x³ + b·x² + c·x + d = 0' },
 };
-function openEqn() { showCalcView('eqn'); renderEqnFields(); }
+// Worked examples so Solve isn't a blank singular system on first open
+// (empty lin2 → all zeros → "No unique solution", which felt like EQN was broken).
+const EQN_DEFAULTS = {
+  lin2: [['2', '1', '5'], ['1', '1', '3']],           // → x=2, y=1
+  lin3: [['1', '1', '1', '6'], ['0', '2', '1', '5'], ['2', '1', '0', '5']], // → 1,2,3
+  quad: [['1', '-5', '6']],                           // → 2, 3
+  cubic: [['1', '0', '-1', '0']],                     // → -1, 0, 1
+};
+function openEqn() {
+  // Create fields BEFORE showCalcView so #eqn-0-0 exists to arm/focus.
+  renderEqnFields();
+  showCalcView('eqn');
+  armCalcField('#eqn-0-0');
+}
 function renderEqnFields() {
   const spec = EQN_SPEC[eqnType];
   document.querySelectorAll('[data-eqn]').forEach((b) => b.classList.toggle('active', b.dataset.eqn === eqnType));
   const hint = $('#eqn-hint'); if (hint) hint.textContent = spec.hint;
   const wrap = $('#eqn-fields'); if (!wrap) return;
   wrap.innerHTML = '';
+  const defaults = EQN_DEFAULTS[eqnType] || [];
   for (let r = 0; r < spec.rows; r++) {
     const row = document.createElement('div');
     row.className = 'eqn-row';
@@ -4936,13 +4992,20 @@ function renderEqnFields() {
       inp.id = `eqn-${r}-${c}`;
       inp.inputMode = 'none'; // faceplate-driven entry, same as the other sub-view fields
       inp.placeholder = lab;
-      inp.value = (spec.rows === 1) ? (c === 0 ? '1' : '0') : '';
+      inp.value = defaults[r]?.[c] ?? (spec.rows === 1 && c === 0 ? '1' : '0');
       row.appendChild(inp);
     });
     wrap.appendChild(row);
   }
+  // Re-arm if EQN is already the active view (type tab switch).
+  if (calcView === 'eqn') armCalcField('#eqn-0-0');
 }
-function eqnVal(r, c) { return Number(math.evaluate($(`#eqn-${r}-${c}`).value || '0')); }
+function eqnVal(r, c) {
+  const raw = ($(`#eqn-${r}-${c}`)?.value ?? '').trim();
+  if (!raw) return 0;
+  try { return Number(math.evaluate(raw, calcScope())); }
+  catch (_) { return Number(raw) || 0; }
+}
 // Durand–Kerner: all roots (real + complex) of a polynomial given coeffs high→low
 function polyRoots(coeffs) {
   let c = coeffs.slice();
@@ -4975,19 +5038,26 @@ function fmtComplexRoot(z) {
 }
 function solveEqn() {
   const out = $('#eqn-out');
+  if (!out) return;
   try {
     if (eqnType === 'lin2' || eqnType === 'lin3') {
       const n = eqnType === 'lin2' ? 2 : 3;
       const A = [], b = [];
       for (let r = 0; r < n; r++) { const row = []; for (let c = 0; c < n; c++) row.push(eqnVal(r, c)); A.push(row); b.push(eqnVal(r, n)); }
-      const x = math.lusolve(A, b).map((v) => v[0]);
+      const sol = math.lusolve(A, b);
+      const rows = (sol && typeof sol.toArray === 'function') ? sol.toArray() : sol;
+      const x = (Array.isArray(rows) ? rows : []).map((v) => (Array.isArray(v) ? v[0] : v));
+      if (x.length !== n) throw new Error('singular');
       const names = ['x', 'y', 'z'];
       out.innerHTML = '<div class="ct-ok">' + x.map((v, i) => `${names[i]} = ${calcFormatPlain(v)}`).join('<br>') + '</div>';
+      calcResultValue = x[0]; calcRenderResult();
     } else {
       const labels = EQN_SPEC[eqnType].labels;
       const coeffs = labels.map((_, c) => eqnVal(0, c));
+      if (Math.abs(coeffs[0]) < 1e-12) throw new Error('leading zero');
       const roots = polyRoots(coeffs);
       out.innerHTML = '<div class="ct-ok">' + roots.map((z, i) => `x<sub>${i + 1}</sub> = ${fmtComplexRoot(z)}`).join('<br>') + '</div>';
+      if (roots[0]) { calcResultValue = roots[0].im ? roots[0] : roots[0].re; calcRenderResult(); }
     }
   } catch (e) { out.innerHTML = '<div class="ct-err">No unique solution (check coefficients).</div>'; }
 }
@@ -5394,6 +5464,13 @@ function calcFieldTarget() {
   if (calcView === 'keys') return null;
   const f = calcActiveField;
   if (f && document.body.contains(f) && f.offsetParent !== null) return f;
+  // VECTOR tab hides #ma00 — if we still hold that stale field, faceplate
+  // digits silently do nothing. Fall back to the first visible prompt.
+  const rootSel = { table: '#calc-table', matrix: '#calc-matrix', eqn: '#calc-eqn', base: '#calc-base', intg: '#calc-intg' }[calcView];
+  const root = rootSel && $(rootSel);
+  if (!root || root.classList.contains('hidden')) return null;
+  const vis = [...root.querySelectorAll('.ct-in, .mx-in')].find((el) => el.offsetParent !== null);
+  if (vis) { calcActiveField = vis; return vis; }
   return null;
 }
 function calcInsertPlain(field, text) {
@@ -5733,8 +5810,8 @@ function setupCalculator() {
   $('#ct-back').onclick = () => showCalcView('keys');
   $('#cm-back').onclick = () => showCalcView('keys');
   $('#ct-gen').onclick = calcGenTable;
-  $('#mx-tab-mat').onclick = () => { $('#mx-tab-mat').classList.add('active'); $('#mx-tab-vec').classList.remove('active'); $('#mx-mat').classList.remove('hidden'); $('#mx-vec').classList.add('hidden'); };
-  $('#mx-tab-vec').onclick = () => { $('#mx-tab-vec').classList.add('active'); $('#mx-tab-mat').classList.remove('active'); $('#mx-vec').classList.remove('hidden'); $('#mx-mat').classList.add('hidden'); };
+  $('#mx-tab-mat').onclick = () => showMxTab('mat');
+  $('#mx-tab-vec').onclick = () => showMxTab('vec');
   document.querySelectorAll('[data-mx]').forEach((b) => b.onclick = () => calcMatrixOp(b.dataset.mx));
   document.querySelectorAll('[data-vx]').forEach((b) => b.onclick = () => calcVectorOp(b.dataset.vx));
   makeDraggable($('#calc'), $('#calc-head'));

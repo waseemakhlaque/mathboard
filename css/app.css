@@ -2833,8 +2833,24 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 .calc-mode-menu.hidden { display: none; }
 .cmm-title { color: #9aa3af; font-size: 11px; margin-bottom: 8px; letter-spacing: 0.4px; }
 .cmm-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
-.cmm-grid button { background: #2a2f37; color: #e7eaef; border: 1px solid #3a414b; border-radius: 6px; padding: 8px; font-size: 12px; }
+.cmm-grid button {
+  background: #2a2f37; color: #e7eaef; border: 1px solid #3a414b;
+  border-radius: 6px; padding: 10px 8px; font-size: 12px;
+  min-height: 40px; touch-action: manipulation;
+}
 .cmm-grid button:hover { background: #343b44; }
+
+/* MODE tools (EQN / VECTOR / TABLE…) sit above the keypad so they stay on-screen
+   on short Windows laptop viewports — previously they were below #calc-keys and
+   looked "broken" because the menu closed onto an off-screen panel. */
+.calc-sub {
+  padding: 8px 10px 10px;
+  margin: 0 8px 8px;
+  border-radius: 10px;
+  background: #1a1e25;
+  border: 1px solid #2c313a;
+}
+.calc-sub.hidden { display: none !important; }
 
 .intg-modes { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
 .gp-trig { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
@@ -2924,8 +2940,7 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
 }
 
 /* ---------- Calculator TABLE / Matrix ---------- */
-.calc-sub { padding: 8px 10px; }
-.calc-sub.hidden { display: none; }
+/* .calc-sub layout is defined with the MODE menu rules above (above keypad). */
 
 .ct-lab {
   font-size: 11px;
