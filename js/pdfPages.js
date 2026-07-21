@@ -42,7 +42,15 @@ export function assertPdfImportSize(byteLength) {
 export async function buildLazyPdfPages(arrayBuffer, pdfDoc, onProgress, sourceUrl) {
   assertPdfImportSize(arrayBuffer.byteLength);
   const n = pdfDoc.numPages;
-  const pdfBlobId = await storeBlobData(new Blob([arrayBuffer], { type: 'application/pdf' }), 'application/pdf');
+  const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+  const pdfBlobId = await storeBlobData(blob, 'application/pdf');
+  // Verify the write round-tripped — Safari has been seen to accept an IDB put
+  // then return a zero-byte Blob on the next get, which then surfaces as the
+  // infamous "PDF file is empty, i.e. its size is zero bytes" banner mid-class.
+  const check = await getBlob(pdfBlobId);
+  if (!check?.blob || check.blob.size === 0) {
+    throw new Error('Could not save the PDF on this device (storage full or Safari cleared it). Free space and try again, or open the paper from Past papers instead.');
+  }
   pdfDocCache.set(pdfBlobId, pdfDoc);
   const pages = [];
   for (let i = 1; i <= n; i++) {
@@ -93,6 +101,7 @@ async function loadPdfDoc(pdfBlobId, bg) {
       // Re-store under the SAME pdfBlobId so page references stay valid
       await putBlob(pdfBlobId, new Blob([freshBuf], { type: 'application/pdf' }), 'application/pdf');
       rec = await getBlob(pdfBlobId);
+      if (!rec?.blob || rec.blob.size === 0) throw new Error('Heal write verified empty');
       _mbToast('Paper restored from server.');
     } catch (e) {
       _mbToast(lostMsg);
@@ -139,7 +148,13 @@ export async function renderPdfPageDataUrl(bg) {
   try {
     const pg = await pdf.getPage(bg.pageNum);
     const base = pg.getViewport({ scale: 1 });
-    const vp = pg.getViewport({ scale: 1500 / base.width });
+    // Adaptive target width: big multipage papers (past papers, coursebooks) used
+    // to rasterise every visited page at ~1500 CSS-px wide, which OOMs iPads and
+    // smart-board Chromebooks mid-lesson. Cap by page count; still sharp enough
+    // for classroom projection.
+    const total = bg.totalPages || pdf.numPages || 1;
+    const targetW = total > 40 ? 1000 : total > 20 ? 1200 : 1500;
+    const vp = pg.getViewport({ scale: targetW / base.width });
     const oc = document.createElement('canvas');
     oc.width = Math.round(vp.width);
     oc.height = Math.round(vp.height);
@@ -147,7 +162,7 @@ export async function renderPdfPageDataUrl(bg) {
     cx.fillStyle = '#ffffff';
     cx.fillRect(0, 0, oc.width, oc.height);
     await pg.render({ canvasContext: cx, viewport: vp }).promise;
-    const url = oc.toDataURL('image/jpeg', 0.92);
+    const url = oc.toDataURL('image/jpeg', total > 20 ? 0.85 : 0.92);
     renderCache.set(key, url);
     return url;
   } catch (e) {

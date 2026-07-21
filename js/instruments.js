@@ -9,8 +9,10 @@ let selInst = null;       // currently selected instrument (Select tool)
 let instMove = null;      // { lastX, lastY, handle, ... } for active drag gesture
 const HANDLE_R = 9;       // handle radius in page units (visual)
 const CLOSE_R = 8;        // close button radius
-const TOL_HANDLE = 18;    // hit tolerance for handles (page units)
-const TOL_BODY = 22;      // hit tolerance for body (generous for touch)
+// Screen-px hit targets — converted via tolPx() so they stay ~finger-sized at
+// any zoom. 28/40 were too tight on smart boards / distant iPad projection.
+const TOL_HANDLE = 32;
+const TOL_BODY = 44;
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 function page() { return hooks.page?.(); }
@@ -428,6 +430,7 @@ function handleAt(it, p) {
 
   if (it.kind === 'compass') {
     const { pivot, pencil, radius: R } = it;
+    const bodyTol = tolPx(TOL_BODY);
     // Close button beyond pencil tip
     const dx = pencil.x - pivot.x, dy = pencil.y - pivot.y;
     const d = Math.hypot(dx, dy) || 1;
@@ -435,11 +438,12 @@ function handleAt(it, p) {
     if (dist(p, closePt) < tol + CLOSE_R) return 'close';
     // Pencil tip handle
     if (dist(p, pencil) < tol + 8) return 'pencil';
-    // Pivot (body drag)
-    if (dist(p, pivot) < TOL_BODY + 10) return 'body';
+    // Pivot (body drag) — must use screen-px tol, not raw page units (zoomed-out
+    // classroom view made the pivot nearly untouchable on smart boards).
+    if (dist(p, pivot) < bodyTol + 10) return 'body';
     // Body: near the line between pivot and pencil
     const proj = projSeg(p, pivot, pencil);
-    if (dist(p, proj) < TOL_BODY && dist(proj, pivot) <= R && dist(proj, { x: pivot.x + dx / d * R, y: pivot.y + dy / d * R }) <= R) return 'body';
+    if (dist(p, proj) < bodyTol && dist(proj, pivot) <= R && dist(proj, { x: pivot.x + dx / d * R, y: pivot.y + dy / d * R }) <= R) return 'body';
     return null;
   }
 

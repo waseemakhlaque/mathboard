@@ -122,7 +122,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 143;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 144;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -413,6 +413,11 @@ let inkSnapContent = false;
 function mark() { S.dirty = true; inkSnapContent = false; }
 function markInk() { S.dirty = true; }
 
+// Last auto-fit scale. On window/device resize we keep the user's relative zoom
+// (pinch / wheel) instead of slamming back to "fit" — that was the Windows laptop
+// / smart-board docking glitch where the page jumped every time the chrome resized.
+let lastFitScale = 1;
+
 function resizeCanvas() {
   const r = cv.getBoundingClientRect();
   if (r.width < 2 || r.height < 2) return;   // ignore transient zero-size during layout
@@ -425,12 +430,12 @@ function resizeCanvas() {
   if (w === cv.width && h === cv.height) return;
   cv.width = w;
   cv.height = h;
-  // keep the page fitted & centred so it can never drift off-screen on resize
-  if (S.notebook && !$('#editor').classList.contains('hidden')) fitPage();
+  if (S.notebook && !$('#editor').classList.contains('hidden')) adaptPageToViewport();
   else mark();
 }
 
-function fitPage() {
+/** Compute the "fit whole page" scale for the current canvas box (no side effects). */
+function computeFitScale() {
   const r = cv.getBoundingClientRect();
   const present = $('#editor')?.classList.contains('present-mode');
   const m = present ? 12 : 24;
@@ -438,19 +443,41 @@ function fitPage() {
   const pw = pgW(), ph = pgH();
   const fitAll = Math.min((r.width - m * 2) / pw, (r.height - m - bottom) / ph);
   const fitW = (r.width - m * 2) / pw;
-  // Present mode: portrait pages fill the width and scroll vertically, so
-  // handwriting is legible on a shared screen without manual zooming.
-  if (present && fitW > fitAll * 1.02) {
-    S.scale = fitW;
-    S.offsetX = (r.width - pw * S.scale) / 2;
-    S.offsetY = m;
-    mark();
+  if (present && fitW > fitAll * 1.02) return { scale: fitW, mode: 'present-width', m, bottom, r, pw, ph };
+  return { scale: fitAll, mode: 'fit', m, bottom, r, pw, ph };
+}
+
+/** Keep relative zoom across resizes; only hard-fit when already at (or near) fit. */
+function adaptPageToViewport() {
+  const prevFit = lastFitScale || 1;
+  const nearFit = Math.abs(S.scale - prevFit) < prevFit * 0.04;
+  const f = computeFitScale();
+  lastFitScale = f.scale;
+  if (nearFit || f.mode === 'present-width') {
+    applyFit(f);
     return;
   }
-  S.scale = fitAll;
-  S.offsetX = (r.width - pw * S.scale) / 2;
-  S.offsetY = (r.height - bottom - ph * S.scale) / 2;
+  // Preserve zoom relative to the previous fit (e.g. user was at 1.6× fit).
+  const rel = S.scale / prevFit;
+  const cx = f.r.width / 2, cy = (f.r.height - f.bottom) / 2;
+  const pageX = (cx - S.offsetX) / S.scale, pageY = (cy - S.offsetY) / S.scale;
+  S.scale = Math.max(0.08, Math.min(8, f.scale * rel));
+  S.offsetX = cx - pageX * S.scale;
+  S.offsetY = cy - pageY * S.scale;
   mark();
+}
+
+function applyFit(f) {
+  const { scale, mode, m, bottom, r, pw, ph } = f;
+  S.scale = scale;
+  S.offsetX = (r.width - pw * S.scale) / 2;
+  S.offsetY = mode === 'present-width' ? m : (r.height - bottom - ph * S.scale) / 2;
+  lastFitScale = scale;
+  mark();
+}
+
+function fitPage() {
+  applyFit(computeFitScale());
 }
 
 // Present-mode camera rail: the page rides a vertical track. Bounds collapse to
@@ -3076,31 +3103,53 @@ function syncCalcAboveKeyboard() {
   dock?.classList.add('hidden');
   if (calc && !calc.dataset.dragged) applyCalcDefaultPosition();
 }
+/** Visible layout box — prefers visualViewport so Windows browser chrome /
+ *  on-screen keyboards don't leave the calculator hanging below the fold. */
+function viewportBox() {
+  const vv = window.visualViewport;
+  if (vv) return { w: vv.width, h: vv.height, ox: vv.offsetLeft || 0, oy: vv.offsetTop || 0 };
+  return { w: window.innerWidth, h: window.innerHeight, ox: 0, oy: 0 };
+}
+
 function applyCalcDefaultPosition() {
   const calc = $('#calc');
-  if (!calc || calc.dataset.dragged) return;
+  if (!calc) return;
   // Only position a laid-out calc. While hidden (display:none) offsetWidth/Height
   // are 0; the old fallback (340×400) then mis-clamped the real 378×560 ClassWiz
   // faceplate ~140px below the fold on short laptop viewports (1366×768). Bail so
   // callers that open the panel first (which forces a reflow) measure real dims.
   if (calc.classList.contains('hidden') || !calc.offsetWidth || !calc.offsetHeight) return;
+  // While the MathLive keyboard is up, syncCalcAboveKeyboard owns the layout —
+  // don't yank the faceplate back to the default corner underneath the plate.
+  if (calc.classList.contains('calc-kbd-open') || calc.classList.contains('calc-vk-active')) return;
   const present = $('#editor')?.classList.contains('present-mode');
+  const vp = viewportBox();
   calc.style.position = 'fixed';
   calc.style.right = 'auto';
   calc.style.bottom = 'auto';
-  // Measure after clearing anchors so offsetWidth/Height are reliable.
+  // Cap height to the live viewport so the keypad stays reachable via scroll.
+  const maxH = Math.max(200, vp.h - 16);
+  calc.style.maxHeight = `${maxH}px`;
   const w = calc.offsetWidth;
-  const h = calc.offsetHeight;
+  const h = Math.min(calc.offsetHeight, maxH);
   const margin = 8;
   const safeR = present ? 12 : 20;
   const safeT = present ? 72 : margin;
   const safeB = present ? margin : 20;
-  let left = window.innerWidth - w - safeR;
-  let top = present ? safeT : window.innerHeight - h - safeB;
-  left = Math.max(margin, Math.min(window.innerWidth - w - margin, left));
-  top = Math.max(margin, Math.min(window.innerHeight - h - margin, top));
-  calc.style.left = `${left}px`;
-  calc.style.top = `${top}px`;
+  let left, top;
+  if (calc.dataset.dragged) {
+    // Keep a user-dragged calc on-screen when the window shrinks (laptop dock,
+    // Windows snap layouts, smart-board resolution changes).
+    left = parseFloat(calc.style.left) || margin;
+    top = parseFloat(calc.style.top) || safeT;
+  } else {
+    left = vp.w - w - safeR;
+    top = present ? safeT : vp.h - h - safeB;
+  }
+  left = Math.max(margin, Math.min(vp.w - w - margin, left));
+  top = Math.max(margin, Math.min(vp.h - Math.min(h, maxH) - margin, top));
+  calc.style.left = `${left + (vp.ox || 0)}px`;
+  calc.style.top = `${top + (vp.oy || 0)}px`;
 }
 function calcVkDone() {
   calcEvaluate();
@@ -4562,8 +4611,11 @@ function bindEditor() {
   }
   window.addEventListener('resize', () => {
     if (!$('#brand')?.classList.contains('hidden')) positionBrand();
-    if (!$('#calc')?.dataset.dragged) applyCalcDefaultPosition();
+    // Always re-clamp — even a dragged calc must stay inside a resized window.
+    applyCalcDefaultPosition();
   });
+  window.visualViewport?.addEventListener('resize', () => applyCalcDefaultPosition());
+  window.visualViewport?.addEventListener('scroll', () => applyCalcDefaultPosition());
   positionBrand();
 
   $('#export-pdf').onclick = exportPDF;
@@ -5312,7 +5364,10 @@ function calcEvaluate() {
   try {
     const res = math.evaluate(autoCloseParens(expr), calcScope());
     if (typeof res === 'function' || res === undefined) { $('#calc-result').textContent = 'Error'; return; }
-    calcAns = res; calcLastExpr = expr; calcResultValue = res; calcDisplayMode = 0;
+    // Keep the user's S⇔D / fraction / surd mode across "=" — resetting to D
+    // every evaluate made fraction & √ display feel "broken" on Windows laptops
+    // (press S⇔D, do another sum, answer snaps back to a long decimal).
+    calcAns = res; calcLastExpr = expr; calcResultValue = res;
     if (hist) hist.textContent = `${expr} =`;
     calcRenderResult();
   } catch (e) { $('#calc-result').textContent = 'Error'; }

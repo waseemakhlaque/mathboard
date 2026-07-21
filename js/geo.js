@@ -295,8 +295,14 @@ export function loadGeoPage(pg) {
     zoom: { wheel: false },
     keepAspectRatio: false,
     renderer: 'svg',
+    // Larger hit targets for finger / smart-board stylus (default ~hasPoint 4 is mouse-only).
+    precision: { touch: 28, mouse: 8, pen: 16, hasPoint: 12 },
   });
+  // Stop the browser from scrolling/zooming underneath geometry gestures on
+  // iPad / interactive whiteboards (JSXGraph sets this on its own container too).
+  try { inner.style.touchAction = 'none'; } catch (_) { /* ok */ }
   rebuildGeo(pg);
+  let lastGeoDownAt = 0;
   board.on('up', () => {
     // 'move' drags points around — commit those edits like tool-less drags,
     // otherwise they were silently lost on the next page switch.
@@ -307,6 +313,11 @@ export function loadGeoPage(pg) {
   });
   board.on('down', (e) => {
     if (!geoTool || e.target?.classList?.contains('JXG_navigation_button')) return;
+    // Smart boards and some Windows pens synthesise mouse+touch for one tap —
+    // without this guard a single press places two points / advances the draft twice.
+    const now = performance.now();
+    if (now - lastGeoDownAt < 45) return;
+    lastGeoDownAt = now;
     handleGeoClick(e);
   });
 }

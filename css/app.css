@@ -64,8 +64,8 @@
   --section-strip-height: 44px;
   --page-strip-h: 90px;
   --page-strip-height: var(--page-strip-h); /* legacy alias */
-  --calc-w: min(340px, 95vw);
-  --calc-h: min(560px, 80vh);
+  --calc-w: min(378px, 95vw);
+  --calc-h: min(560px, 85dvh, 85vh);
   --touch-min: 44px;
 }
 
@@ -2252,9 +2252,10 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
   transform-origin: 0 0;
   pointer-events: none;
   overflow: visible;
+  touch-action: none;
 }
 
-.geo-layer.active { pointer-events: auto; }
+.geo-layer.active { pointer-events: auto; touch-action: none; }
 
 .geo-inner { width: 1000px; height: 1414px; } /* resized per page in geo.js */
 
@@ -2459,8 +2460,10 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
   user-select: none;
   box-sizing: border-box;
   /* Cap height so short/laptop viewports keep the keypad reachable via
-     internal scroll instead of clipping past the window bottom. */
-  max-height: min(90vh, var(--calc-h));
+     internal scroll instead of clipping past the window bottom. Prefer dvh
+     (dynamic viewport) so Windows browser chrome / taskbar don't leave the
+     faceplate hanging below the fold. */
+  max-height: min(90dvh, 90vh, var(--calc-h));
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
@@ -2885,13 +2888,39 @@ math-field.eq-editor-field::part(virtual-keyboard-toggle) {
   }
 }
 
-/* Short laptop viewports: reclaim vertical space. */
-@media (max-height: 700px) {
+/* Short laptop / Windows notebook viewports: reclaim vertical space so the
+   ClassWiz keypad stays reachable without scrolling past the fold. */
+@media (max-height: 820px) {
   .calc-kbd-bar { display: none; }
   .calc-screen,
-  .calc.casio .calc-screen { height: auto; }
+  .calc.casio .calc-screen {
+    height: auto;
+    min-height: 72px;
+    margin: 4px 10px 6px;
+    padding: 4px 8px 5px;
+  }
   .calc-sci,
   .calc-num { gap: 2px; }
+  .calc.casio .ck,
+  .calc.casio .calc-sci .ck,
+  .calc.casio .ck-num {
+    padding: 8px 0 4px;
+    min-height: 28px;
+    font-size: 12px;
+  }
+  .calc-ctl { padding: 0 12px 4px; gap: 4px; }
+}
+
+/* Even shorter (1366×768 with browser chrome ≈ 650–700 usable). */
+@media (max-height: 700px) {
+  .calc.casio .calc-screen { min-height: 64px; }
+  .calc.casio .ck,
+  .calc.casio .calc-sci .ck,
+  .calc.casio .ck-num {
+    padding: 6px 0 3px;
+    min-height: 24px;
+    font-size: 11px;
+  }
 }
 
 /* ---------- Calculator TABLE / Matrix ---------- */
