@@ -122,7 +122,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 146;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 147;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -2995,6 +2995,7 @@ function showEqNativeFallback() {
 }
 
 function showMathKeyboard() {
+  calcKbdDismissed = false;   // deliberate reopen — allow vk-mode again
   const vk = mathVirtualKeyboard();
   hideEqNativeFallback();
   if (!vk) {
@@ -3055,6 +3056,30 @@ window.addEventListener('scroll', pinViewportForMathKeyboard, { passive: true })
 // Lift calculator + pin a fixed Done bar directly above the MathLive keyboard.
 let calcKbdSyncT = 0;
 let calcKbdPoll = 0;
+// User-initiated "close the calculator keyboard" latch. The compact vk-mode was
+// only ever torn down by the async syncCalcAboveKeyboard poll noticing the VK had
+// gone — but if MathLive leaves its plate flagged visible (seen on iPad/Windows),
+// that poll keeps RE-adding calc-vk-active and the faceplate never returns, so the
+// keyboard looks stuck open with no way to close it. This latch lets the Hide/Done/
+// close buttons exit synchronously and blocks re-entry until the keyboard is
+// deliberately reopened (showMathKeyboard clears it).
+let calcKbdDismissed = false;
+// Synchronously leave the calculator's keyboard/vk mode: restore the faceplate,
+// hide the action dock, drop the height cap and re-anchor. Does NOT rely on the
+// async poll, so a wedged MathLive VK can no longer trap the calculator.
+function exitCalcVkMode() {
+  calcKbdDismissed = true;
+  stopCalcKbdPoll();
+  hideMathKeyboard();
+  const calc = $('#calc');
+  if (calc) {
+    calc.classList.remove('calc-vk-active', 'calc-kbd-open');
+    calc.style.removeProperty('max-height');
+  }
+  $('#calc-vk-dock')?.classList.add('hidden');
+  try { calcExprEl()?.blur?.(); } catch (_) {}
+  if (calc && !calc.dataset.dragged && !calc.classList.contains('hidden')) applyCalcDefaultPosition();
+}
 function scheduleCalcKeyboardSync() {
   clearTimeout(calcKbdSyncT);
   requestAnimationFrame(syncCalcAboveKeyboard);
@@ -3095,7 +3120,7 @@ function syncCalcAboveKeyboard() {
   const dock = $('#calc-vk-dock');
   const calcOpen = calc && !calc.classList.contains('hidden');
   const kbd = mathKeyboardEl();
-  if (calcOpen && kbd) {
+  if (calcOpen && kbd && !calcKbdDismissed) {
     const kr = kbd.getBoundingClientRect();
     // Clamp: never let the dock ride above the status bar or below the screen
     // (the plate animates in from the bottom, so early reads can be odd).
@@ -3170,8 +3195,7 @@ function applyCalcDefaultPosition() {
 }
 function calcVkDone() {
   calcEvaluate();
-  hideMathKeyboard();
-  calcExprEl()?.blur?.();
+  exitCalcVkMode();
 }
 
 function configureMathLive() {
@@ -5787,23 +5811,17 @@ function setupCalculator() {
     }
   };
   $('#calc-close').onclick = () => {
-    hideMathKeyboard();
-    stopCalcKbdPoll();
-    $('#calc-vk-dock')?.classList.add('hidden');
+    exitCalcVkMode();
     $('#calc').classList.add('hidden');
-    $('#calc').classList.remove('calc-kbd-open', 'calc-vk-active');
   };
   $('#calc-done')?.addEventListener('click', calcVkDone);
   $('#calc-vk-done')?.addEventListener('click', calcVkDone);
-  $('#calc-vk-hide')?.addEventListener('click', () => {
-    hideMathKeyboard();
-    calcExprEl()?.blur?.();
-  });
+  $('#calc-vk-hide')?.addEventListener('click', exitCalcVkMode);
   $('#calc-kbd-toggle')?.addEventListener('click', () => {
     // Only focus when opening — focusing before hide makes MathLive ignore hide().
     const vk = mathVirtualKeyboard();
-    if (vk?.visible) {
-      hideMathKeyboard();
+    if (vk?.visible || $('#calc').classList.contains('calc-vk-active')) {
+      exitCalcVkMode();
     } else {
       calcExprEl()?.focus({ preventScroll: true });
       showMathKeyboard();
