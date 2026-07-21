@@ -122,7 +122,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 142;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 143;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -3079,13 +3079,18 @@ function syncCalcAboveKeyboard() {
 function applyCalcDefaultPosition() {
   const calc = $('#calc');
   if (!calc || calc.dataset.dragged) return;
+  // Only position a laid-out calc. While hidden (display:none) offsetWidth/Height
+  // are 0; the old fallback (340×400) then mis-clamped the real 378×560 ClassWiz
+  // faceplate ~140px below the fold on short laptop viewports (1366×768). Bail so
+  // callers that open the panel first (which forces a reflow) measure real dims.
+  if (calc.classList.contains('hidden') || !calc.offsetWidth || !calc.offsetHeight) return;
   const present = $('#editor')?.classList.contains('present-mode');
   calc.style.position = 'fixed';
   calc.style.right = 'auto';
   calc.style.bottom = 'auto';
   // Measure after clearing anchors so offsetWidth/Height are reliable.
-  const w = calc.offsetWidth || 340;
-  const h = calc.offsetHeight || 400;
+  const w = calc.offsetWidth;
+  const h = calc.offsetHeight;
   const margin = 8;
   const safeR = present ? 12 : 20;
   const safeT = present ? 72 : margin;
@@ -6046,7 +6051,23 @@ function setupPanelMenu() {
       const el = $(id);
       if (el) {
         el.classList.toggle('hidden');
-        if (id === '#layers' && !el.classList.contains('hidden')) renderLayersPanel();
+        const shown = !el.classList.contains('hidden');
+        if (id === '#layers' && shown) renderLayersPanel();
+        // Opening the calculator from the Panels menu must run the same
+        // reveal-then-position/lifecycle path as the #calc-toggle button —
+        // otherwise it shows at a stale off-screen inline position and never
+        // starts the keyboard-sync poll or focuses the expression line.
+        if (id === '#calc') {
+          if (shown) {
+            if (!el.dataset.dragged) applyCalcDefaultPosition();
+            startCalcKbdPoll();
+            calcFocusExpr();
+          } else {
+            hideMathKeyboard();
+            stopCalcKbdPoll();
+            $('#calc-vk-dock')?.classList.add('hidden');
+          }
+        }
       }
       drop.classList.add('hidden');
     };
