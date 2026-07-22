@@ -44,8 +44,8 @@
 <link rel="apple-touch-icon" href="./assets/icon-512.png" sizes="512x512" />
 <link rel="stylesheet" href="./vendor/uPlot.min.css" />
 <link rel="stylesheet" href="./vendor/jsxgraph.css" />
-<link rel="stylesheet" href="./css/app.css?v=150" />
-<link rel="stylesheet" href="./css/annotatedSim.css?v=150" />
+<link rel="stylesheet" href="./css/app.css?v=151" />
+<link rel="stylesheet" href="./css/annotatedSim.css?v=151" />
 <link rel="stylesheet" href="./vendor/mathlive.css" />
 <link rel="stylesheet" href="./vendor/katex.min.css" />
 <link rel="stylesheet" href="./vendor/pickr.nano.min.css" />
@@ -89,6 +89,7 @@
       <label for="json-file-lib" id="import-json-lib" class="lib-act-lesson lib-file-btn">Import lesson</label>
       <label for="pdf-file-lib" id="import-pdf-lib" class="lib-act-paper lib-file-btn">Import PDF</label>
       <button type="button" id="sync-settings" title="Cloud sync settings">Sync</button>
+      <button type="button" id="lib-signout" class="ghost hidden" title="Sign out of MathBoard on this device">Sign out</button>
       <button type="button" id="new-nb" class="lib-act-lesson primary">+ New lesson</button>
     </div>
   </header>
@@ -1101,26 +1102,32 @@
 <!-- Sync dialog (body level so it works in library + editor views) -->
 <div id="sync-dialog" class="sync-dialog hidden">
   <div class="sync-box">
-    <h3>Cloud sync</h3>
+    <h3>Account &amp; sync</h3>
     <p id="sync-config-hint" class="muted hidden">Add supabaseUrl + supabaseAnonKey in config.local.js (see config.example.js).</p>
-    <p class="muted">Lessons save locally first. Sign in with your Supabase account, then sync.</p>
     <p id="sync-user" class="sync-user muted"></p>
-    <label class="ct-lab" for="sync-email">Email</label>
-    <input id="sync-email" class="ct-in" type="email" autocomplete="username" />
-    <label class="ct-lab" for="sync-password">Password</label>
-    <input id="sync-password" class="ct-in" type="password" autocomplete="current-password" />
+    <p class="muted sync-session-hint">Closing the browser does <strong>not</strong> sign you out. On a shared/public laptop, always press <strong>Sign out</strong> when you finish.</p>
+    <div id="sync-auth-fields">
+      <label class="ct-lab" for="sync-email">Email</label>
+      <input id="sync-email" class="ct-in" type="email" autocomplete="username" />
+      <label class="ct-lab" for="sync-password">Password</label>
+      <input id="sync-password" class="ct-in" type="password" autocomplete="current-password" />
+    </div>
     <div class="sync-btns sync-auth-btns">
       <button type="button" id="sync-signin" class="primary">Sign in</button>
-      <button type="button" id="sync-signout" class="ghost hidden">Sign out</button>
-    </div>
-    <label class="ct-lab" for="sync-url">API base URL</label>
-    <input id="sync-url" class="ct-in" type="url" placeholder="https://YOUR_PROJECT.supabase.co/functions/v1/mathboard" autocomplete="off" />
-    <div class="sync-btns">
-      <button type="button" id="sync-save" class="primary">Save URL</button>
-      <button type="button" id="sync-push">Upload all</button>
-      <button type="button" id="sync-pull">Sync now</button>
+      <button type="button" id="sync-signout" class="danger hidden">Sign out</button>
+      <button type="button" id="sync-pull" class="hidden">Sync now</button>
       <button type="button" id="sync-close" class="ghost">Close</button>
     </div>
+    <details id="sync-advanced" class="sync-advanced">
+      <summary>Advanced (developers)</summary>
+      <p class="muted" style="font-size:12px;margin:8px 0">You normally do not need this. Leave the URL as set.</p>
+      <label class="ct-lab" for="sync-url">API base URL</label>
+      <input id="sync-url" class="ct-in" type="url" placeholder="https://YOUR_PROJECT.supabase.co/functions/v1/mathboard" autocomplete="off" />
+      <div class="sync-btns">
+        <button type="button" id="sync-save" class="primary">Save URL</button>
+        <button type="button" id="sync-push">Upload all</button>
+      </div>
+    </details>
   </div>
 </div>
 
@@ -1194,5 +1201,5 @@
 </div>
 
 <script src="./vendor/three.min.js" defer></script>
-<script type="module" src="./js/app.js?v=150"></script>
+<script type="module" src="./js/app.js?v=151"></script>
 </html>

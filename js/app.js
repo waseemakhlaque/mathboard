@@ -122,7 +122,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 150;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 151;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -3689,11 +3689,12 @@ function updateSyncStatus(s) {
   }
 }
 
-/** Keep editor Sign out controls in sync with auth state. */
+/** Keep Sign out controls in sync with auth state (library + editor). */
 function updateEditorSignOutUI() {
   const signed = isSignedIn();
   $('#editor-signout')?.classList.toggle('hidden', !signed);
   $('#editor-signout-more')?.classList.toggle('hidden', !signed);
+  $('#lib-signout')?.classList.toggle('hidden', !signed);
 }
 
 let refreshSyncAuthUI = () => {};
@@ -6251,8 +6252,9 @@ function setupPanelMenu() {
 }
 
 function setupSyncSettings() {
-  // Toolbar Sign out — wired even if the sync dialog markup is missing.
+  // Toolbar / library Sign out — wired even if the sync dialog markup is missing.
   $('#editor-signout')?.addEventListener('click', () => signOut({ confirm: true }));
+  $('#lib-signout')?.addEventListener('click', () => signOut({ confirm: true }));
   $('#editor-signout-more')?.addEventListener('click', () => {
     $('#tbar-more-drop')?.classList.add('hidden');
     signOut({ confirm: true });
@@ -6268,9 +6270,13 @@ function setupSyncSettings() {
     const signed = isSignedIn();
     const configured = !!(getSupabaseUrl() && getSupabaseAnonKey());
     $('#sync-config-hint')?.classList.toggle('hidden', configured);
-    $('#sync-user').textContent = signed && user?.email ? `Signed in as ${user.email}` : 'Not signed in';
+    $('#sync-user').textContent = signed && user?.email
+      ? `Signed in as ${user.email}`
+      : 'Not signed in';
     $('#sync-signin')?.classList.toggle('hidden', signed);
     $('#sync-signout')?.classList.toggle('hidden', !signed);
+    $('#sync-pull')?.classList.toggle('hidden', !signed);
+    $('#sync-auth-fields')?.classList.toggle('hidden', signed);
     if ($('#sync-email')) $('#sync-email').disabled = signed;
     if ($('#sync-password')) $('#sync-password').disabled = signed;
     updateEditorSignOutUI();

@@ -1705,6 +1705,23 @@ math-field.calc-expr:focus-within { outline: none; }
 
 .sync-auth-btns { margin-top: 8px; margin-bottom: 4px; }
 .sync-user { margin: 0 0 8px; font-size: 13px; }
+.sync-session-hint { font-size: 13px; line-height: 1.45; margin: 0 0 12px; }
+.sync-advanced {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
+  font-size: 13px;
+}
+.sync-advanced summary {
+  cursor: pointer;
+  color: var(--muted, #64748b);
+  user-select: none;
+}
+.sync-advanced[open] summary { margin-bottom: 8px; }
+#sync-signout:not(.hidden) {
+  min-width: 7.5rem;
+  font-weight: 600;
+}
 
 /* in-app dialogs (replace native alert/confirm/prompt — broken in iOS PWAs) */
 .mb-modal { z-index: 300; }
