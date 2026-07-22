@@ -122,7 +122,7 @@ const UNDO_CAP = 60;
 const UNIT = 50;              // page units per "1" on the grid — vectors snap to this
 const FORCE_SCALE = 32;       // page units (px) per 1 N for the live force-vector primitive
 const GRID_PAPERS = ['argand', 'vectorgrid', 'axes'];   // papers where vectors snap to integer points
-const APP_VERSION = 149;   // bump with index.html ?v= and sw.js CACHE
+const APP_VERSION = 150;   // bump with index.html ?v= and sw.js CACHE
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
@@ -6305,10 +6305,10 @@ function setupSyncSettings() {
       refreshSyncAuthUI();
       updateSyncStatus({ state: 'configured', mode: 'remote' });
       if (canMerge()) {
-        const { pulled, pushed } = await mergeSync();
+        const { pulled, pushed, deleted = 0 } = await mergeSync();
         renderLibrary();
         dlg.classList.add('hidden');
-        alert(`Signed in. Synced: ${pulled} pulled, ${pushed} pushed.`);
+        alert(`Signed in. Synced: ${pulled} pulled, ${pushed} pushed${deleted ? `, ${deleted} deleted` : ''}.`);
       } else {
         // Sign-in succeeded but merge wasn't possible — still close the dialog.
         dlg.classList.add('hidden');
@@ -6329,13 +6329,13 @@ function setupSyncSettings() {
     console.warn('[mathboard] #sync-signout not found — sign-out listener not attached');
   }
   $('#sync-save')?.addEventListener('click', () => {
-    setSyncBaseUrl(urlIn.value);
+    urlIn.value = setSyncBaseUrl(urlIn.value) || '';
     dlg.classList.add('hidden');
     updateSyncStatus({ state: getSyncBaseUrl() ? 'configured' : 'saved', mode: getSyncBaseUrl() ? 'remote' : 'local' });
   });
   $('#sync-push')?.addEventListener('click', async () => {
     try {
-      setSyncBaseUrl(urlIn.value);
+      urlIn.value = setSyncBaseUrl(urlIn.value) || urlIn.value;
       if (!isSignedIn()) throw new Error('Sign in first.');
       const n = await syncAllToRemote();
       alert(`Uploaded ${n} lesson(s) to cloud.`);
@@ -6343,11 +6343,11 @@ function setupSyncSettings() {
   });
   $('#sync-pull')?.addEventListener('click', async () => {
     try {
-      setSyncBaseUrl(urlIn.value);
+      urlIn.value = setSyncBaseUrl(urlIn.value) || urlIn.value;
       if (!isSignedIn()) throw new Error('Sign in first.');
-      const { pulled, pushed } = await mergeSync();
+      const { pulled, pushed, deleted = 0 } = await mergeSync();
       renderLibrary();
-      alert(`Sync complete: ${pulled} pulled, ${pushed} pushed.`);
+      alert(`Sync complete: ${pulled} pulled, ${pushed} pushed${deleted ? `, ${deleted} deleted` : ''}.`);
     } catch (e) { alert(e.message); }
   });
 

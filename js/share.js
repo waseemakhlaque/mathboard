@@ -9,6 +9,8 @@ import {
 
 let statusListeners = [];
 const SYNC_URL_KEY = 'mb-sync-url';
+const TOMBSTONE_KEY = 'mb-sync-tombstones';
+const TOMBSTONE_MAX_AGE_MS = 90 * 86400000; // drop stale markers after 90 days
 const pendingRemote = new Set();
 let remotePushTimer = null;
 
@@ -18,16 +20,73 @@ function emitStatus(s) {
   for (const fn of statusListeners) fn(s);
 }
 
+/** Ensure Supabase function base ends with /mathboard (common paste mistake). */
+function normalizeSyncUrl(url) {
+  let u = (url || '').trim().replace(/\/$/, '');
+  if (!u) return '';
+  // …/functions/v1  or  …/functions/v1/  → append mathboard
+  if (/\/functions\/v1$/i.test(u)) u = `${u}/mathboard`;
+  return u;
+}
+
+function readTombstones() {
+  try {
+    const raw = localStorage.getItem(TOMBSTONE_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    if (!map || typeof map !== 'object') return {};
+    const now = Date.now();
+    let changed = false;
+    for (const [id, at] of Object.entries(map)) {
+      if (!id || typeof at !== 'number' || now - at > TOMBSTONE_MAX_AGE_MS) {
+        delete map[id];
+        changed = true;
+      }
+    }
+    if (changed) writeTombstones(map);
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+function writeTombstones(map) {
+  try {
+    const keys = Object.keys(map);
+    if (!keys.length) localStorage.removeItem(TOMBSTONE_KEY);
+    else localStorage.setItem(TOMBSTONE_KEY, JSON.stringify(map));
+  } catch { /* ok */ }
+}
+
+function markTombstone(id) {
+  if (!id) return;
+  const map = readTombstones();
+  map[id] = Date.now();
+  writeTombstones(map);
+}
+
+function clearTombstone(id) {
+  if (!id) return;
+  const map = readTombstones();
+  if (!(id in map)) return;
+  delete map[id];
+  writeTombstones(map);
+}
+
+function isTombstoned(id, map = null) {
+  const m = map || readTombstones();
+  return !!(id && m[id]);
+}
+
 export function getSyncBaseUrl() {
   try {
     const saved = localStorage.getItem(SYNC_URL_KEY) || '';
-    if (saved) return saved;
+    if (saved) return normalizeSyncUrl(saved);
   } catch { /* ok */ }
-  return defaultSyncApiUrl();
+  return normalizeSyncUrl(defaultSyncApiUrl());
 }
 
 export function setSyncBaseUrl(url) {
-  const u = (url || '').trim().replace(/\/$/, '');
+  const u = normalizeSyncUrl(url);
   try {
     if (u) localStorage.setItem(SYNC_URL_KEY, u);
     else localStorage.removeItem(SYNC_URL_KEY);
@@ -93,11 +152,15 @@ async function flushRemotePush() {
   if (!canUseRemote()) return;
   const ids = [...pendingRemote];
   pendingRemote.clear();
+  const tombs = readTombstones();
   for (const id of ids) {
+    // Never re-upload a lesson the user already deleted.
+    if (isTombstoned(id, tombs)) continue;
     try {
       const nb = await getNotebook(id);
       if (nb) {
         await remotePushPackage(normalizeNotebook(nb));
+        clearTombstone(id);
         emitStatus({ mode: 'remote', state: 'synced', at: Date.now(), id });
       }
     } catch (e) {
@@ -134,6 +197,7 @@ export async function importNotebookFromFile(file) {
   const ids = new Set(existing.map((n) => n.id));
   if (ids.has(nb.id)) nb.id = freshId();
   nb.updated = Date.now();
+  clearTombstone(nb.id); // intentional re-import overrides a prior delete
   await saveNotebook(nb);
   scheduleRemotePush(nb);
   emitStatus({ mode: 'local', state: 'imported', at: Date.now(), id: nb.id });
@@ -205,6 +269,7 @@ const hybridProvider = {
   get mode() { return canUseRemote() ? 'remote' : 'local'; },
   push(nb) {
     const normalized = normalizeNotebook(nb);
+    clearTombstone(normalized.id);
     return saveNotebook(normalized).then(() => {
       emitStatus({ mode: 'local', state: 'saved', at: Date.now(), id: nb.id });
       scheduleRemotePush(normalized);
@@ -214,11 +279,25 @@ const hybridProvider = {
   pull: (id) => getNotebook(id),
   list: () => getAllNotebooks(),
   async remove(id) {
+    // Mark deleted first so an in-flight / later mergeSync cannot resurrect it.
+    markTombstone(id);
+    pendingRemote.delete(id);
     await deleteNotebook(id);
     if (canUseRemote()) {
       try {
         await createSyncProvider({ mode: 'remote', baseUrl: getSyncBaseUrl() }).remove(id);
-      } catch (_) { /* offline — local delete stands */ }
+        clearTombstone(id);
+        emitStatus({ mode: 'remote', state: 'deleted', at: Date.now(), id });
+      } catch (e) {
+        // Keep tombstone — next Sync now will retry cloud delete instead of restoring.
+        emitStatus({
+          mode: 'remote',
+          state: 'delete-pending',
+          at: Date.now(),
+          id,
+          error: e?.message || String(e),
+        });
+      }
     }
   },
 };
@@ -247,17 +326,38 @@ export async function syncAllToRemote() {
 /**
  * Two-way merge: pull newer remote lessons, push newer/local-only lessons.
  * Last-write-wins by notebook.updated (ms timestamp).
+ * Local deletes leave tombstones so Sync now removes cloud copies instead of restoring them.
  */
 export async function mergeSync() {
   if (!canUseRemote()) throw new Error('Sign in and save sync URL first.');
   const remote = createSyncProvider({ mode: 'remote', baseUrl: getSyncBaseUrl() });
   const list = await remote.list();
   const remoteIds = new Set();
-  let pulled = 0, pushed = 0;
+  const tombs = readTombstones();
+  let pulled = 0, pushed = 0, deleted = 0;
 
   for (const meta of list) {
     const id = meta.id || meta;
     remoteIds.add(id);
+
+    // User deleted this lesson locally — finish the cloud delete; never pull it back.
+    if (isTombstoned(id, tombs)) {
+      try {
+        await remote.remove(id);
+        clearTombstone(id);
+        deleted++;
+      } catch (e) {
+        emitStatus({
+          mode: 'remote',
+          state: 'delete-pending',
+          at: Date.now(),
+          id,
+          error: e?.message || String(e),
+        });
+      }
+      continue;
+    }
+
     const remoteNb = await remotePullPackage(id);
     const local = await getNotebook(id);
     if (!local) {
@@ -274,14 +374,21 @@ export async function mergeSync() {
 
   const localAll = await getAllNotebooks();
   for (const nb of localAll) {
+    if (isTombstoned(nb.id, tombs)) continue;
     if (!remoteIds.has(nb.id)) {
       await remotePushPackage(normalizeNotebook(nb));
+      clearTombstone(nb.id);
       pushed++;
     }
   }
 
-  emitStatus({ mode: 'remote', state: 'merged', at: Date.now(), pulled, pushed });
-  return { pulled, pushed };
+  // Tombstones whose remote row is already gone can be cleared.
+  for (const id of Object.keys(readTombstones())) {
+    if (!remoteIds.has(id)) clearTombstone(id);
+  }
+
+  emitStatus({ mode: 'remote', state: 'merged', at: Date.now(), pulled, pushed, deleted });
+  return { pulled, pushed, deleted };
 }
 
 /** @deprecated use mergeSync — kept for API compat */
@@ -323,8 +430,11 @@ export function getPortalAPI() {
   };
 }
 
-// Restore saved sync URL on load; retry cloud queue when back online.
-setSyncBaseUrl(getSyncBaseUrl());
+// Restore saved sync URL on load (normalize …/functions/v1 → …/mathboard); retry cloud queue when back online.
+{
+  const u = getSyncBaseUrl();
+  if (u) setSyncBaseUrl(u);
+}
 window.addEventListener('online', () => {
   if (canUseRemote()) flushRemotePush().catch(() => {});
 });
